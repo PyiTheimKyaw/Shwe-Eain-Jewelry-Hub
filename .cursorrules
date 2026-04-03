@@ -1,0 +1,40 @@
+# Jewelry Hub - FYP Technical Rules & Context
+
+## Project Overview
+- A high-end Jewelry Management System for a family business (UK University Final Year Project).
+- Roles: Admin (Web Dashboard), Artisan (Mobile), Customer (Mobile).
+
+## Tech Stack
+- Backend: Laravel (REST API & Admin Web Panel).
+- Frontend: Flutter (Multi-role Mobile App).
+- Real-time: Firebase (Chat & Order Progress Tracking).
+- Database: MySQL.
+
+## Business Logic & Unit Standards
+- Base Currency: **MMK** — stored monetary amounts (catalog labor/gems, gold snapshots, quote/order lines, totals) are in Myanmar Kyat.
+- FX Snapshot: `mmk_per_usd` (MMK per 1 USD) for deriving USD display and frozen `*_usd_snapshot` fields on quotes/orders.
+- Display Currencies: MMK (primary in app) and USD (derived); optional GBP later via conversion.
+- Weight Unit: Base unit is Grams.
+- Local Display: Support Myanmar units (16.606g = 1 Kyat, 16 Pae = 1 Kyat, 8 Yway = 1 Pae).
+- Pricing: Total MMK = (Weight × Live Gold MMK/gram) + Labor (MMK) + Gems (MMK).
+- Catalog **list prices** require **active** gold + FX snapshots (`GET /api/v1/catalog/products` → `meta.pricing_configured`). After `php artisan db:seed`, **`PricingSnapshotSeeder`** (before **`CatalogSeeder`**) supplies demo snapshots so the mobile **`PriceTag`** is numeric, not “Price on request”.
+
+## Development Rules
+- Database First: Always define migrations before implementing features.
+- Documentation: Every major implementation must be logged in `docs/FYP_Technical_Log.md`.
+- Localization: Use a conversion service/provider for all currency and weight displays.
+- Real-time: Use Firebase Streams for Chat and Progress Updates in Flutter.
+
+## Global UI Standard (Flutter)
+- **Theme**: Premium **Dark Gold** — primary `#D4AF37`, background `#0F172A`, elevated surfaces slate (`#1E293B` / `#334155`).
+- **Glassmorphism**: Use shared glass cards — `BackdropFilter` blur, thin semi-transparent **gold** border, layered gradient fills (no flat gray slabs for primary surfaces).
+- **Typography**: Distinctive pairing — display/brand via **Cinzel Decorative** (or equivalent), body/UI via **Outfit**; hierarchy: display > headline > body > caption (see `frontend/lib/core/ui/design_system.dart`).
+- **Motion**: Prefer short fades (`AnimatedSwitcher` / `FadeTransition`) when switching **currency** or **weight units**; avoid jarring snaps.
+- **Mandatory reuse**: New Flutter screens **must** use `frontend/lib/core/ui/design_system.dart` (`AppColors`, `AppTheme`, `AppGradients`, radii) and widgets under `frontend/lib/core/ui/widgets/` (`AppGlassCard`, `AppGoldButton`, `PremiumText`, `PriceTag`, `WeightBadge`) unless a one-off is explicitly justified in the task.
+- **Backend admin (web)**: Filament panel at `/admin`; primary color aligned to `#D4AF37` for consistency with the app. **Pricing** sidebar: **Gold prices** + **Exchange rates** (create new snapshots via `PricingService`; history is read-only in the UI).
+
+## Architecture
+- Root Directory:
+  /backend (Laravel)
+  /frontend (Flutter)
+  /docs (Documentation)
