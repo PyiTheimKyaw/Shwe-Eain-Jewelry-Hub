@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    /*
+    | Google service account JSON path for Firebase Admin (custom tokens + Firestore).
+    | Example: storage_path('app/firebase-credentials.json') or base_path('firebase-credentials.json')
+    */
+    'firebase' => [
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+        'project_id' => env('FIREBASE_PROJECT_ID'),
+        'web_api_key' => env('FIREBASE_WEB_API_KEY'),
+        // Web SDK (Filament chat) — match Firebase Console Web app / flutter web block
+        'storage_bucket' => env('FIREBASE_STORAGE_BUCKET', 'shwe-eain-jewelry-hub.firebasestorage.app'),
+        'messaging_sender_id' => env('FIREBASE_MESSAGING_SENDER_ID', '885710177863'),
+        'web_app_id' => env('FIREBASE_WEB_APP_ID', '1:885710177863:web:ef5eb17a2127003d649362'),
+    ],
+
 ];

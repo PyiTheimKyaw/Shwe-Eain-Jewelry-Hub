@@ -10,6 +10,7 @@ import 'package:jewelry_hub/core/ui/widgets/weight_badge.dart';
 import 'package:jewelry_hub/features/catalog/data/catalog_api.dart';
 import 'package:jewelry_hub/features/catalog/models/catalog_product.dart';
 import 'package:jewelry_hub/features/catalog/ui/catalog_toggle_bar.dart';
+import 'package:jewelry_hub/features/inquiries/ui/new_inquiry_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -168,7 +169,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
+                AppGoldButton(
+                  label: 'Send inquiry',
+                  icon: Icons.chat_bubble_outline_rounded,
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (context) =>
+                            NewInquiryScreen(productId: p.id),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
                 AppGoldButton(
                   label: 'Back to catalog',
                   icon: Icons.grid_view_rounded,

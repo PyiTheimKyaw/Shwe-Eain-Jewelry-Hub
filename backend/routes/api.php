@@ -52,6 +52,7 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::post('conversations/{inquiry}/firebase-bootstrap', [ConversationController::class, 'firebaseBootstrap']);
+        Route::post('conversations/{inquiry}/firebase-token', [ConversationController::class, 'firebaseToken']);
 
         Route::get('orders/{order}/progress', [OrderProgressController::class, 'index']);
 

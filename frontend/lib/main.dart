@@ -1,14 +1,21 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/providers/display_preferences_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/features/auth/ui/login_screen.dart';
-import 'package:jewelry_hub/features/catalog/ui/product_catalog_screen.dart';
+import 'package:jewelry_hub/features/shell/customer_shell.dart';
+import 'package:jewelry_hub/firebase_options.dart';
 import 'package:provider/provider.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e, st) {
+    debugPrint('Firebase.initializeApp failed: $e\n$st');
+  }
   runApp(const JewelryHubApp());
 }
 
@@ -48,7 +55,7 @@ class _AuthGate extends StatelessWidget {
       child: !auth.isBootstrapComplete
           ? const _BootstrapSplash(key: ValueKey('boot'))
           : auth.isSignedIn
-              ? const ProductCatalogScreen(key: ValueKey('catalog'))
+              ? const CustomerShell(key: ValueKey('shell'))
               : const LoginScreen(key: ValueKey('login')),
     );
   }

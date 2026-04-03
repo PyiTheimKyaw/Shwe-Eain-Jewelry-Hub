@@ -1,0 +1,101 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:jewelry_hub/core/config/api_config.dart';
+import 'package:jewelry_hub/features/inquiries/models/inquiry_summary.dart';
+
+class InquiryApiException implements Exception {
+  InquiryApiException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class InquiryApi {
+  InquiryApi._();
+
+  static Map<String, String> _authHeaders(String token) => {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      };
+
+  static String _errorBody(String body) {
+    try {
+      final m = json.decode(body);
+      if (m is Map && m['message'] is String) {
+        return m['message'] as String;
+      }
+    } catch (_) {}
+    return body;
+  }
+
+  static Future<List<InquirySummary>> fetchMine(String token) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/inquiries/mine');
+    final res = await http.get(uri, headers: _authHeaders(token));
+    if (res.statusCode != 200) {
+      throw InquiryApiException('Inquiries ${res.statusCode}: ${_errorBody(res.body)}');
+    }
+    final map = json.decode(res.body) as Map<String, dynamic>;
+    final list = map['data'] as List<dynamic>? ?? [];
+    return list
+        .map((e) => InquirySummary.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  static Future<InquirySummary> create({
+    required String token,
+    required String message,
+    int? productId,
+    List<XFile> attachments = const [],
+  }) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/inquiries');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(_authHeaders(token));
+    request.fields['message'] = message;
+    if (productId != null) {
+      request.fields['product_id'] = '$productId';
+    }
+    for (final file in attachments) {
+      request.files.add(
+        await http.MultipartFile.fromPath('attachments[]', file.path),
+      );
+    }
+    final streamed = await request.send();
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode != 201) {
+      throw InquiryApiException(
+        'Create inquiry ${streamed.statusCode}: ${_errorBody(body)}',
+      );
+    }
+    final map = json.decode(body) as Map<String, dynamic>;
+    final data = map['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw InquiryApiException('Invalid create inquiry response');
+    }
+    return InquirySummary.fromJson(data);
+  }
+
+  static Future<({String token, String threadId})> fetchFirebaseChatToken({
+    required String bearerToken,
+    required int inquiryId,
+  }) async {
+    final uri = Uri.parse(
+      '${ApiConfig.apiV1}/conversations/$inquiryId/firebase-token',
+    );
+    final res = await http.post(uri, headers: _authHeaders(bearerToken));
+    if (res.statusCode != 200) {
+      throw InquiryApiException(
+        'Firebase token ${res.statusCode}: ${_errorBody(res.body)}',
+      );
+    }
+    final map = json.decode(res.body) as Map<String, dynamic>;
+    final t = map['firebase_token'] as String?;
+    final thread = map['firebase_thread_id'] as String?;
+    if (t == null || thread == null) {
+      throw InquiryApiException('Invalid firebase token response');
+    }
+    return (token: t, threadId: thread);
+  }
+}

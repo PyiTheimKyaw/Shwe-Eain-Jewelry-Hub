@@ -7,6 +7,7 @@ How to run the **Laravel API + Filament admin** (`backend/`) and the **Flutter a
 - **Backend:** PHP **8.3+**, [Composer](https://getcomposer.org/), [Node.js](https://nodejs.org/) (for Vite / Filament assets if you use `composer run dev` or `npm run build`)
 - **Database:** The default `.env.example` uses **SQLite** (`DB_CONNECTION=sqlite`). For **MySQL** (as in the FYP spec), set `DB_*` in `.env` and create an empty database before migrating.
 - **Mobile:** [Flutter SDK](https://docs.flutter.dev/get-started/install) (stable), Xcode (iOS) and/or Android Studio (Android)
+- **Inquiry chat (optional for local dev):** Firebase project + credentials; see [Firebase_Setup.md](./Firebase_Setup.md).
 
 ---
 

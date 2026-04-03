@@ -10,11 +10,17 @@ class Inquiry extends Model
 {
     protected $fillable = [
         'customer_user_id',
+        'product_id',
         'message',
         'status',
         'firebase_thread_id',
         'notes_internal',
     ];
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
 
     public function customer(): BelongsTo
     {

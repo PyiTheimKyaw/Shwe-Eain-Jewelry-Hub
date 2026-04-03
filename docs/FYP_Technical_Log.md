@@ -134,8 +134,8 @@ Mobile app now **requires sign-in** before the customer catalog: Laravel **Sanct
 - **`frontend/lib/features/auth/models/auth_user.dart`** — `id`, `name`, `email`, `role` from API user payload.
 - **`frontend/lib/core/providers/auth_provider.dart`** — `bootstrap()` reads token, validates with `me`, clears invalid token; `login` / `register` persist token; `logout` calls API then clears storage.
 - **`frontend/lib/features/auth/ui/login_screen.dart`** & **`register_screen.dart`** — `AppGlassCard`, `AppGoldButton`, `PremiumText`, `AnimatedSwitcher` for loading; register collects optional `phone`; password rules aligned with backend (confirm + min length on client).
-- **`frontend/lib/main.dart`** — `MultiProvider` includes **`AuthProvider`** first; **`_AuthGate`** with **`AnimatedSwitcher`**: bootstrap splash → **`LoginScreen`** or **`ProductCatalogScreen`**.
-- **`frontend/lib/features/catalog/ui/product_catalog_screen.dart`** — **`SliverAppBar`** **`IconButton`** → **`AuthProvider.logout()`**.
+- **`frontend/lib/main.dart`** — `MultiProvider` includes **`AuthProvider`** first; **`_AuthGate`** with **`AnimatedSwitcher`**: bootstrap splash → **`LoginScreen`** or **`CustomerShell`** (catalog + inquiries).
+- **`frontend/lib/features/catalog/ui/product_catalog_screen.dart`** — **`SliverAppBar`** **`IconButton`** → **`AuthProvider.logout()`** (catalog tab).
 - **`frontend/lib/core/ui/design_system.dart`** — shared **`inputDecorationTheme`** (gold focus border, glass fill) for auth (and future forms).
 - **Dependencies**: `flutter_secure_storage` (see `pubspec.yaml`).
 - **Tests**: `test/widget_test.dart` — **`FlutterSecureStorage.setMockInitialValues({})`**; expects **Sign in** after bootstrap (avoids `pumpAndSettle` on indeterminate progress indicator).
@@ -143,3 +143,50 @@ Mobile app now **requires sign-in** before the customer catalog: Laravel **Sanct
 ### Demo accounts
 
 Use seeded **`customer@example.com`** / **`password`** or **`admin@jewelryhub.test`** / **`password`** after `php artisan db:seed`, or **Create an account** (API registers **customer** role only).
+
+---
+
+## 2026-04-05 — Real-time inquiry system (Firestore + Flutter + Filament)
+
+### Summary
+
+Customers can **create inquiries** (message + optional photo attachments, optional **`product_id`**), see **my inquiries** with status badges, and open **Firestore-backed chat** per inquiry. **`firebase_thread_id`** is generated **when the inquiry is created**. Laravel mints **Firebase custom tokens** (`kreait/firebase-php`) so Flutter and the Filament web chat use **Firebase Auth** + **Firestore security rules**. Admin manages inquiries in **Filament** (`InquiryResource`) with **Open chat** and a dashboard **Active inquiries** stat.
+
+### Backend
+
+- **Composer**: `kreait/firebase-php`.
+- **Migration**: `product_id` nullable FK on `inquiries` → `products`.
+- **`InquiryController::store`**: sets **`firebase_thread_id`** = `Str::uuid()` on create; validates optional **`product_id`**; calls **`FirebaseInquiryService::syncInquiryThreadDocument`** (Firestore metadata when configured).
+- **`POST /api/v1/conversations/{inquiry}/firebase-token`** (auth:sanctum, `InquiryPolicy::view`) — returns **`firebase_token`**, **`firebase_thread_id`**, **`auth_uid`** (`laravel_{id}`). Custom token claims: **`role`**, **`thread_id`**, **`inquiry_id`**.
+- **`App\Services\FirebaseInquiryService`**: singleton from `FIREBASE_CREDENTIALS` in **`config/services.php`**; **`mintChatToken`**, **`syncInquiryThreadDocument`**.
+- **Env** (see **`backend/.env.example`**): `FIREBASE_CREDENTIALS`, `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` (web key + project id for Filament JS + rules alignment).
+- **Firestore rules**: [`firebase/firestore.rules`](../firebase/firestore.rules) — deploy with Firebase CLI (`firebase deploy --only firestore:rules`). **`firebase/firebase.json`** points at rules.
+- **Test**: `tests/Feature/InquiryApiTest.php` — create inquiry returns non-empty **`firebase_thread_id`**.
+
+### Flutter
+
+- **Packages**: `firebase_core`, `firebase_auth`, `cloud_firestore`, `image_picker`; plus existing **`http`**, **`provider`**.
+- **`lib/firebase_options.dart`**: placeholder — run **`flutterfire configure`** or paste keys (see **`docs/Firebase_Setup.md`**).
+- **`main.dart`**: **`Firebase.initializeApp`** (errors logged; app still runs).
+- **`CustomerShell`**: bottom navigation **Catalog** \| **Inquiries** (`IndexedStack`).
+- **`features/inquiries/`**: **`inquiry_api.dart`**, **`inquiry_summary.dart`**, **`inquiry_list_screen.dart`**, **`new_inquiry_screen.dart`**, **`inquiry_chat_screen.dart`**, **`inquiry_status_badge.dart`**; **`core/storage/public_storage_url.dart`** for attachment URLs.
+- **Product detail**: **Send inquiry** → **`NewInquiryScreen(productId: …)`**.
+- **Chat**: **`POST`** firebase-token → **`signInWithCustomToken`** → Firestore `inquiry_threads/{threadId}/messages` with **`text`**, **`sender_role`**, **`created_at`**, **`laravel_user_id`**.
+
+### Filament
+
+- **`InquiryResource`** (group **Inquiries**): list / view / edit; **no** create (inquiries originate from API).
+- **`Edit`**: status + internal notes only.
+- **`View`**: header **Open chat** → **`ChatInquiry`** page (`/{record}/chat`).
+- **`ChatInquiry`**: Livewire page + **`resources/views/filament/resources/inquiries/chat-inquiry.blade.php`** — Firebase compat JS, real-time message list + send as **`sender_role: admin`**.
+- **`OpenInquiriesStats`** widget: count **open + reviewing** on the dashboard.
+
+### Documentation
+
+- **`docs/Firebase_Setup.md`** — Firebase project, credentials, rules deploy, Flutter config.
+
+### Security note
+
+Service account JSON and web API keys must stay private. Firestore rules rely on **custom token claims**; misconfiguration can expose data — treat **FYP** config as **non-production** unless reviewed.
+
+php artisan serve --host=0.0.0.0 --port=8000
