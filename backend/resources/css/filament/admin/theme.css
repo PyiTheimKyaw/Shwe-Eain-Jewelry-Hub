@@ -1,0 +1,5 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+/* Scan app + views so custom page classes (e.g. concierge chat) are compiled */
+@source '../../../../app/**/*.php';
+@source '../../../../resources/views/**/*.blade.php';

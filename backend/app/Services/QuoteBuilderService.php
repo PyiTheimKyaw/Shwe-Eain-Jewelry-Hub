@@ -19,6 +19,7 @@ class QuoteBuilderService
 
     /**
      * @param  array<int, array{product_id?: int|null, custom_title?: string|null, weight_grams: float|string, labor_fee_mmk?: float|string|null, gem_price_mmk?: float|string|null}>  $lines
+     * @param  'draft'|'sent'  $initialStatus
      */
     public function createQuote(
         User $customer,
@@ -27,16 +28,17 @@ class QuoteBuilderService
         array $lines,
         ?int $inquiryId = null,
         ?string $notesInternal = null,
-        ?\DateTimeInterface $validUntil = null
+        ?\DateTimeInterface $validUntil = null,
+        string $initialStatus = 'draft'
     ): Quote {
-        return DB::transaction(function () use ($customer, $gold, $fx, $lines, $inquiryId, $notesInternal, $validUntil) {
+        return DB::transaction(function () use ($customer, $gold, $fx, $lines, $inquiryId, $notesInternal, $validUntil, $initialStatus) {
             $quote = Quote::create([
                 'inquiry_id' => $inquiryId,
                 'customer_user_id' => $customer->id,
                 'gold_price_snapshot_id' => $gold->id,
                 'exchange_rate_snapshot_id' => $fx->id,
                 'quote_number' => $this->uniqueQuoteNumber(),
-                'status' => 'draft',
+                'status' => $initialStatus === 'sent' ? 'sent' : 'draft',
                 'total_mmk' => 0,
                 'total_usd_snapshot' => 0,
                 'valid_until' => $validUntil,

@@ -5,6 +5,7 @@ import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/providers/display_preferences_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/features/auth/ui/login_screen.dart';
+import 'package:jewelry_hub/features/shell/artisan_shell.dart';
 import 'package:jewelry_hub/features/shell/customer_shell.dart';
 import 'package:jewelry_hub/firebase_options.dart';
 import 'package:provider/provider.dart';
@@ -55,7 +56,9 @@ class _AuthGate extends StatelessWidget {
       child: !auth.isBootstrapComplete
           ? const _BootstrapSplash(key: ValueKey('boot'))
           : auth.isSignedIn
-              ? const CustomerShell(key: ValueKey('shell'))
+              ? (auth.user?.role == 'artisan'
+                  ? const ArtisanShell(key: ValueKey('artisan'))
+                  : const CustomerShell(key: ValueKey('shell')))
               : const LoginScreen(key: ValueKey('login')),
     );
   }

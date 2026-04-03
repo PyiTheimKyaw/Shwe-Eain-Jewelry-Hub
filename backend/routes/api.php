@@ -3,17 +3,23 @@
 use App\Http\Controllers\Api\V1\Admin\CategoryController as AdminCategoryController;
 use App\Http\Controllers\Api\V1\Admin\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\InquiryController as AdminInquiryController;
+use App\Http\Controllers\Api\V1\Admin\InquiryQuotePublishController;
 use App\Http\Controllers\Api\V1\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Api\V1\Admin\OrderPaymentInstructionController;
+use App\Http\Controllers\Api\V1\Admin\OrderQcController;
+use App\Http\Controllers\Api\V1\Admin\PaymentVerificationController;
 use App\Http\Controllers\Api\V1\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Api\V1\Admin\ProductImageController as AdminProductImageController;
 use App\Http\Controllers\Api\V1\Admin\QuoteController as AdminQuoteController;
 use App\Http\Controllers\Api\V1\Admin\ReportController;
 use App\Http\Controllers\Api\V1\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Api\V1\Artisan\AssignmentController;
+use App\Http\Controllers\Api\V1\Artisan\OrderWorkflowController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\CustomerOrderController;
+use App\Http\Controllers\Api\V1\CustomerOrderDepositController;
 use App\Http\Controllers\Api\V1\CustomerQuoteController;
 use App\Http\Controllers\Api\V1\InquiryController;
 use App\Http\Controllers\Api\V1\OrderProgressController;
@@ -46,9 +52,12 @@ Route::prefix('v1')->group(function () {
 
             Route::get('quotes/mine', [CustomerQuoteController::class, 'mine']);
             Route::get('quotes/{quote}', [CustomerQuoteController::class, 'show']);
+            Route::post('quotes/{quote}/accept', [CustomerQuoteController::class, 'accept']);
+            Route::post('quotes/{quote}/decline', [CustomerQuoteController::class, 'decline']);
 
             Route::get('orders/mine', [CustomerOrderController::class, 'mine']);
             Route::get('orders/{order}', [CustomerOrderController::class, 'show']);
+            Route::post('orders/{order}/deposit-proof', [CustomerOrderDepositController::class, 'store']);
         });
 
         Route::post('conversations/{inquiry}/firebase-bootstrap', [ConversationController::class, 'firebaseBootstrap']);
@@ -61,6 +70,8 @@ Route::prefix('v1')->group(function () {
             Route::get('artisan/assignments/{assignment}', [AssignmentController::class, 'show']);
             Route::patch('artisan/assignments/{assignment}', [AssignmentController::class, 'update']);
             Route::post('artisan/orders/{order}/progress', [OrderProgressController::class, 'store']);
+            Route::post('artisan/orders/{order}/start', [OrderWorkflowController::class, 'start']);
+            Route::post('artisan/orders/{order}/ready-for-review', [OrderWorkflowController::class, 'readyForReview']);
         });
 
         Route::middleware('role:admin')->group(function () {
@@ -81,6 +92,7 @@ Route::prefix('v1')->group(function () {
             Route::get('admin/inquiries', [AdminInquiryController::class, 'index']);
             Route::get('admin/inquiries/{inquiry}', [AdminInquiryController::class, 'show']);
             Route::patch('admin/inquiries/{inquiry}', [AdminInquiryController::class, 'update']);
+            Route::post('admin/inquiries/{inquiry}/quotes/publish', InquiryQuotePublishController::class);
 
             Route::get('admin/quotes', [AdminQuoteController::class, 'index']);
             Route::post('admin/quotes', [AdminQuoteController::class, 'store']);
@@ -92,6 +104,10 @@ Route::prefix('v1')->group(function () {
             Route::get('admin/orders/{order}', [AdminOrderController::class, 'show']);
             Route::patch('admin/orders/{order}', [AdminOrderController::class, 'update']);
             Route::post('admin/orders/{order}/assignments', [AdminOrderController::class, 'storeAssignment']);
+            Route::post('admin/orders/{order}/payment-instructions', [OrderPaymentInstructionController::class, 'store']);
+            Route::post('admin/orders/{order}/qc/approve', [OrderQcController::class, 'approve']);
+            Route::post('admin/payments/{payment}/confirm', [PaymentVerificationController::class, 'confirm']);
+            Route::post('admin/payments/{payment}/reject', [PaymentVerificationController::class, 'reject']);
             Route::post('admin/orders/{order}/progress', [OrderProgressController::class, 'store']);
 
             Route::get('pricing/gold/history', [PricingController::class, 'goldHistory']);

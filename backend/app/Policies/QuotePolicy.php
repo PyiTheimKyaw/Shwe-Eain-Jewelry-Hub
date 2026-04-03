@@ -21,4 +21,18 @@ class QuotePolicy
     {
         return $user->role === UserRole::Admin;
     }
+
+    public function accept(User $user, Quote $quote): bool
+    {
+        if ($user->role !== UserRole::Customer || $quote->customer_user_id !== $user->id) {
+            return false;
+        }
+
+        return $quote->status === 'sent';
+    }
+
+    public function decline(User $user, Quote $quote): bool
+    {
+        return $this->accept($user, $quote);
+    }
 }

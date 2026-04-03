@@ -1,42 +1,373 @@
+@php
+    $step = $pipeline['step'] ?? 'consulting';
+    $labels = ['Consulting', 'Quoted', 'Awaiting deposit', 'In production', 'Quality review', 'Ready'];
+    $stepIndex = match ($step) {
+        'consulting' => 0,
+        'quoted' => 1,
+        'awaiting_deposit' => 2,
+        'pre_production' => 2,
+        'in_production' => 3,
+        'pending_qc' => 4,
+        'ready' => 5,
+        default => 0,
+    };
+    /** @var \App\Models\Inquiry $inquiry */
+    $inquiry = $this->getRecord();
+    $inquiry->loadMissing('customer', 'product');
+@endphp
+
 <x-filament-panels::page>
     @if (! $showChat)
         <x-filament::section>
             <p class="text-sm text-gray-600 dark:text-gray-400">
-                Chat is unavailable. Ensure <code class="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">FIREBASE_CREDENTIALS</code>,
-                <code class="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">FIREBASE_PROJECT_ID</code>, and
-                <code class="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">FIREBASE_WEB_API_KEY</code> are set, Firestore rules are deployed, and this inquiry has a thread id.
+                {{ __('Chat is unavailable. Ensure') }}
+                <code class="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">FIREBASE_CREDENTIALS</code>,
+                <code class="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">FIREBASE_PROJECT_ID</code>,
+                {{ __('and') }}
+                <code class="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">FIREBASE_WEB_API_KEY</code>
+                {{ __('are set, Firestore rules are deployed, and this inquiry has a thread id.') }}
             </p>
         </x-filament::section>
     @else
+        @php
+            $paymentProfiles = \App\Models\PaymentProfile::query()->active()->ordered()->get();
+        @endphp
         <x-filament::section>
-            <div class="mb-2 text-sm text-gray-500 dark:text-gray-400">
-                Thread: <code class="text-xs">{{ $threadId }}</code>
-            </div>
             <div
-                id="jh-messages"
-                class="mb-4 max-h-[480px] min-h-[280px] overflow-y-auto rounded-lg border border-gray-200 bg-gray-950/40 p-3 dark:border-gray-700"
-                wire:ignore
-            ></div>
-            <form id="jh-form" class="flex flex-wrap gap-2" wire:ignore>
-                <input
-                    id="jh-input"
-                    type="text"
-                    maxlength="4000"
-                    class="min-w-[200px] flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                    placeholder="{{ __('Type a message to the customer') }}"
-                />
-                <button
-                    type="submit"
-                    class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-amber-400"
-                >
-                    {{ __('Send') }}
-                </button>
-            </form>
+                class="jh-concierge-root flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-950"
+                wire:key="concierge-chat-shell"
+            >
+                <div class="flex min-h-0 flex-1 flex-col-reverse lg:flex-row lg:min-h-[min(70vh,36rem)]">
+                    {{-- Sidebar: journey + inquiry --}}
+                    <aside
+                        class="flex w-full shrink-0 flex-col border-t border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/50 lg:w-80 lg:border-r lg:border-t-0"
+                        wire:ignore.self
+                    >
+                        <div class="flex max-h-[40vh] flex-col gap-4 overflow-y-auto p-4 lg:max-h-none lg:flex-1">
+                            <div class="flex items-center gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
+                                <div
+                                    class="flex h-9 w-9 items-center justify-center rounded-lg border border-primary-500/40 bg-primary-500/10"
+                                >
+                                    <svg class="h-5 w-5 text-primary-600 dark:text-primary-400" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary-600 dark:text-primary-400">
+                                        {{ __('Concierge') }}
+                                    </p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">{{ __('Private atelier') }}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <p class="mb-3 text-[10px] font-semibold uppercase tracking-widest text-primary-600/90 dark:text-primary-400/90">
+                                    {{ __('Your journey') }}
+                                </p>
+                                <nav class="relative flex flex-col gap-0" aria-label="{{ __('Pipeline') }}">
+                                    @foreach ($labels as $i => $label)
+                                        @php
+                                            $done = $i < $stepIndex;
+                                            $current = $i === $stepIndex;
+                                        @endphp
+                                        <div class="relative flex gap-3">
+                                            @if ($i > 0)
+                                                <div
+                                                    class="absolute left-[13px] top-0 h-3 w-px -translate-y-full bg-gradient-to-b {{ $done || $current ? 'from-primary-500/50 to-primary-500/30' : 'from-gray-400 to-gray-500 dark:from-gray-600 dark:to-gray-700' }}"
+                                                ></div>
+                                            @endif
+                                            <div
+                                                class="relative z-[1] flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 {{ $done ? 'border-primary-500 bg-primary-500/20 text-primary-600 dark:text-primary-400' : ($current ? 'border-primary-500 bg-primary-500/15 shadow-sm dark:shadow-primary-500/20' : 'border-gray-300 bg-gray-100 text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500') }}"
+                                            >
+                                                @if ($done)
+                                                    <svg class="h-3.5 w-3.5" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                                @else
+                                                    @switch($i)
+                                                        @case(0)
+                                                            <svg class="h-3.5 w-3.5" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.202 16.617 2.25 14.411 2.25 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
+                                                            @break
+                                                        @case(1)
+                                                            <svg class="h-3.5 w-3.5" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                                                            @break
+                                                        @case(2)
+                                                            <svg class="h-3.5 w-3.5" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                            @break
+                                                        @case(3)
+                                                            <svg class="h-3.5 w-3.5" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.227 2.28z" /></svg>
+                                                            @break
+                                                        @case(4)
+                                                            <svg class="h-3.5 w-3.5" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
+                                                            @break
+                                                        @default
+                                                            <svg class="h-3.5 w-3.5" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>
+                                                    @endswitch
+                                                @endif
+                                            </div>
+                                            <div class="min-w-0 flex-1 pb-4 pt-0.5">
+                                                <p
+                                                    class="text-xs font-medium leading-tight {{ $current ? 'text-primary-600 dark:text-primary-400' : ($done ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500') }}"
+                                                >
+                                                    {{ $label }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </nav>
+                            </div>
+
+                            <div class="rounded-xl border border-gray-200 bg-white/80 p-3 shadow-inner dark:border-gray-700 dark:bg-gray-900/60">
+                                <p class="text-[10px] font-semibold uppercase tracking-wider text-primary-600/80 dark:text-primary-400/80">
+                                    {{ __('Inquiry') }} #{{ $inquiry->id }}
+                                </p>
+                                <p class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    {{ $inquiry->customer?->name ?? __('Customer') }}
+                                </p>
+                                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                    {{ $inquiry->product?->title ?? __('Bespoke / no product') }}
+                                </p>
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <span
+                                        class="inline-flex items-center rounded-full border border-primary-500/30 bg-primary-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary-700 dark:text-primary-300"
+                                    >
+                                        {{ $inquiry->status }}
+                                    </span>
+                                    @if (! empty($pipeline['order']['order_number'] ?? null))
+                                        <span
+                                            class="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 font-mono text-[10px] text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                                        >
+                                            {{ $pipeline['order']['order_number'] }}
+                                        </span>
+                                    @endif
+                                </div>
+                                <p class="mt-2 break-all text-[10px] text-gray-400 dark:text-gray-500">
+                                    <span class="text-gray-500 dark:text-gray-600">{{ __('Thread') }}</span>
+                                    <code class="text-[10px] text-gray-500">{{ $threadId }}</code>
+                                </p>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {{-- Main: messages + composer --}}
+                    <main class="relative flex min-h-[50vh] min-w-0 flex-1 flex-col bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 lg:min-h-0">
+                        <div
+                            id="jh-messages"
+                            class="jh-scroll min-h-0 flex-1 overflow-y-auto scroll-smooth px-3 py-4 sm:px-5"
+                            wire:ignore
+                        ></div>
+
+                        <div
+                            class="shrink-0 border-t border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur-md dark:border-gray-700 dark:bg-gray-950/90"
+                        >
+                            <div class="mb-2 flex flex-wrap items-center gap-2">
+                                <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                    {{ __('Quick actions') }}
+                                </span>
+                                <div class="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onclick="document.getElementById('jh-dialog-quote').showModal()"
+                                        class="inline-flex items-center gap-1.5 rounded-lg border border-primary-500/40 bg-primary-500/10 px-3 py-1.5 text-xs font-medium text-primary-700 shadow-sm transition hover:bg-primary-500/20 dark:text-primary-300"
+                                    >
+                                        <svg class="h-4 w-4" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                        {{ __('Generate quote') }}
+                                    </button>
+                                    @if ($paymentProfiles->isEmpty())
+                                        <span class="text-xs text-amber-700 dark:text-amber-400">
+                                            {{ __('Add payment profiles under Settings → Payment profiles.') }}
+                                        </span>
+                                    @else
+                                        <button
+                                            type="button"
+                                            onclick="document.getElementById('jh-dialog-payment').showModal()"
+                                            class="inline-flex items-center gap-1.5 rounded-lg border border-primary-500/40 bg-white px-3 py-1.5 text-xs font-medium text-primary-700 shadow-sm transition hover:bg-primary-500/10 dark:border-primary-400/40 dark:bg-gray-900 dark:text-primary-300"
+                                        >
+                                            {{ __('Send payment info') }}
+                                        </button>
+                                    @endif
+                                </div>
+                            </div>
+                            <form id="jh-form" class="flex gap-2" wire:ignore>
+                                <input
+                                    id="jh-input"
+                                    type="text"
+                                    maxlength="4000"
+                                    class="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-inner placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+                                    placeholder="{{ __('Message the customer…') }}"
+                                />
+                                <button
+                                    type="submit"
+                                    class="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-500"
+                                >
+                                    {{ __('Send') }}
+                                </button>
+                            </form>
+                        </div>
+                    </main>
+                </div>
+            </div>
         </x-filament::section>
 
+        <dialog
+            id="jh-dialog-quote"
+            class="jh-quote-dialog max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-gray-200 bg-white p-0 text-gray-900 shadow-xl dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        >
+            <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4 dark:border-gray-700 dark:bg-gray-900">
+                <div>
+                    <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary-600 dark:text-primary-400">
+                        {{ __('Concierge') }}
+                    </p>
+                    <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ __('Generate quote') }}</p>
+                </div>
+                <button
+                    type="button"
+                    onclick="document.getElementById('jh-dialog-quote').close()"
+                    class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                    aria-label="{{ __('Close') }}"
+                >
+                    <svg class="h-5 w-5" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-5">
+                <form wire:submit.prevent="publishQuoteFromConsole" class="space-y-3">
+                    @foreach ($quoteFormLines as $index => $line)
+                        <div
+                            class="space-y-2 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-800/50"
+                            wire:key="line-{{ $index }}"
+                        >
+                            <p class="text-xs font-medium text-primary-600 dark:text-primary-400">{{ __('Line') }} {{ $index + 1 }}</p>
+                            <input
+                                type="number"
+                                step="any"
+                                min="0"
+                                required
+                                wire:model="quoteFormLines.{{ $index }}.weight_grams"
+                                placeholder="{{ __('Weight (g)') }}"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                            />
+                            <div class="grid grid-cols-2 gap-2">
+                                <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    wire:model="quoteFormLines.{{ $index }}.labor_fee_mmk"
+                                    placeholder="{{ __('Labor MMK') }}"
+                                    class="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                />
+                                <input
+                                    type="number"
+                                    step="any"
+                                    min="0"
+                                    wire:model="quoteFormLines.{{ $index }}.gem_price_mmk"
+                                    placeholder="{{ __('Gems MMK') }}"
+                                    class="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                />
+                            </div>
+                            <input
+                                type="text"
+                                wire:model="quoteFormLines.{{ $index }}.custom_title"
+                                placeholder="{{ __('Title (optional)') }}"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                            />
+                            <input
+                                type="number"
+                                wire:model="quoteFormLines.{{ $index }}.product_id"
+                                placeholder="{{ __('Product ID (optional)') }}"
+                                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                            />
+                            @if (count($quoteFormLines) > 1)
+                                <button
+                                    type="button"
+                                    wire:click="removeQuoteLine({{ $index }})"
+                                    class="text-xs text-gray-500 underline hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
+                                >
+                                    {{ __('Remove line') }}
+                                </button>
+                            @endif
+                        </div>
+                    @endforeach
+
+                    <button
+                        type="button"
+                        wire:click="addQuoteLine"
+                        class="w-full rounded-xl border border-dashed border-primary-500/40 bg-primary-500/5 px-3 py-2.5 text-sm text-primary-700 hover:bg-primary-500/10 dark:text-primary-300"
+                    >
+                        {{ __('Add line') }}
+                    </button>
+
+                    <input
+                        type="datetime-local"
+                        wire:model="quoteValidUntil"
+                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    />
+
+                    <textarea
+                        wire:model="quoteNotes"
+                        rows="2"
+                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                        placeholder="{{ __('Internal notes (optional)') }}"
+                    ></textarea>
+
+                    <button
+                        type="submit"
+                        class="w-full rounded-lg bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-primary-500"
+                    >
+                        {{ __('Publish quote to chat') }}
+                    </button>
+                </form>
+            </div>
+        </dialog>
+
+        <dialog
+            id="jh-dialog-payment"
+            class="jh-dialog-payment w-full max-w-md overflow-hidden rounded-xl border border-gray-200 bg-white p-0 text-gray-900 shadow-xl dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        >
+            <div class="border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+                <p class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ __('Send payment instructions') }}</p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    {{ __('Choose which payment method to show on the customer chat card.') }}
+                </p>
+            </div>
+            <div class="space-y-4 p-5">
+                <div>
+                    <label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300" for="jh-payment-profile">
+                        {{ __('Payment profile') }}
+                    </label>
+                    <select
+                        id="jh-payment-profile"
+                        wire:model.live="selectedPaymentProfileId"
+                        class="fi-select-input block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-950 dark:text-gray-100"
+                    >
+                        @foreach ($paymentProfiles as $pp)
+                            <option value="{{ $pp->id }}">{{ $pp->name }} — {{ $pp->channel->label() }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="flex flex-wrap justify-end gap-2">
+                    <button
+                        type="button"
+                        onclick="document.getElementById('jh-dialog-payment').close()"
+                        class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                        {{ __('Cancel') }}
+                    </button>
+                    <button
+                        type="button"
+                        wire:click="sendPaymentInstructionsToChat"
+                        wire:loading.attr="disabled"
+                        class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500"
+                    >
+                        <span wire:loading.remove wire:target="sendPaymentInstructionsToChat">{{ __('Send to chat') }}</span>
+                        <span wire:loading wire:target="sendPaymentInstructionsToChat">{{ __('Sending…') }}</span>
+                    </button>
+                </div>
+            </div>
+        </dialog>
+    @endif
+</x-filament-panels::page>
+
+@if ($showChat)
+    @push('scripts')
         @php
-            // Read from Laravel config here — not from Livewire public array props (arrays can dehydrate
-            // to [] in Filament/Livewire, which causes auth/configuration-not-found in the browser).
             $__firebaseWebConfig = [
                 'apiKey' => trim((string) config('services.firebase.web_api_key')),
                 'authDomain' => trim((string) config('services.firebase.project_id')).'.firebaseapp.com',
@@ -53,8 +384,11 @@
             (function () {
                 const firebaseConfig = @json($__firebaseWebConfig);
                 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-                    document.getElementById('jh-messages').textContent =
-                        'Firebase web config is incomplete. Set FIREBASE_WEB_API_KEY and FIREBASE_PROJECT_ID in backend .env (same values as the Firebase Web app), then run: php artisan config:clear';
+                    var el = document.getElementById('jh-messages');
+                    if (el) {
+                        el.textContent =
+                            'Firebase web config is incomplete. Set FIREBASE_WEB_API_KEY and FIREBASE_PROJECT_ID in backend .env, then run: php artisan config:clear';
+                    }
                     return;
                 }
                 if (!firebase.apps.length) {
@@ -65,17 +399,138 @@
                 const box = document.getElementById('jh-messages');
                 const form = document.getElementById('jh-form');
                 const input = document.getElementById('jh-input');
+                if (!box || !form || !input) {
+                    return;
+                }
+
+                function esc(s) {
+                    return String(s || '').replace(/</g, '&lt;');
+                }
+
+                function paymentCardHtml(data) {
+                    var method = esc(data.payment_method_label || '');
+                    var qr = data.qr_image_url ? '<div class="mt-3"><img src="' + esc(data.qr_image_url) + '" alt="" class="max-h-40 rounded-lg border border-gray-200 dark:border-gray-600" /></div>' : '';
+                    return (
+                        '<div class="max-w-full rounded-2xl border border-gray-300 bg-white p-4 text-left shadow-sm dark:border-gray-600 dark:bg-gray-900">' +
+                        '<div class="mb-2 flex items-center gap-2 text-primary-600 dark:text-primary-400"><span class="text-lg">◆</span> <span class="font-semibold">Payment ' +
+                        esc(data.order_number) +
+                        '</span></div>' +
+                        (method ? '<p class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">' + method + '</p>' : '') +
+                        '<div class="mb-2 text-sm text-gray-700 dark:text-gray-300">' +
+                        esc(data.amount_mmk) +
+                        ' MMK</div>' +
+                        '<div class="space-y-1 text-xs text-gray-600 dark:text-gray-400">' +
+                        '<div><span class="text-gray-500">Wallet / KPay:</span> ' +
+                        esc(data.kpay_id) +
+                        '</div>' +
+                        '<div><span class="text-gray-500">Bank:</span> ' +
+                        esc(data.bank_name) +
+                        '</div>' +
+                        '<div><span class="text-gray-500">Account:</span> ' +
+                        esc(data.bank_account_number) +
+                        ' · ' +
+                        esc(data.bank_account_name) +
+                        '</div>' +
+                        '</div>' +
+                        qr +
+                        '</div>'
+                    );
+                }
+
+                function quoteCardHtml(data) {
+                    const lines = data.lines || [];
+                    let rows = '';
+                    lines.forEach(function (ln) {
+                        rows +=
+                            '<div class="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs dark:border-gray-600 dark:bg-gray-800">' +
+                            '<div class="font-medium text-primary-600 dark:text-primary-400">' +
+                            esc(ln.title) +
+                            '</div>' +
+                            '<div class="mt-1 text-gray-500 dark:text-gray-400">Gold ' +
+                            esc(ln.metal_mmk) +
+                            ' · Labor ' +
+                            esc(ln.labor_mmk) +
+                            ' · Gems ' +
+                            esc(ln.gems_mmk) +
+                            '</div>' +
+                            '<div class="mt-1 text-right text-primary-600 dark:text-primary-400">Line ' +
+                            esc(ln.line_total_mmk) +
+                            '</div>' +
+                            '</div>';
+                    });
+                    return (
+                        '<div class="max-w-full rounded-2xl border border-gray-300 bg-white p-4 text-left shadow-sm dark:border-gray-600 dark:bg-gray-900">' +
+                        '<div class="mb-2 flex items-center gap-2 text-primary-600 dark:text-primary-400"><span class="text-lg">◇</span> <span class="font-semibold">Quote ' +
+                        esc(data.quote_number) +
+                        '</span></div>' +
+                        '<div class="mb-2 text-[10px] uppercase tracking-wider text-gray-500">Estimate (MMK)</div>' +
+                        rows +
+                        '<div class="mt-2 flex justify-between border-t border-gray-200 pt-2 text-sm dark:border-gray-700"><span class="text-gray-500">Total</span><span class="font-semibold text-primary-600 dark:text-primary-400">' +
+                        esc(data.total_mmk) +
+                        '</span></div>' +
+                        '<p class="mt-2 text-[11px] text-gray-500">Customer accepts or declines in the mobile app.</p>' +
+                        '</div>'
+                    );
+                }
 
                 function row(msg) {
+                    const type = msg.type || '';
+                    if (type === 'quote_card') {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'mb-4 flex w-full justify-center px-1';
+                        const inner = document.createElement('div');
+                        inner.className = 'w-full max-w-lg';
+                        inner.innerHTML = quoteCardHtml(msg);
+                        wrap.appendChild(inner);
+                        return wrap;
+                    }
+                    if (type === 'payment_info_card') {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'mb-4 flex w-full justify-center px-1';
+                        const inner = document.createElement('div');
+                        inner.className = 'w-full max-w-lg';
+                        inner.innerHTML = paymentCardHtml(msg);
+                        wrap.appendChild(inner);
+                        return wrap;
+                    }
+                    if (type === 'image') {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'mb-4 flex w-full justify-start';
+                        const inner = document.createElement('div');
+                        inner.className =
+                            'max-w-[min(100%,24rem)] rounded-2xl border border-gray-200 bg-gray-50 p-2 shadow-sm dark:border-gray-600 dark:bg-gray-800';
+                        const img = document.createElement('img');
+                        img.src = msg.image_url || '';
+                        img.className = 'max-h-72 w-full rounded-lg object-cover';
+                        img.alt = '';
+                        const cap = document.createElement('p');
+                        cap.className = 'mt-2 px-1 text-xs text-gray-500 dark:text-gray-400';
+                        cap.textContent = msg.caption || '';
+                        inner.appendChild(img);
+                        inner.appendChild(cap);
+                        wrap.appendChild(inner);
+                        return wrap;
+                    }
                     const role = msg.sender_role || '';
                     const text = msg.text || '';
                     const wrap = document.createElement('div');
-                    wrap.className = 'mb-2 text-sm ' + (role === 'admin' ? 'text-right' : 'text-left');
-                    wrap.innerHTML =
-                        '<span class="inline-block max-w-[85%] rounded-lg border border-amber-500/30 bg-gray-900/80 px-3 py-2 text-gray-100">' +
-                        (role === 'admin' ? '<span class="text-xs text-amber-400">Shop</span><br/>' : '<span class="text-xs text-gray-400">Customer</span><br/>') +
-                        text.replace(/</g, '&lt;') +
-                        '</span>';
+                    wrap.className = 'mb-3 flex w-full ' + (role === 'admin' ? 'justify-end' : 'justify-start');
+                    const bubble = document.createElement('div');
+                    bubble.className =
+                        role === 'admin'
+                            ? 'max-w-[min(100%,28rem)] rounded-2xl border-2 border-primary-500/50 bg-white px-4 py-2.5 text-left text-sm text-gray-900 shadow-sm dark:border-primary-400/50 dark:bg-gray-800 dark:text-gray-100'
+                            : 'max-w-[min(100%,28rem)] rounded-2xl border border-gray-200 bg-gray-100 px-4 py-2.5 text-left text-sm text-gray-900 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-100';
+                    const label = document.createElement('div');
+                    label.className =
+                        'mb-1 text-[10px] font-semibold uppercase tracking-wider ' +
+                        (role === 'admin' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400');
+                    label.textContent = role === 'admin' ? 'Concierge' : 'Customer';
+                    const body = document.createElement('div');
+                    body.className = 'whitespace-pre-wrap break-words text-[15px] leading-relaxed';
+                    body.textContent = text;
+                    bubble.appendChild(label);
+                    bubble.appendChild(body);
+                    wrap.appendChild(bubble);
                     return wrap;
                 }
 
@@ -124,5 +579,5 @@
                 });
             })();
         </script>
-    @endif
-</x-filament-panels::page>
+    @endpush
+@endif

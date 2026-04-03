@@ -9,7 +9,14 @@ import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/inquiries/data/inquiry_api.dart';
+import 'package:jewelry_hub/features/inquiries/models/inquiry_pipeline.dart';
 import 'package:jewelry_hub/features/inquiries/models/inquiry_summary.dart';
+import 'package:jewelry_hub/features/inquiries/widgets/concierge_pipeline_stepper.dart';
+import 'package:jewelry_hub/features/inquiries/widgets/inquiry_api_quote_banner.dart';
+import 'package:jewelry_hub/features/inquiries/widgets/inquiry_payment_info_card.dart';
+import 'package:jewelry_hub/features/inquiries/widgets/inquiry_quote_card.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:jewelry_hub/features/inquiries/widgets/inquiry_status_badge.dart';
 import 'package:provider/provider.dart';
 
@@ -24,14 +31,23 @@ class InquiryChatScreen extends StatefulWidget {
 
 class _InquiryChatScreenState extends State<InquiryChatScreen> {
   final _composer = TextEditingController();
+  final _scrollController = ScrollController();
+
   bool _connecting = true;
   String? _error;
   bool _sending = false;
+  bool _uploadingDeposit = false;
+  InquiryPipeline? _restPipeline;
+  final Set<int> _actedQuoteIds = {};
+  int? _quoteActionBusyId;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _connect());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _connect();
+      _loadPipeline();
+    });
   }
 
   Future<void> _connect() async {
@@ -83,6 +99,123 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     }
   }
 
+  Future<void> _loadPipeline() async {
+    final bearer = context.read<AuthProvider>().token;
+    if (bearer == null) {
+      return;
+    }
+    try {
+      final p = await InquiryApi.fetchPipeline(
+        bearerToken: bearer,
+        inquiryId: widget.inquiry.id,
+      );
+      if (mounted) {
+        setState(() {
+          _restPipeline = p ??
+              InquiryPipeline(
+                step: widget.inquiry.status == 'quoted' ? 'quoted' : 'consulting',
+              );
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _restPipeline = InquiryPipeline(
+            step: widget.inquiry.status == 'quoted' ? 'quoted' : 'consulting',
+          );
+        });
+      }
+    }
+  }
+
+  InquiryPipeline _effectivePipeline(InquiryPipeline? fromFirestore) {
+    final rest = _restPipeline ??
+        InquiryPipeline(
+          step: widget.inquiry.status == 'quoted' ? 'quoted' : 'consulting',
+        );
+    if (fromFirestore == null) {
+      return rest;
+    }
+    return InquiryPipeline(
+      step: fromFirestore.step,
+      orderId: fromFirestore.orderId ?? rest.orderId,
+      orderStatus: fromFirestore.orderStatus ?? rest.orderStatus,
+      activeQuoteId: fromFirestore.activeQuoteId ?? rest.activeQuoteId,
+      orderNumber: fromFirestore.orderNumber ?? rest.orderNumber,
+      depositState: fromFirestore.depositState ?? rest.depositState,
+      depositAmountMmk: fromFirestore.depositAmountMmk ?? rest.depositAmountMmk,
+      depositInstructionsSentAt:
+          fromFirestore.depositInstructionsSentAt ?? rest.depositInstructionsSentAt,
+      depositPayment: rest.depositPayment,
+    );
+  }
+
+  bool _canUploadDeposit(InquiryPipeline p) {
+    if (p.orderId == null) {
+      return false;
+    }
+    if (p.orderStatus != 'awaiting_deposit') {
+      return false;
+    }
+    final ds = p.depositState ?? '';
+    if (ds == 'confirmed' || ds == 'proof_submitted') {
+      return false;
+    }
+    if (ds == 'instructions_sent' || ds == 'rejected') {
+      return true;
+    }
+    return p.depositInstructionsSentAt != null;
+  }
+
+  Future<void> _pickAndUploadDeposit(InquiryPipeline pipeline) async {
+    final oid = pipeline.orderId;
+    if (oid == null) {
+      return;
+    }
+    final bearer = context.read<AuthProvider>().token;
+    if (bearer == null) {
+      return;
+    }
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (file == null) {
+      return;
+    }
+    setState(() => _uploadingDeposit = true);
+    try {
+      await InquiryApi.uploadDepositProof(
+        bearerToken: bearer,
+        orderId: oid,
+        proof: file,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment proof submitted.')),
+      );
+      await _loadPipeline();
+    } on InquiryApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _uploadingDeposit = false);
+      }
+    }
+  }
+
   Future<void> _send() async {
     final text = _composer.text.trim();
     if (text.isEmpty || _sending) {
@@ -100,17 +233,24 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
           .doc(threadId)
           .collection('messages')
           .add({
-        'text': text,
-        'sender_role': 'customer',
-        'created_at': FieldValue.serverTimestamp(),
-        'laravel_user_id': uid,
-      });
+            'text': text,
+            'sender_role': 'customer',
+            'created_at': FieldValue.serverTimestamp(),
+            'laravel_user_id': uid,
+          });
       _composer.clear();
+      if (_scrollController.hasClients) {
+        await _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Send failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Send failed: $e')));
       }
     } finally {
       if (mounted) {
@@ -119,9 +259,95 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     }
   }
 
+  Future<void> _acceptQuote(int quoteId) async {
+    final bearer = context.read<AuthProvider>().token;
+    if (bearer == null) {
+      return;
+    }
+    setState(() => _quoteActionBusyId = quoteId);
+    try {
+      final r = await InquiryApi.acceptQuote(
+        bearerToken: bearer,
+        quoteId: quoteId,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _actedQuoteIds.add(quoteId);
+        _quoteActionBusyId = null;
+        final order = r.order;
+        final num = order['order_number'] as String?;
+        _restPipeline = InquiryPipeline(
+          step: 'awaiting_deposit',
+          orderId: order['id'] as int?,
+          orderStatus: order['status'] as String?,
+          orderNumber: num,
+        );
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Order ${r.order['order_number'] ?? ''} — awaiting deposit.',
+          ),
+        ),
+      );
+      await _loadPipeline();
+    } on InquiryApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _quoteActionBusyId = null);
+      }
+    }
+  }
+
+  Future<void> _declineQuote(int quoteId) async {
+    final bearer = context.read<AuthProvider>().token;
+    if (bearer == null) {
+      return;
+    }
+    setState(() => _quoteActionBusyId = quoteId);
+    try {
+      await InquiryApi.declineQuote(bearerToken: bearer, quoteId: quoteId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _actedQuoteIds.add(quoteId);
+        _quoteActionBusyId = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Quote declined. We will follow up soon.')),
+      );
+      await _loadPipeline();
+    } on InquiryApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _quoteActionBusyId = null);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _composer.dispose();
+    _scrollController.dispose();
     if (Firebase.apps.isNotEmpty) {
       try {
         auth.FirebaseAuth.instance.signOut();
@@ -147,15 +373,17 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                          color: AppColors.textPrimary),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: AppColors.textPrimary,
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          PremiumText.headline('Chat', maxLines: 1),
+                          PremiumText.headline('Concierge', maxLines: 1),
                           const SizedBox(height: 4),
                           Row(
                             children: [
@@ -190,133 +418,494 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                   ),
                 )
               else if (threadId == null)
-                const Expanded(
-                  child: Center(child: Text('No thread id')),
-                )
+                const Expanded(child: Center(child: Text('No thread id')))
               else
                 Expanded(
-                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                     stream: FirebaseFirestore.instance
                         .collection('inquiry_threads')
                         .doc(threadId)
-                        .collection('messages')
-                        .orderBy('created_at', descending: false)
                         .snapshots(),
-                    builder: (context, snap) {
-                      if (snap.hasError) {
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Text('${snap.error}'),
+                    builder: (context, threadSnap) {
+                      final threadData = threadSnap.data?.data();
+                      final fromFs = InquiryPipeline.fromFirestore(threadData);
+                      final effectivePipeline = _effectivePipeline(fromFs);
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                            child: ConciergePipelineStepper(
+                              pipeline: effectivePipeline,
+                            ),
                           ),
-                        );
-                      }
-                      if (!snap.hasData) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.gold,
-                            strokeWidth: 2,
+                          Expanded(
+                            child: StreamBuilder<
+                                QuerySnapshot<Map<String, dynamic>>>(
+                              stream: FirebaseFirestore.instance
+                                  .collection('inquiry_threads')
+                                  .doc(threadId)
+                                  .collection('messages')
+                                  .orderBy('created_at', descending: false)
+                                  .snapshots(),
+                              builder: (context, msgSnap) {
+                                if (msgSnap.hasError) {
+                                  return Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(24),
+                                      child: Text('${msgSnap.error}'),
+                                    ),
+                                  );
+                                }
+                                if (!msgSnap.hasData) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(
+                                      color: AppColors.gold,
+                                      strokeWidth: 2,
+                                    ),
+                                  );
+                                }
+                                final docs = msgSnap.data!.docs;
+                                final activeQuoteId =
+                                    effectivePipeline.activeQuoteId;
+                                final hasFsQuoteCard = activeQuoteId != null &&
+                                    docs.any((doc) {
+                                      final d = doc.data();
+                                      return d['type'] == 'quote_card' &&
+                                          (d['quote_id'] as num?)?.toInt() ==
+                                              activeQuoteId;
+                                    });
+                                final showApiQuoteBanner = activeQuoteId !=
+                                        null &&
+                                    !hasFsQuoteCard;
+                                final showApiDepositPayment =
+                                    _showApiDepositPaymentCard(
+                                  effectivePipeline,
+                                  docs,
+                                );
+
+                                return Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (showApiQuoteBanner)
+                                      InquiryApiQuoteBanner(
+                                        key: ValueKey(activeQuoteId),
+                                        quoteId: activeQuoteId,
+                                        pipeline: effectivePipeline,
+                                        onAcceptQuote: _acceptQuote,
+                                        onDeclineQuote: _declineQuote,
+                                        quoteBusyId: _quoteActionBusyId,
+                                        actedQuoteIds: _actedQuoteIds,
+                                      ),
+                                    if (showApiDepositPayment)
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          12,
+                                          0,
+                                          12,
+                                          8,
+                                        ),
+                                        child: _apiDepositPaymentFromPipeline(
+                                          effectivePipeline,
+                                        ),
+                                      ),
+                                    Expanded(
+                                      child: ListView.builder(
+                                        controller: _scrollController,
+                                        reverse: true,
+                                        padding: const EdgeInsets.fromLTRB(
+                                          12,
+                                          0,
+                                          12,
+                                          12,
+                                        ),
+                                        itemCount: docs.length,
+                                        itemBuilder: (context, index) {
+                                          final doc =
+                                              docs[docs.length - 1 - index];
+                                          final d = doc.data();
+                                          return _MessageTile(
+                                            data: d,
+                                            timeFmt: timeFmt,
+                                            onAcceptQuote: _acceptQuote,
+                                            onDeclineQuote: _declineQuote,
+                                            quoteBusyId: _quoteActionBusyId,
+                                            actedQuoteIds: _actedQuoteIds,
+                                            pipeline: effectivePipeline,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
                           ),
-                        );
-                      }
-                      final docs = snap.data!.docs;
-                      return ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        itemCount: docs.length,
-                        itemBuilder: (context, i) {
-                          final d = docs[i].data();
-                          final text = d['text'] as String? ?? '';
-                          final role = d['sender_role'] as String? ?? '';
-                          final isMe = role == 'customer';
-                          final ts = d['created_at'];
-                          DateTime? at;
-                          if (ts is Timestamp) {
-                            at = ts.toDate();
-                          }
-                          return Align(
-                            alignment: isMe
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: AppGlassCard(
-                                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxWidth:
-                                        MediaQuery.sizeOf(context).width * 0.82,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: isMe
-                                        ? CrossAxisAlignment.end
-                                        : CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        text,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyLarge,
-                                      ),
-                                      const SizedBox(height: 6),
-                                      PremiumText.caption(
-                                        '${role == 'admin' ? 'Shop' : 'You'}'
-                                        '${at != null ? ' · ${timeFmt.format(at.toLocal())}' : ''}',
-                                      ),
-                                    ],
-                                  ),
+                          if (_canUploadDeposit(effectivePipeline))
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                              child: OutlinedButton.icon(
+                                onPressed: _uploadingDeposit
+                                    ? null
+                                    : () =>
+                                        _pickAndUploadDeposit(effectivePipeline),
+                                icon: _uploadingDeposit
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          color: AppColors.gold,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.upload_file_outlined),
+                                label: Text(
+                                  _uploadingDeposit
+                                      ? 'Uploading…'
+                                      : 'Upload payment proof',
                                 ),
                               ),
                             ),
-                          );
-                        },
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: _composer,
+                                    minLines: 1,
+                                    maxLines: 4,
+                                    maxLength: 4000,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Message',
+                                      counterText: '',
+                                    ),
+                                    onSubmitted: (_) => _send(),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                _sending
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            color: AppColors.gold,
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      )
+                                    : AppGoldButton(
+                                        label: 'Send',
+                                        icon: Icons.send_rounded,
+                                        onPressed: _send,
+                                      ),
+                              ],
+                            ),
+                          ),
+                        ],
                       );
                     },
-                  ),
-                ),
-              if (!_connecting && _error == null && threadId != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _composer,
-                          minLines: 1,
-                          maxLines: 4,
-                          maxLength: 4000,
-                          decoration: const InputDecoration(
-                            labelText: 'Message',
-                            counterText: '',
-                          ),
-                          onSubmitted: (_) => _send(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _sending
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  color: AppColors.gold,
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            )
-                          : AppGoldButton(
-                              label: 'Send',
-                              icon: Icons.send_rounded,
-                              onPressed: _send,
-                            ),
-                    ],
                   ),
                 ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+String? _firestoreString(dynamic v) {
+  if (v == null) {
+    return null;
+  }
+  if (v is String) {
+    return v;
+  }
+  return v.toString();
+}
+
+String _messageTypeKey(Map<String, dynamic> data) {
+  final raw = data['type'];
+  if (raw == null) {
+    return '';
+  }
+  if (raw is String) {
+    return raw;
+  }
+  return raw.toString();
+}
+
+/// Recognises server-written payment cards even if [type] is missing (older writes / SDK quirks).
+bool _isPaymentInfoPayload(Map<String, dynamic> data) {
+  final t = _messageTypeKey(data);
+  if (t == 'payment_info_card') {
+    return true;
+  }
+  if (data['sender_role'] != 'admin') {
+    return false;
+  }
+  if (data.containsKey('quote_id')) {
+    return false;
+  }
+  if (data['payment_profile_id'] != null) {
+    return true;
+  }
+  return data['order_number'] != null &&
+      data['amount_mmk'] != null &&
+      data.containsKey('kpay_id');
+}
+
+/// When Firestore never received `payment_info_card`, show the same data from REST (MySQL).
+bool _showApiDepositPaymentCard(
+  InquiryPipeline pipeline,
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+) {
+  final orderNum = pipeline.orderNumber;
+  if (orderNum == null ||
+      pipeline.orderStatus != 'awaiting_deposit' ||
+      pipeline.depositPayment == null) {
+    return false;
+  }
+  final hasFs = docs.any((doc) {
+    final d = doc.data();
+    if (!_isPaymentInfoPayload(d)) {
+      return false;
+    }
+    return _firestoreString(d['order_number']) == orderNum;
+  });
+  return !hasFs;
+}
+
+Widget _apiDepositPaymentFromPipeline(InquiryPipeline pipeline) {
+  final m = pipeline.depositPayment!;
+  return InquiryPaymentInfoCard(
+    orderNumber: (m['order_number'] as String?) ?? '',
+    amountMmk: m['amount_mmk']?.toString() ?? '0',
+    kpayId: m['kpay_id'] as String? ?? '',
+    bankName: m['bank_name'] as String? ?? '',
+    bankAccountNumber: m['bank_account_number'] as String? ?? '',
+    bankAccountName: m['bank_account_name'] as String? ?? '',
+    paymentMethodLabel: m['payment_method_label'] as String?,
+    qrImageUrl: m['qr_image_url'] as String?,
+  );
+}
+
+class _MessageTile extends StatelessWidget {
+  const _MessageTile({
+    required this.data,
+    required this.timeFmt,
+    required this.onAcceptQuote,
+    required this.onDeclineQuote,
+    required this.quoteBusyId,
+    required this.actedQuoteIds,
+    required this.pipeline,
+  });
+
+  final Map<String, dynamic> data;
+  final DateFormat timeFmt;
+  final Future<void> Function(int) onAcceptQuote;
+  final Future<void> Function(int) onDeclineQuote;
+  final int? quoteBusyId;
+  final Set<int> actedQuoteIds;
+  final InquiryPipeline? pipeline;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = _messageTypeKey(data);
+    if (_isPaymentInfoPayload(data)) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.94,
+            ),
+            child: InquiryPaymentInfoCard(
+              orderNumber: _firestoreString(data['order_number']) ?? '',
+              amountMmk: data['amount_mmk']?.toString() ?? '0',
+              kpayId: _firestoreString(data['kpay_id']) ?? '',
+              bankName: _firestoreString(data['bank_name']) ?? '',
+              bankAccountNumber:
+                  _firestoreString(data['bank_account_number']) ?? '',
+              bankAccountName: _firestoreString(data['bank_account_name']) ?? '',
+              paymentMethodLabel: _firestoreString(data['payment_method_label']),
+              qrImageUrl: _firestoreString(data['qr_image_url']),
+            ),
+          ),
+        ),
+      );
+    }
+    if (type == 'image') {
+      final url = data['image_url'] as String? ?? '';
+      final caption = data['caption'] as String? ?? '';
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.94,
+            ),
+            child: AppGlassCard(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (url.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadii.sm),
+                      child: CachedNetworkImage(
+                        imageUrl: url,
+                        width: 220,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const SizedBox(
+                          width: 220,
+                          height: 140,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.gold,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 6),
+                  PremiumText.caption(
+                    caption.isEmpty ? 'Workshop update' : caption,
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (type == 'quote_card') {
+      final quoteId = (data['quote_id'] as num?)?.toInt();
+      final quoteNumber = data['quote_number'] as String? ?? '';
+      final totalMmk = data['total_mmk']?.toString() ?? '0';
+      final rawLines = data['lines'] as List<dynamic>? ?? [];
+      final lines = rawLines
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final hasOrder = pipeline?.orderId != null;
+      final acted = quoteId != null && actedQuoteIds.contains(quoteId);
+      final showActions =
+          quoteId != null && !hasOrder && !acted;
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.94,
+            ),
+            child: InquiryQuoteCard(
+              quoteNumber: quoteNumber,
+              totalMmk: totalMmk,
+              lines: lines,
+              actionsEnabled: showActions,
+              busy: quoteBusyId == quoteId,
+              onAccept: showActions
+                  ? () => onAcceptQuote(quoteId)
+                  : null,
+              onDecline: showActions
+                  ? () => onDeclineQuote(quoteId)
+                  : null,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final text = data['text'] as String? ?? '';
+    final role = data['sender_role'] as String? ?? '';
+    final isMe = role == 'customer';
+    final ts = data['created_at'];
+    DateTime? at;
+    if (ts is Timestamp) {
+      at = ts.toDate();
+    }
+    final label = role == 'admin' ? 'Concierge' : 'You';
+
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: _TextBubble(
+          isMe: isMe,
+          text: text,
+          caption:
+              '$label${at != null ? ' · ${timeFmt.format(at.toLocal())}' : ''}',
+        ),
+      ),
+    );
+  }
+}
+
+class _TextBubble extends StatelessWidget {
+  const _TextBubble({
+    required this.isMe,
+    required this.text,
+    required this.caption,
+  });
+
+  final bool isMe;
+  final String text;
+  final String caption;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width * 0.82,
+      ),
+      child: Column(
+        crossAxisAlignment:
+            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Text(
+            text,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 6),
+          PremiumText.caption(caption),
+        ],
+      ),
+    );
+
+    if (isMe) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          gradient: LinearGradient(
+            colors: [
+              AppColors.gold.withValues(alpha: 0.22),
+              AppColors.gold.withValues(alpha: 0.08),
+            ],
+          ),
+          border: Border.all(color: AppColors.glassBorder),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: child,
+        ),
+      );
+    }
+
+    return AppGlassCard(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: child,
     );
   }
 }

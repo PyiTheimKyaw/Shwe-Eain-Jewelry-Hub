@@ -21,4 +21,12 @@ class InquiryPolicy
     {
         return $user->role === UserRole::Admin;
     }
+
+    /**
+     * Publish a quote into the inquiry thread (admin chat console).
+     */
+    public function publishQuote(User $user, Inquiry $inquiry): bool
+    {
+        return $user->role === UserRole::Admin;
+    }
 }

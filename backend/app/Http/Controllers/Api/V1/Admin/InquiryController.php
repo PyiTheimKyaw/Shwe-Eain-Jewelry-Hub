@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
+use App\Services\InquiryPipelinePresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,11 +21,16 @@ class InquiryController extends Controller
         return response()->json($q->paginate(30));
     }
 
-    public function show(Inquiry $inquiry): JsonResponse
+    public function show(Inquiry $inquiry, InquiryPipelinePresenter $pipeline): JsonResponse
     {
         $inquiry->load(['customer', 'attachments', 'quotes']);
 
-        return response()->json(['data' => $inquiry]);
+        return response()->json([
+            'data' => $inquiry,
+            'meta' => [
+                'pipeline' => $pipeline->present($inquiry),
+            ],
+        ]);
     }
 
     public function update(Request $request, Inquiry $inquiry): JsonResponse

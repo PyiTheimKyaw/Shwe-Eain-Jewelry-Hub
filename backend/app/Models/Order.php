@@ -13,6 +13,8 @@ class Order extends Model
         'quote_id',
         'order_number',
         'status',
+        'deposit_amount_mmk',
+        'deposit_instructions_sent_at',
         'total_mmk',
         'total_usd_snapshot',
         'exchange_rate_snapshot_id',
@@ -24,6 +26,8 @@ class Order extends Model
         return [
             'total_mmk' => 'decimal:4',
             'total_usd_snapshot' => 'decimal:4',
+            'deposit_amount_mmk' => 'decimal:4',
+            'deposit_instructions_sent_at' => 'datetime',
         ];
     }
 
@@ -35,6 +39,16 @@ class Order extends Model
     public function quote(): BelongsTo
     {
         return $this->belongsTo(Quote::class);
+    }
+
+    public function resolveInquiry(): ?Inquiry
+    {
+        $this->loadMissing('quote');
+        if ($this->quote === null || $this->quote->inquiry_id === null) {
+            return null;
+        }
+
+        return Inquiry::query()->find($this->quote->inquiry_id);
     }
 
     public function exchangeRateSnapshot(): BelongsTo
@@ -55,5 +69,15 @@ class Order extends Model
     public function progressEvents(): HasMany
     {
         return $this->hasMany(OrderProgressEvent::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function depositPayment(): ?Payment
+    {
+        return $this->payments()->where('type', Payment::TYPE_DEPOSIT)->orderByDesc('id')->first();
     }
 }

@@ -19,11 +19,15 @@ class OrderBuilderService
         return DB::transaction(function () use ($quote) {
             $quote->load('lineItems');
 
+            $depositPct = (float) config('jewelry.default_deposit_percentage', 50);
+            $depositAmount = round((float) $quote->total_mmk * ($depositPct / 100), 4);
+
             $order = Order::create([
                 'customer_user_id' => $quote->customer_user_id,
                 'quote_id' => $quote->id,
                 'order_number' => $this->uniqueOrderNumber(),
-                'status' => 'pending',
+                'status' => 'awaiting_deposit',
+                'deposit_amount_mmk' => $depositAmount,
                 'total_mmk' => $quote->total_mmk,
                 'total_usd_snapshot' => $quote->total_usd_snapshot,
                 'exchange_rate_snapshot_id' => $quote->exchange_rate_snapshot_id,

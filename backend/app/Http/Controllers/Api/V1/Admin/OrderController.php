@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderAssignment;
+use App\Models\Payment;
 use App\Models\Quote;
 use App\Models\User;
 use App\Services\OrderBuilderService;
@@ -37,6 +38,7 @@ class OrderController extends Controller
             'progressEvents.attachments',
             'progressEvents.artisan',
             'quote',
+            'payments',
         ]);
 
         return response()->json(['data' => $order]);
@@ -57,7 +59,7 @@ class OrderController extends Controller
     public function update(Request $request, Order $order): JsonResponse
     {
         $data = $request->validate([
-            'status' => ['sometimes', 'in:pending,confirmed,in_production,qa,ready,shipped,completed,cancelled'],
+            'status' => ['sometimes', 'in:awaiting_deposit,deposit_confirmed,in_production,pending_qc,ready,shipped,completed,cancelled'],
             'shipping_notes' => ['nullable', 'string', 'max:10000'],
         ]);
 
@@ -80,6 +82,19 @@ class OrderController extends Controller
             if (! $belongs) {
                 return response()->json(['message' => 'Order item does not belong to this order.'], 422);
             }
+        }
+
+        if ($order->status !== 'deposit_confirmed') {
+            return response()->json(['message' => 'Deposit must be confirmed before assigning an artisan.'], 422);
+        }
+
+        $depositOk = Payment::query()
+            ->where('order_id', $order->id)
+            ->where('type', Payment::TYPE_DEPOSIT)
+            ->where('status', Payment::STATUS_CONFIRMED)
+            ->exists();
+        if (! $depositOk) {
+            return response()->json(['message' => 'A confirmed deposit payment is required.'], 422);
         }
 
         $artisan = User::query()->findOrFail($data['artisan_user_id']);

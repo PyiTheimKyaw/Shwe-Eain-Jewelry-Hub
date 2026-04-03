@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderProgressAttachment;
 use App\Models\OrderProgressEvent;
+use App\Services\FirebaseInquiryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class OrderProgressController extends Controller
 {
+    public function __construct(
+        protected FirebaseInquiryService $firebaseInquiry
+    ) {}
+
     public function index(Request $request, Order $order): JsonResponse
     {
         $this->authorize('view', $order);
@@ -62,6 +67,14 @@ class OrderProgressController extends Controller
         }
 
         $event->load(['attachments', 'artisan']);
+
+        $inquiry = $order->resolveInquiry();
+        if ($inquiry !== null) {
+            foreach ($event->attachments as $attachment) {
+                $this->firebaseInquiry->publishProgressImageMessage($inquiry, $event, $attachment);
+            }
+            $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
+        }
 
         return response()->json(['data' => $event], 201);
     }

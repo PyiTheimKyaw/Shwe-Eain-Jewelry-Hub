@@ -189,4 +189,100 @@ Customers can **create inquiries** (message + optional photo attachments, option
 
 Service account JSON and web API keys must stay private. Firestore rules rely on **custom token claims**; misconfiguration can expose data — treat **FYP** config as **non-production** unless reviewed.
 
+---
+
+## 2026-04-06 — Inquiry & chat: documentation standards (luxury UX + Firebase)
+
+### Purpose
+
+Align **FYP documentation** and **`.cursorrules`** with the intended **boutique concierge** experience (not a basic admin table UI): **Dark Gold** (`#D4AF37`), **glassmorphism**, and **Firebase** for all live chat behavior while **MySQL** remains the system of record for inquiries, quotes, and statuses.
+
+### Target product behavior (reference for future implementation)
+
+| Area | Intent |
+|------|--------|
+| **Customer app (Flutter)** | Chat feels like a high-end atelier: soft rounded bubbles; **customer** messages use **gold** accents; **concierge/admin** messages use **translucent slate / glass** (see `AppColors` + shared widgets). Optional **progress stepper** at top: e.g. **Consultation → Quoted → Production → Ready**, driven by **`inquiries.status`** with instant UI updates when **Firestore thread metadata** mirrors that status. |
+| **Live feel** | **Typing indicators** (`inquiry_threads/{threadId}/typing/{uid}` or equivalent) and **Messenger-style** delivery using Firestore listeners on **`messages`**. |
+| **Thread document** | Optional fields on **`inquiry_threads/{threadId}`** (server or trusted path): e.g. **`inquiry_status`**, **`updated_at`**, so Flutter can subscribe to **one document** for pipeline state without polling MySQL. **Requires** `google/cloud-firestore` (+ often **ext-grpc**) on Laravel for `FirebaseInquiryService::syncInquiryThreadDocument`, or another approved sync strategy. |
+| **Quote in chat** | Admin publishes a **final MMK** quote from the inquiry/chat context; customer receives a **premium quote card** in the thread with **Accept / Decline**; backend updates **`quotes`** + **`inquiries.status`** (e.g. accept → production). |
+| **Filament** | Unified **chat console** (slide-over or full page) with the same Firestore thread as Flutter — not a static message dump. Styling should match **Dark Gold** panel branding. |
+
+### Firestore rules evolution
+
+Deployed rules live in **`firebase/firestore.rules`**. Any addition of **image-only messages**, **`quote_card`** payloads, or **typing** writes must be reflected in rules and redeployed (`firebase deploy --only firestore:rules`). See **`.cursorrules`** for UX and architecture expectations.
+
+### Local server
+
+For LAN/mobile testing against a machine IP, run Laravel with an open bind, e.g.:
+
+```bash
 php artisan serve --host=0.0.0.0 --port=8000
+```
+
+(Also documented in [Local_Setup.md](./Local_Setup.md).)
+
+---
+
+## 2026-04-07 — Luxury Concierge inquiry overhaul (pipeline, quote cards, accept/decline)
+
+### Summary
+
+Implemented the **concierge** inquiry flow: **derived pipeline** from MySQL, **customer accept/decline** with automatic **order** creation, **admin publish quote** (API + Filament), **Firestore** `quote_card` messages (server-side) and richer **thread metadata**, **Messenger-style** Flutter chat with **stepper** + **quote card** UI, and **Filament** chat console with **Generate quote** form.
+
+### Backend
+
+- **`App\Services\InquiryPipelinePresenter`**: steps `consulting` | `quoted` | `in_production` | `ready` from inquiry + quotes + orders; exposed on **`GET /api/v1/inquiries/{inquiry}`** and **`GET /api/v1/admin/inquiries/{inquiry}`** as **`meta.pipeline`** (includes `order_id`, `order_status`, `active_quote_id`, nested `order` when present).
+- **`QuoteBuilderService::createQuote(..., $initialStatus)`**: supports **`draft`** (default) or **`sent`** for publish flows.
+- **`POST /api/v1/quotes/{quote}/accept`** (customer): accepts **`sent`** quote, creates **`Order`** via **`OrderBuilderService`**, syncs Firestore thread.
+- **`POST /api/v1/quotes/{quote}/decline`** (customer): sets quote **`void`**, inquiry **`reviewing`**.
+- **`POST /api/v1/admin/inquiries/{inquiry}/quotes/publish`**: creates **`sent`** quote with lines, **quoted** inquiry, **`publishQuoteCardMessage`** + **`syncInquiryThreadDocument`**.
+- **`FirebaseInquiryService`**: **`publishQuoteCardMessage`** writes `messages` doc (`type: quote_card`, totals, `lines[]`); thread doc adds **`pipeline_step`**, **`order_id`**, **`order_number`**, **`order_status`**, **`active_quote_id`**.
+
+### Firebase
+
+- **`firebase/firestore.rules`**: legacy `text` + `sender_role`; optional **`type`** + **`created_at`** for **`text`** and **`image`** client messages; **`quote_card`** remains **server-only** (Admin SDK bypasses rules).
+
+### Flutter
+
+- **`InquiryPipeline`**, **`InquiryApi.fetchPipeline`**, **`acceptQuote`**, **`declineQuote`**.
+- **`ConciergePipelineStepper`**, **`InquiryQuoteCard`**, **`inquiry_chat_screen.dart`**: nested **thread** + **messages** streams, **reverse** list, gold vs glass bubbles, quote card **Accept / Decline**.
+- **`PremiumText`**: optional **`color`** on **caption** / **headline**.
+
+### Filament
+
+- **`ChatInquiry`**: **`publishQuoteFromConsole`** (Livewire), **`pipeline`** stepper in Blade, **Dark Gold** layout, **Generate quote** form (multi-line), Firebase JS renders **`quote_card`** messages.
+
+### Tests
+
+- **`tests/Feature/InquiryQuoteFlowTest.php`**: publish → accept → order; draft accept forbidden; decline → void + reviewing.
+
+---
+
+## 2026-04-10 — Bespoke order workflow (deposit gate, artisan jobs, QC)
+
+### Summary
+
+**MySQL** is extended with **`payments`** and richer **`orders.status`** (`awaiting_deposit`, `deposit_confirmed`, `pending_qc`, etc.). **Accept quote** creates an order in **`awaiting_deposit`** with a computed **deposit %**. Admins send **`payment_info_card`** to Firestore; customers upload **deposit proof** via API; admins **confirm/reject** in **Filament** or API. **Assignment** is gated on **confirmed deposit**; artisans **start job**, upload **progress** (photos sync to chat as server **`image`** messages), **ready for review**, then admin **QC approve** → **`ready`**. **Flutter**: 6-step **ConciergePipelineStepper**, payment card + workshop images in chat, **upload proof** CTA; **artisan** role opens a **job list** and **job detail** actions.
+
+### Backend
+
+- **Migration** `2026_04_10_120000_bespoke_order_workflow_payments_and_order_status`: **`payments`** table; **`orders.deposit_amount_mmk`**, **`deposit_instructions_sent_at`**; status vocabulary migration (SQLite-safe).
+- **`InquiryPipelinePresenter`**: steps include **`awaiting_deposit`**, **`pre_production`**, **`in_production`**, **`pending_qc`**, **`ready`**; **`deposit_state`**, **`assignment_state`**, etc. in **`meta.pipeline`**.
+- **API**: `POST /api/v1/orders/{order}/deposit-proof` (customer); `POST /api/v1/admin/orders/{order}/payment-instructions`; `POST /api/v1/admin/payments/{payment}/confirm|reject`; `POST /api/v1/artisan/orders/{order}/start`; `POST /api/v1/artisan/orders/{order}/ready-for-review`; `POST /api/v1/admin/orders/{order}/qc/approve`; gated **`storeAssignment`**.
+- **`FirebaseInquiryService`**: **`publishPaymentInfoCard`**, **`publishProgressImageMessage`**; thread doc merges **`deposit_state`**, **`assignment_state`**, **`primary_artisan_user_id`**, etc.
+- **`PaymentVerificationService`**: shared confirm/reject logic for API + Filament.
+
+### Filament
+
+- **`PaymentResource`**: list deposits with **Confirm deposit** / **Reject**.
+- **`ChatInquiry`**: **Send payment info to chat** (`sendPaymentInstructionsToChat`); Blade stepper expanded to six steps; JS renders **`payment_info_card`** and **`image`**.
+
+### Flutter
+
+- **`InquiryPipeline`**: deposit fields; **`ConciergePipelineStepper`** (6 steps); **`InquiryPaymentInfoCard`**; chat tiles for **`payment_info_card`** + **`image`**; **`uploadDepositProof`**; accept-quote snackbar/pipeline → **`awaiting_deposit`**.
+- **`ArtisanShell`**, **`ArtisanJobsScreen`**, **`ArtisanJobDetailScreen`**, **`ArtisanApi`**.
+
+### Tests
+
+- **`tests/Feature/BespokeOrderWorkflowTest.php`**: end-to-end deposit → confirm → assign → start → progress → ready-for-review → QC.
+- **`InquiryQuoteFlowTest`**: order **`awaiting_deposit`** after accept.

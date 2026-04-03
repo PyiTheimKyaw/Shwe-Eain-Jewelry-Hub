@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use App\Models\InquiryAttachment;
 use App\Services\FirebaseInquiryService;
+use App\Services\InquiryPipelinePresenter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -58,12 +59,17 @@ class InquiryController extends Controller
         return response()->json($items);
     }
 
-    public function show(Request $request, Inquiry $inquiry): JsonResponse
+    public function show(Request $request, Inquiry $inquiry, InquiryPipelinePresenter $pipeline): JsonResponse
     {
         $this->authorize('view', $inquiry);
 
-        $inquiry->load(['attachments', 'product']);
+        $inquiry->load(['attachments', 'product', 'quotes']);
 
-        return response()->json(['data' => $inquiry]);
+        return response()->json([
+            'data' => $inquiry,
+            'meta' => [
+                'pipeline' => $pipeline->present($inquiry),
+            ],
+        ]);
     }
 }

@@ -4,10 +4,19 @@ namespace App\Filament\Resources\Inquiries\Pages;
 
 use App\Filament\Resources\Inquiries\InquiryResource;
 use App\Models\Inquiry;
+use App\Models\Order;
+use App\Models\Payment;
+use App\Models\PaymentProfile;
+use App\Models\User;
 use App\Services\FirebaseInquiryService;
+use App\Services\InquiryPipelinePresenter;
+use App\Services\PricingService;
+use App\Services\QuoteBuilderService;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Facades\Gate;
 
 class ChatInquiry extends Page
 {
@@ -25,6 +34,18 @@ class ChatInquiry extends Page
 
     public bool $showChat = false;
 
+    /** @var array<string, mixed> */
+    public array $pipeline = [];
+
+    /** @var array<int, array{weight_grams: string, labor_fee_mmk: string, gem_price_mmk: string, product_id: string, custom_title: string}> */
+    public array $quoteFormLines = [];
+
+    public ?string $quoteValidUntil = null;
+
+    public ?string $quoteNotes = null;
+
+    public ?int $selectedPaymentProfileId = null;
+
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
@@ -35,6 +56,18 @@ class ChatInquiry extends Page
         $inquiry = $this->getRecord();
 
         $this->threadId = (string) ($inquiry->firebase_thread_id ?? '');
+
+        $this->quoteFormLines = [
+            [
+                'weight_grams' => '',
+                'labor_fee_mmk' => '',
+                'gem_price_mmk' => '',
+                'product_id' => '',
+                'custom_title' => '',
+            ],
+        ];
+
+        $this->refreshPipeline();
 
         $firebase = app(FirebaseInquiryService::class);
         $webKey = trim((string) config('services.firebase.web_api_key'));
@@ -49,11 +82,231 @@ class ChatInquiry extends Page
                 $this->showChat = false;
             }
         }
+
+        $this->selectedPaymentProfileId = PaymentProfile::query()
+            ->active()
+            ->ordered()
+            ->value('id');
+    }
+
+    public function refreshPipeline(): void
+    {
+        /** @var Inquiry $inquiry */
+        $inquiry = $this->getRecord();
+        $inquiry->refresh();
+        $this->pipeline = app(InquiryPipelinePresenter::class)->present($inquiry);
+    }
+
+    public function addQuoteLine(): void
+    {
+        $this->quoteFormLines[] = [
+            'weight_grams' => '',
+            'labor_fee_mmk' => '',
+            'gem_price_mmk' => '',
+            'product_id' => '',
+            'custom_title' => '',
+        ];
+    }
+
+    public function removeQuoteLine(int $index): void
+    {
+        if (count($this->quoteFormLines) <= 1) {
+            return;
+        }
+        unset($this->quoteFormLines[$index]);
+        $this->quoteFormLines = array_values($this->quoteFormLines);
+    }
+
+    public function publishQuoteFromConsole(): void
+    {
+        /** @var Inquiry $inquiry */
+        $inquiry = $this->getRecord();
+        Gate::authorize('publishQuote', $inquiry);
+
+        foreach ($this->quoteFormLines as $k => $row) {
+            if (isset($row['product_id']) && $row['product_id'] === '') {
+                $this->quoteFormLines[$k]['product_id'] = null;
+            }
+        }
+
+        $pricing = app(PricingService::class);
+        $gold = $pricing->currentGoldSnapshot();
+        $fx = $pricing->currentFxSnapshot();
+
+        if (! $gold || ! $fx) {
+            Notification::make()
+                ->title(__('Configure gold and FX rates in Pricing first'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $validated = $this->validate([
+            'quoteFormLines' => ['required', 'array', 'min:1'],
+            'quoteFormLines.*.weight_grams' => ['required', 'numeric', 'min:0'],
+            'quoteFormLines.*.labor_fee_mmk' => ['nullable', 'numeric', 'min:0'],
+            'quoteFormLines.*.gem_price_mmk' => ['nullable', 'numeric', 'min:0'],
+            'quoteFormLines.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
+            'quoteFormLines.*.custom_title' => ['nullable', 'string', 'max:255'],
+            'quoteValidUntil' => ['nullable', 'date'],
+            'quoteNotes' => ['nullable', 'string'],
+        ]);
+
+        $lines = [];
+        foreach ($validated['quoteFormLines'] as $row) {
+            $lines[] = [
+                'weight_grams' => $row['weight_grams'],
+                'labor_fee_mmk' => $row['labor_fee_mmk'] ?? null,
+                'gem_price_mmk' => $row['gem_price_mmk'] ?? null,
+                'product_id' => isset($row['product_id']) && $row['product_id'] !== '' && $row['product_id'] !== null
+                    ? (int) $row['product_id']
+                    : null,
+                'custom_title' => $row['custom_title'] ?? null,
+            ];
+        }
+
+        $customer = User::query()->findOrFail($inquiry->customer_user_id);
+        if (! $customer->isCustomer()) {
+            Notification::make()->title(__('Invalid customer on inquiry'))->danger()->send();
+
+            return;
+        }
+
+        $quote = app(QuoteBuilderService::class)->createQuote(
+            $customer,
+            $gold,
+            $fx,
+            $lines,
+            $inquiry->id,
+            $validated['quoteNotes'] ?? null,
+            isset($validated['quoteValidUntil']) ? new \DateTimeImmutable($validated['quoteValidUntil']) : null,
+            'sent'
+        );
+
+        $inquiry->update(['status' => 'quoted']);
+
+        $quote->load(['lineItems.product', 'goldPriceSnapshot', 'exchangeRateSnapshot']);
+        $firebase = app(FirebaseInquiryService::class);
+        $firebase->publishQuoteCardMessage($inquiry, $quote);
+        $firebase->syncInquiryThreadDocument($inquiry);
+
+        $this->refreshPipeline();
+
+        Notification::make()
+            ->title(__('Quote sent to the customer chat'))
+            ->success()
+            ->send();
+
+        $this->js('document.getElementById("jh-dialog-quote")?.close()');
+    }
+
+    public function sendPaymentInstructionsToChat(): void
+    {
+        /** @var Inquiry $inquiry */
+        $inquiry = $this->getRecord();
+
+        Gate::authorize('update', $inquiry);
+
+        if (! PaymentProfile::query()->active()->exists()) {
+            Notification::make()
+                ->title(__('Create an active payment profile first'))
+                ->body(__('Go to Settings → Payment profiles.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->validate([
+            'selectedPaymentProfileId' => ['required', 'integer', 'exists:payment_profiles,id'],
+        ]);
+
+        $profile = PaymentProfile::query()
+            ->where('is_active', true)
+            ->whereKey($this->selectedPaymentProfileId)
+            ->first();
+
+        if ($profile === null) {
+            Notification::make()
+                ->title(__('Select a valid payment profile'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $order = Order::query()
+            ->whereHas('quote', fn ($q) => $q->where('inquiry_id', $inquiry->id))
+            ->orderByDesc('id')
+            ->first();
+
+        if ($order === null) {
+            Notification::make()
+                ->title(__('No order linked to this inquiry yet'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        Gate::authorize('sendPaymentInstructions', $order);
+
+        if ($order->status !== 'awaiting_deposit') {
+            Notification::make()
+                ->title(__('Order is not awaiting deposit'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if ($order->deposit_amount_mmk === null) {
+            Notification::make()
+                ->title(__('Order has no deposit amount'))
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $order->deposit_instructions_sent_at = now();
+        $order->save();
+
+        Payment::query()->updateOrCreate(
+            [
+                'order_id' => $order->id,
+                'type' => Payment::TYPE_DEPOSIT,
+            ],
+            [
+                'payment_profile_id' => $profile->id,
+                'amount_mmk' => $order->deposit_amount_mmk,
+                'currency' => 'MMK',
+                'status' => Payment::STATUS_PENDING_PROOF,
+            ]
+        );
+
+        $firebase = app(FirebaseInquiryService::class);
+        $firebase->publishPaymentInfoCard(
+            $inquiry,
+            $order->fresh(),
+            $profile
+        );
+        $firebase->syncInquiryThreadDocument($inquiry);
+
+        $this->refreshPipeline();
+
+        Notification::make()
+            ->title(__('Payment instructions sent to chat'))
+            ->success()
+            ->send();
+
+        $this->js('document.getElementById("jh-dialog-payment")?.close()');
     }
 
     public function getTitle(): string|Htmlable
     {
-        return __('Inquiry chat');
+        return __('Concierge chat');
     }
 
     public function getBreadcrumb(): string
