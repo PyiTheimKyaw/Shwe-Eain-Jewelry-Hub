@@ -31,6 +31,7 @@
 - **Typography**: Distinctive pairing — display/brand via **Cinzel Decorative** (or equivalent), body/UI via **Outfit**; hierarchy: display > headline > body > caption (see `frontend/lib/core/ui/design_system.dart`).
 - **Motion**: Prefer short fades (`AnimatedSwitcher` / `FadeTransition`) when switching **currency** or **weight units**; avoid jarring snaps.
 - **Mandatory reuse**: New Flutter screens **must** use `frontend/lib/core/ui/design_system.dart` (`AppColors`, `AppTheme`, `AppGradients`, radii) and widgets under `frontend/lib/core/ui/widgets/` (`AppGlassCard`, `AppGoldButton`, `PremiumText`, `PriceTag`, `WeightBadge`) unless a one-off is explicitly justified in the task.
+- **Auth (Flutter)**: Sanctum **bearer token** in **`flutter_secure_storage`** (`AuthTokenStorage`); session state in **`AuthProvider`** (`frontend/lib/core/providers/auth_provider.dart`). API calls live under **`frontend/lib/features/auth/data/auth_api.dart`**. The app **gates** the home stack: signed-out users see **login/register**; after sign-in, **customer catalog** is the default shell (admin/artisan can still sign in for testing; role-specific mobile homes can branch later). Use **`AuthProvider.token`** for new authenticated `http` clients.
 - **Backend admin (web)**: Filament panel at `/admin`; primary color aligned to `#D4AF37` for consistency with the app. **Pricing** sidebar: **Gold prices** + **Exchange rates** (create new snapshots via `PricingService`; history is read-only in the UI).
 
 ## Architecture

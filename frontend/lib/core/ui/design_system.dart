@@ -90,6 +90,38 @@ abstract final class AppTheme {
         titleTextStyle: textTheme.titleLarge,
       ),
       dividerColor: AppColors.glassBorder,
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: AppColors.surface.withValues(alpha: 0.55),
+        labelStyle: GoogleFonts.outfit(
+          color: AppColors.textSecondary,
+          fontSize: 14,
+        ),
+        hintStyle: GoogleFonts.outfit(
+          color: AppColors.textSecondary.withValues(alpha: 0.85),
+          fontSize: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+          borderSide: const BorderSide(color: AppColors.glassBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+          borderSide: const BorderSide(color: AppColors.glassBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+          borderSide: const BorderSide(color: AppColors.gold, width: 1.5),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+          borderSide: BorderSide(color: Colors.red.shade300),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+          borderSide: BorderSide(color: Colors.red.shade200, width: 1.5),
+        ),
+      ),
     );
   }
 }

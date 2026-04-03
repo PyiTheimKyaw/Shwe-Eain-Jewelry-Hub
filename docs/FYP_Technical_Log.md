@@ -1,5 +1,7 @@
 # FYP Technical Log — Jewelry Hub
 
+**Run locally:** see [Local_Setup.md](./Local_Setup.md) (Laravel + Filament + Flutter).
+
 ## 2026-04-03 — Database schema and REST API v1 scaffold
 
 ### Summary
@@ -116,3 +118,28 @@ All routes are registered in `backend/routes/api.php` under the `v1` prefix. Rol
 - Catalog **`pricing`** is omitted until **both** a current `gold_price_snapshots` row and a current `exchange_rate_snapshots` row exist (`CatalogController` / `CatalogProductPresenter`).
 - **Local / FYP demo**: run **`php artisan migrate:fresh --seed`** (or `db:seed` on an empty pricing table) so **`PricingSnapshotSeeder`** runs before **`CatalogSeeder`**; the Flutter **`PriceTag`** then shows MMK/USD instead of “Price on request”.
 - **Production / staging**: set rates via **Filament → Pricing** or authenticated **`POST /api/v1/pricing/gold`** and **`POST /api/v1/pricing/fx`** (admin).
+
+---
+
+## 2026-04-03 — Flutter authentication & session
+
+### Summary
+
+Mobile app now **requires sign-in** before the customer catalog: Laravel **Sanctum** bearer token is stored in **`flutter_secure_storage`**, session is restored on cold start via **`GET /api/v1/auth/me`**, and the catalog screen exposes **logout**.
+
+### Implementation
+
+- **`frontend/lib/core/auth/auth_token_storage.dart`** — key `sanctum_token`; Android uses encrypted shared preferences.
+- **`frontend/lib/features/auth/data/auth_api.dart`** — `register` / `login` / `logout` / `me` against `/api/v1/auth/*` with `Accept` + `Content-Type: application/json`; Bearer on authenticated routes; parses Laravel **`message`** / **`errors`** for failures.
+- **`frontend/lib/features/auth/models/auth_user.dart`** — `id`, `name`, `email`, `role` from API user payload.
+- **`frontend/lib/core/providers/auth_provider.dart`** — `bootstrap()` reads token, validates with `me`, clears invalid token; `login` / `register` persist token; `logout` calls API then clears storage.
+- **`frontend/lib/features/auth/ui/login_screen.dart`** & **`register_screen.dart`** — `AppGlassCard`, `AppGoldButton`, `PremiumText`, `AnimatedSwitcher` for loading; register collects optional `phone`; password rules aligned with backend (confirm + min length on client).
+- **`frontend/lib/main.dart`** — `MultiProvider` includes **`AuthProvider`** first; **`_AuthGate`** with **`AnimatedSwitcher`**: bootstrap splash → **`LoginScreen`** or **`ProductCatalogScreen`**.
+- **`frontend/lib/features/catalog/ui/product_catalog_screen.dart`** — **`SliverAppBar`** **`IconButton`** → **`AuthProvider.logout()`**.
+- **`frontend/lib/core/ui/design_system.dart`** — shared **`inputDecorationTheme`** (gold focus border, glass fill) for auth (and future forms).
+- **Dependencies**: `flutter_secure_storage` (see `pubspec.yaml`).
+- **Tests**: `test/widget_test.dart` — **`FlutterSecureStorage.setMockInitialValues({})`**; expects **Sign in** after bootstrap (avoids `pumpAndSettle` on indeterminate progress indicator).
+
+### Demo accounts
+
+Use seeded **`customer@example.com`** / **`password`** or **`admin@jewelryhub.test`** / **`password`** after `php artisan db:seed`, or **Create an account** (API registers **customer** role only).

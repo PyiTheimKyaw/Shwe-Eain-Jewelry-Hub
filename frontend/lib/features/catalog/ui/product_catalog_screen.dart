@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
@@ -72,6 +73,18 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                   floating: false,
                   backgroundColor: AppColors.background.withValues(alpha: 0.85),
                   title: PremiumText.display('Jewelry Hub'),
+                  actions: [
+                    IconButton(
+                      tooltip: 'Log out',
+                      icon: const Icon(
+                        Icons.logout_rounded,
+                        color: AppColors.textSecondary,
+                      ),
+                      onPressed: () async {
+                        await context.read<AuthProvider>().logout();
+                      },
+                    ),
+                  ],
                   bottom: const PreferredSize(
                     preferredSize: Size.fromHeight(52),
                     child: CatalogToggleBar(),
