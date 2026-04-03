@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import 'package:firebase_core/firebase_core.dart';
@@ -40,6 +42,58 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
   InquiryPipeline? _restPipeline;
   final Set<int> _actedQuoteIds = {};
   int? _quoteActionBusyId;
+  bool _didInitialScrollToBottom = false;
+  Timer? _pipelineRefreshDebounce;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _threadPipelineSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _messagesPipelineSub;
+
+  /// Keeps REST pipeline (quote API banner, deposit_payment) in sync when Firestore updates.
+  void _schedulePipelineRefresh() {
+    _pipelineRefreshDebounce?.cancel();
+    _pipelineRefreshDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (mounted) {
+        _loadPipeline();
+      }
+    });
+  }
+
+  void _attachPipelineSyncListeners(String threadId) {
+    _threadPipelineSub?.cancel();
+    _messagesPipelineSub?.cancel();
+    _threadPipelineSub = FirebaseFirestore.instance
+        .collection('inquiry_threads')
+        .doc(threadId)
+        .snapshots()
+        .listen((_) => _schedulePipelineRefresh());
+    _messagesPipelineSub = FirebaseFirestore.instance
+        .collection('inquiry_threads')
+        .doc(threadId)
+        .collection('messages')
+        .orderBy('created_at', descending: false)
+        .snapshots()
+        .listen((_) => _schedulePipelineRefresh());
+  }
+
+  void _scrollToBottom({bool animated = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+      final max = _scrollController.position.maxScrollExtent;
+      if (max <= 0) {
+        return;
+      }
+      if (animated) {
+        _scrollController.animateTo(
+          max,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        );
+      } else {
+        _scrollController.jumpTo(max);
+      }
+    });
+  }
 
   @override
   void initState() {
@@ -76,6 +130,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       );
       await auth.FirebaseAuth.instance.signInWithCustomToken(creds.token);
       if (mounted) {
+        _attachPipelineSyncListeners(threadId);
         setState(() {
           _connecting = false;
           _error = null;
@@ -239,13 +294,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
             'laravel_user_id': uid,
           });
       _composer.clear();
-      if (_scrollController.hasClients) {
-        await _scrollController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
-      }
+      _scrollToBottom(animated: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -346,6 +395,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
 
   @override
   void dispose() {
+    _pipelineRefreshDebounce?.cancel();
+    _threadPipelineSub?.cancel();
+    _messagesPipelineSub?.cancel();
     _composer.dispose();
     _scrollController.dispose();
     if (Firebase.apps.isNotEmpty) {
@@ -362,6 +414,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     final timeFmt = DateFormat.jm();
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: SafeArea(
@@ -434,12 +487,6 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-                            child: ConciergePipelineStepper(
-                              pipeline: effectivePipeline,
-                            ),
-                          ),
                           Expanded(
                             child: StreamBuilder<
                                 QuerySnapshot<Map<String, dynamic>>>(
@@ -485,57 +532,87 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                   docs,
                                 );
 
-                                return Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (showApiQuoteBanner)
-                                      InquiryApiQuoteBanner(
-                                        key: ValueKey(activeQuoteId),
-                                        quoteId: activeQuoteId,
-                                        pipeline: effectivePipeline,
-                                        onAcceptQuote: _acceptQuote,
-                                        onDeclineQuote: _declineQuote,
-                                        quoteBusyId: _quoteActionBusyId,
-                                        actedQuoteIds: _actedQuoteIds,
-                                      ),
-                                    if (showApiDepositPayment)
-                                      Padding(
+                                if (!_didInitialScrollToBottom &&
+                                    docs.isNotEmpty) {
+                                  _didInitialScrollToBottom = true;
+                                  WidgetsBinding.instance
+                                      .addPostFrameCallback((_) {
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    _scrollToBottom();
+                                  });
+                                }
+
+                                return CustomScrollView(
+                                  controller: _scrollController,
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  slivers: [
+                                    SliverToBoxAdapter(
+                                      child: Padding(
                                         padding: const EdgeInsets.fromLTRB(
                                           12,
                                           0,
                                           12,
                                           8,
                                         ),
-                                        child: _apiDepositPaymentFromPipeline(
-                                          effectivePipeline,
+                                        child: ConciergePipelineStepper(
+                                          pipeline: effectivePipeline,
                                         ),
                                       ),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        controller: _scrollController,
-                                        reverse: true,
-                                        padding: const EdgeInsets.fromLTRB(
-                                          12,
-                                          0,
-                                          12,
-                                          12,
+                                    ),
+                                    if (showApiQuoteBanner)
+                                      SliverToBoxAdapter(
+                                        child: InquiryApiQuoteBanner(
+                                          key: ValueKey(activeQuoteId),
+                                          quoteId: activeQuoteId,
+                                          pipeline: effectivePipeline,
+                                          onAcceptQuote: _acceptQuote,
+                                          onDeclineQuote: _declineQuote,
+                                          quoteBusyId: _quoteActionBusyId,
+                                          actedQuoteIds: _actedQuoteIds,
                                         ),
-                                        itemCount: docs.length,
-                                        itemBuilder: (context, index) {
-                                          final doc =
-                                              docs[docs.length - 1 - index];
-                                          final d = doc.data();
-                                          return _MessageTile(
-                                            data: d,
-                                            timeFmt: timeFmt,
-                                            onAcceptQuote: _acceptQuote,
-                                            onDeclineQuote: _declineQuote,
-                                            quoteBusyId: _quoteActionBusyId,
-                                            actedQuoteIds: _actedQuoteIds,
-                                            pipeline: effectivePipeline,
-                                          );
-                                        },
+                                      ),
+                                    if (showApiDepositPayment)
+                                      SliverToBoxAdapter(
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(
+                                            12,
+                                            0,
+                                            12,
+                                            8,
+                                          ),
+                                          child: _apiDepositPaymentFromPipeline(
+                                            effectivePipeline,
+                                          ),
+                                        ),
+                                      ),
+                                    SliverPadding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        12,
+                                        0,
+                                        12,
+                                        12,
+                                      ),
+                                      sliver: SliverList(
+                                        delegate:
+                                            SliverChildBuilderDelegate(
+                                          (context, index) {
+                                            final doc = docs[index];
+                                            final d = doc.data();
+                                            return _MessageTile(
+                                              data: d,
+                                              timeFmt: timeFmt,
+                                              onAcceptQuote: _acceptQuote,
+                                              onDeclineQuote: _declineQuote,
+                                              quoteBusyId: _quoteActionBusyId,
+                                              actedQuoteIds: _actedQuoteIds,
+                                              pipeline: effectivePipeline,
+                                            );
+                                          },
+                                          childCount: docs.length,
+                                        ),
                                       ),
                                     ),
                                   ],

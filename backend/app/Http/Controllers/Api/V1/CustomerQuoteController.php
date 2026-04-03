@@ -57,9 +57,7 @@ class CustomerQuoteController extends Controller
                 abort(422, 'Only a sent quote can be accepted.');
             }
 
-            $locked->update(['status' => 'accepted']);
-
-            return $this->orders->createFromQuote($locked->fresh(['lineItems']));
+            return $this->orders->acceptSentQuoteAndCreateOrder($locked);
         });
 
         $order->load(['items', 'quote']);

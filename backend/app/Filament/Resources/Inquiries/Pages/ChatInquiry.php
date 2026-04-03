@@ -7,6 +7,7 @@ use App\Models\Inquiry;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentProfile;
+use App\Models\Quote;
 use App\Models\User;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryPipelinePresenter;
@@ -45,6 +46,13 @@ class ChatInquiry extends Page
     public ?string $quoteNotes = null;
 
     public ?int $selectedPaymentProfileId = null;
+
+    /**
+     * Active quote card data for admin chat (MySQL), same shape as Firestore quote_card.
+     *
+     * @var array<string, mixed>|null
+     */
+    public ?array $adminQuoteCardPayload = null;
 
     public function mount(int|string $record): void
     {
@@ -95,6 +103,43 @@ class ChatInquiry extends Page
         $inquiry = $this->getRecord();
         $inquiry->refresh();
         $this->pipeline = app(InquiryPipelinePresenter::class)->present($inquiry);
+        $this->adminQuoteCardPayload = $this->buildAdminQuoteCardPayload($inquiry);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function buildAdminQuoteCardPayload(Inquiry $inquiry): ?array
+    {
+        $qid = $this->pipeline['active_quote_id'] ?? null;
+        if ($qid === null) {
+            return null;
+        }
+
+        $quote = Quote::query()->with('lineItems')->find($qid);
+        if ($quote === null || ! in_array($quote->status, ['sent', 'accepted'], true)) {
+            return null;
+        }
+
+        $lines = [];
+        foreach ($quote->lineItems as $line) {
+            $lines[] = [
+                'title' => (string) ($line->custom_title ?? 'Item'),
+                'metal_mmk' => (string) $line->metal_value_mmk,
+                'labor_mmk' => (string) $line->labor_fee_mmk,
+                'gems_mmk' => (string) $line->gem_price_mmk,
+                'line_total_mmk' => (string) $line->line_total_mmk,
+            ];
+        }
+
+        return [
+            'type' => 'quote_card',
+            'sender_role' => 'admin',
+            'quote_id' => $quote->id,
+            'quote_number' => $quote->quote_number,
+            'total_mmk' => (string) $quote->total_mmk,
+            'lines' => $lines,
+        ];
     }
 
     public function addQuoteLine(): void
@@ -198,7 +243,15 @@ class ChatInquiry extends Page
             ->success()
             ->send();
 
-        $this->js('document.getElementById("jh-dialog-quote")?.close()');
+        $this->js(<<<'JS'
+            document.getElementById("jh-dialog-quote")?.close();
+            [0, 200, 600].forEach(function (ms) {
+                setTimeout(function () {
+                    window.jhAdminChatRefreshStatic?.();
+                }, ms);
+            });
+            JS);
+
     }
 
     public function sendPaymentInstructionsToChat(): void
@@ -301,7 +354,15 @@ class ChatInquiry extends Page
             ->success()
             ->send();
 
-        $this->js('document.getElementById("jh-dialog-payment")?.close()');
+        $this->js(<<<'JS'
+            document.getElementById("jh-dialog-payment")?.close();
+            [0, 200, 600].forEach(function (ms) {
+                setTimeout(function () {
+                    window.jhAdminChatRefreshStatic?.();
+                }, ms);
+            });
+            JS);
+
     }
 
     public function getTitle(): string|Htmlable

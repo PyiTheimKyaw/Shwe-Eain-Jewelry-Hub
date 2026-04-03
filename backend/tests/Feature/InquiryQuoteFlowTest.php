@@ -7,6 +7,7 @@ use App\Models\ExchangeRateSnapshot;
 use App\Models\GoldPriceSnapshot;
 use App\Models\Inquiry;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Quote;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -156,5 +157,147 @@ class InquiryQuoteFlowTest extends TestCase
         $this->assertDatabaseHas('quotes', ['id' => $quoteId, 'status' => 'void']);
         $this->assertDatabaseHas('inquiries', ['id' => $inquiry->id, 'status' => 'reviewing']);
         $this->assertSame(0, Order::query()->count());
+    }
+
+    public function test_accepting_newer_quote_supersedes_awaiting_deposit_order(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Ring',
+            'status' => 'open',
+            'firebase_thread_id' => 'test-thread-super-1',
+        ]);
+
+        $q1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            [
+                'lines' => [
+                    [
+                        'weight_grams' => 10,
+                        'labor_fee_mmk' => 50000,
+                        'gem_price_mmk' => 10000,
+                    ],
+                ],
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $q1->assertCreated();
+        $quoteId1 = (int) $q1->json('data.id');
+        $total1 = (float) $q1->json('data.total_mmk');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId1}/accept")->assertOk();
+        $order1 = Order::query()->where('quote_id', $quoteId1)->first();
+        $this->assertNotNull($order1);
+        $this->assertSame('awaiting_deposit', $order1->status);
+
+        Sanctum::actingAs($admin);
+        $adminToken2 = $admin->createToken('t2')->plainTextToken;
+        $q2 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            [
+                'lines' => [
+                    [
+                        'weight_grams' => 1,
+                        'labor_fee_mmk' => 100,
+                        'gem_price_mmk' => 0,
+                    ],
+                ],
+            ],
+            ['Authorization' => 'Bearer '.$adminToken2]
+        );
+        $q2->assertCreated();
+        $quoteId2 = (int) $q2->json('data.id');
+        $total2 = (float) $q2->json('data.total_mmk');
+
+        Sanctum::actingAs($customer);
+        $accept2 = $this->postJson("/api/v1/quotes/{$quoteId2}/accept");
+        $accept2->assertOk();
+
+        $this->assertDatabaseHas('quotes', ['id' => $quoteId1, 'status' => 'void']);
+        $this->assertDatabaseHas('quotes', ['id' => $quoteId2, 'status' => 'accepted']);
+
+        $order1->refresh();
+        $this->assertSame('cancelled', $order1->status);
+
+        $order2Id = (int) $accept2->json('data.order.id');
+        $order2 = Order::query()->findOrFail($order2Id);
+        $this->assertSame($quoteId2, $order2->quote_id);
+        $this->assertSame('awaiting_deposit', $order2->status);
+        $expectedDeposit = round($total2 * 0.5, 4);
+        $this->assertEqualsWithDelta($expectedDeposit, (float) $order2->deposit_amount_mmk, 0.01);
+        $this->assertEqualsWithDelta($total2, (float) $order2->total_mmk, 0.01);
+        $this->assertNotEquals($total1, $total2);
+    }
+
+    public function test_cannot_accept_new_quote_while_deposit_awaiting_verification(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Pendant',
+            'status' => 'open',
+            'firebase_thread_id' => 'test-thread-super-2',
+        ]);
+
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            [
+                'lines' => [
+                    [
+                        'weight_grams' => 5,
+                        'labor_fee_mmk' => 10000,
+                        'gem_price_mmk' => 0,
+                    ],
+                ],
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $quoteId1 = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId1}/accept")->assertOk();
+        $order1 = Order::query()->where('quote_id', $quoteId1)->firstOrFail();
+
+        Payment::query()->create([
+            'order_id' => $order1->id,
+            'payment_profile_id' => null,
+            'type' => Payment::TYPE_DEPOSIT,
+            'amount_mmk' => $order1->deposit_amount_mmk,
+            'currency' => 'MMK',
+            'status' => Payment::STATUS_AWAITING_VERIFICATION,
+        ]);
+
+        Sanctum::actingAs($admin);
+        $publish2 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            [
+                'lines' => [
+                    [
+                        'weight_grams' => 1,
+                        'labor_fee_mmk' => 500,
+                        'gem_price_mmk' => 0,
+                    ],
+                ],
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $quoteId2 = (int) $publish2->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId2}/accept")->assertStatus(422);
     }
 }

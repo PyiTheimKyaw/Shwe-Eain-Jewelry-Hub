@@ -149,11 +149,24 @@
 
                     {{-- Main: messages + composer --}}
                     <main class="relative flex min-h-[50vh] min-w-0 flex-1 flex-col bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900 lg:min-h-0">
+                        @php
+                            $__jhAdminStatic = [
+                                'quote' => $adminQuoteCardPayload,
+                                'payment' => $pipeline['deposit_payment'] ?? null,
+                                'recordCaption' => __('Record (matches customer app)'),
+                            ];
+                        @endphp
+                        <script type="application/json" id="jh-admin-static-json">@json($__jhAdminStatic)</script>
                         <div
-                            id="jh-messages"
-                            class="jh-scroll min-h-0 flex-1 overflow-y-auto scroll-smooth px-3 py-4 sm:px-5"
-                            wire:ignore
-                        ></div>
+                            class="jh-scroll-thread jh-scroll min-h-0 flex-1 overflow-y-auto scroll-smooth"
+                        >
+                            <div id="jh-server-cards" class="space-y-1 px-3 pt-4 sm:px-5"></div>
+                            <div
+                                id="jh-messages"
+                                class="min-h-[6rem] px-3 pb-4 sm:px-5"
+                                wire:ignore
+                            ></div>
+                        </div>
 
                         <div
                             class="shrink-0 border-t border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur-md dark:border-gray-700 dark:bg-gray-950/90"
@@ -383,54 +396,128 @@
         <script>
             (function () {
                 const firebaseConfig = @json($__firebaseWebConfig);
-                if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-                    var el = document.getElementById('jh-messages');
-                    if (el) {
-                        el.textContent =
-                            'Firebase web config is incomplete. Set FIREBASE_WEB_API_KEY and FIREBASE_PROJECT_ID in backend .env, then run: php artisan config:clear';
-                    }
-                    return;
-                }
-                if (!firebase.apps.length) {
-                    firebase.initializeApp(firebaseConfig);
-                }
                 const token = @json($firebaseToken);
                 const threadId = @json($threadId);
-                const box = document.getElementById('jh-messages');
-                const form = document.getElementById('jh-form');
-                const input = document.getElementById('jh-input');
-                if (!box || !form || !input) {
-                    return;
-                }
 
                 function esc(s) {
                     return String(s || '').replace(/</g, '&lt;');
                 }
 
+                function messageTypeKey(msg) {
+                    var t = msg.type;
+                    if (t == null || t === undefined) {
+                        return '';
+                    }
+                    return String(t);
+                }
+
+                /** Mirrors Flutter: quote_card or structured quote payload without type. */
+                function isQuoteCardPayload(msg) {
+                    if (messageTypeKey(msg) === 'quote_card') {
+                        return true;
+                    }
+                    if (msg.quote_id == null) {
+                        return false;
+                    }
+                    return msg.quote_number != null && Array.isArray(msg.lines);
+                }
+
+                /** Mirrors Flutter _isPaymentInfoPayload — cards missing explicit type still render. */
+                function isPaymentInfoPayload(msg) {
+                    var t = messageTypeKey(msg);
+                    if (t === 'payment_info_card') {
+                        return true;
+                    }
+                    if (msg.sender_role !== 'admin') {
+                        return false;
+                    }
+                    if (msg.quote_id != null) {
+                        return false;
+                    }
+                    if (msg.payment_profile_id != null) {
+                        return true;
+                    }
+                    return (
+                        msg.order_number != null &&
+                        msg.amount_mmk != null &&
+                        Object.prototype.hasOwnProperty.call(msg, 'kpay_id')
+                    );
+                }
+
+                function formatMessageTime(msg) {
+                    var ts = msg.created_at;
+                    if (!ts) {
+                        return '';
+                    }
+                    try {
+                        var d = null;
+                        if (typeof ts.toDate === 'function') {
+                            d = ts.toDate();
+                        } else if (ts.seconds != null) {
+                            d = new Date(ts.seconds * 1000);
+                        }
+                        if (!d || isNaN(d.getTime())) {
+                            return '';
+                        }
+                        return d.toLocaleTimeString(undefined, {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                        });
+                    } catch (e) {
+                        return '';
+                    }
+                }
+
+                function roleTimeCaption(msg) {
+                    var role = msg.sender_role || '';
+                    var who = role === 'admin' ? 'Concierge' : 'Customer';
+                    var t = formatMessageTime(msg);
+                    return t ? who + ' · ' + t : who;
+                }
+
+                function fmtMmk(raw) {
+                    var v = parseFloat(String(raw || '').replace(/,/g, ''));
+                    if (isNaN(v)) {
+                        return esc(String(raw || ''));
+                    }
+                    return 'K ' + Math.round(v).toLocaleString();
+                }
+
                 function paymentCardHtml(data) {
                     var method = esc(data.payment_method_label || '');
-                    var qr = data.qr_image_url ? '<div class="mt-3"><img src="' + esc(data.qr_image_url) + '" alt="" class="max-h-40 rounded-lg border border-gray-200 dark:border-gray-600" /></div>' : '';
+                    var qr = data.qr_image_url
+                        ? '<div class="mt-3"><img src="' +
+                          esc(data.qr_image_url) +
+                          '" alt="" class="mx-auto max-h-48 max-w-full rounded-lg border border-primary-500/20 object-contain dark:border-primary-500/30" /></div>'
+                        : '';
+                    var amt = fmtMmk(data.amount_mmk);
                     return (
-                        '<div class="max-w-full rounded-2xl border border-gray-300 bg-white p-4 text-left shadow-sm dark:border-gray-600 dark:bg-gray-900">' +
-                        '<div class="mb-2 flex items-center gap-2 text-primary-600 dark:text-primary-400"><span class="text-lg">◆</span> <span class="font-semibold">Payment ' +
+                        '<div class="max-w-full rounded-2xl border-2 border-primary-500/30 bg-gradient-to-br from-white via-white to-gray-50 p-4 text-left shadow-md dark:border-primary-500/40 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950">' +
+                        '<div class="mb-3 flex items-center gap-2 text-primary-600 dark:text-primary-400">' +
+                        '<svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" /></svg>' +
+                        '<span class="font-semibold tracking-tight">Payment ' +
                         esc(data.order_number) +
                         '</span></div>' +
-                        (method ? '<p class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">' + method + '</p>' : '') +
-                        '<div class="mb-2 text-sm text-gray-700 dark:text-gray-300">' +
-                        esc(data.amount_mmk) +
-                        ' MMK</div>' +
-                        '<div class="space-y-1 text-xs text-gray-600 dark:text-gray-400">' +
-                        '<div><span class="text-gray-500">Wallet / KPay:</span> ' +
-                        esc(data.kpay_id) +
-                        '</div>' +
-                        '<div><span class="text-gray-500">Bank:</span> ' +
-                        esc(data.bank_name) +
-                        '</div>' +
-                        '<div><span class="text-gray-500">Account:</span> ' +
-                        esc(data.bank_account_number) +
+                        (method
+                            ? '<p class="mb-2 text-xs font-medium text-primary-700/90 dark:text-primary-300/90">' +
+                              method +
+                              '</p>'
+                            : '') +
+                        '<p class="mb-3 text-base font-medium text-primary-600 dark:text-primary-400">' +
+                        amt +
+                        ' MMK</p>' +
+                        '<div class="space-y-2 text-xs">' +
+                        '<div><span class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Wallet / KPay</span><p class="mt-0.5 text-gray-800 dark:text-gray-200">' +
+                        esc(data.kpay_id || '') +
+                        '</p></div>' +
+                        '<div><span class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Bank</span><p class="mt-0.5 text-gray-800 dark:text-gray-200">' +
+                        esc(data.bank_name || '') +
+                        '</p></div>' +
+                        '<div><span class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Account</span><p class="mt-0.5 text-gray-800 dark:text-gray-200">' +
+                        esc(data.bank_account_number || '') +
                         ' · ' +
-                        esc(data.bank_account_name) +
-                        '</div>' +
+                        esc(data.bank_account_name || '') +
+                        '</p></div>' +
                         '</div>' +
                         qr +
                         '</div>'
@@ -438,100 +525,242 @@
                 }
 
                 function quoteCardHtml(data) {
-                    const lines = data.lines || [];
-                    let rows = '';
+                    var lines = data.lines || [];
+                    var rows = '';
                     lines.forEach(function (ln) {
+                        var title = esc((ln.title != null ? ln.title : 'Item') || 'Item');
+                        var metal = fmtMmk(ln.metal_mmk);
+                        var labor = fmtMmk(ln.labor_mmk);
+                        var gems = fmtMmk(ln.gems_mmk);
+                        var lineTot = fmtMmk(ln.line_total_mmk);
                         rows +=
-                            '<div class="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs dark:border-gray-600 dark:bg-gray-800">' +
-                            '<div class="font-medium text-primary-600 dark:text-primary-400">' +
-                            esc(ln.title) +
+                            '<div class="mb-3 rounded-xl border border-gray-200/90 bg-gray-50/90 p-3 dark:border-gray-600 dark:bg-gray-800/90">' +
+                            '<div class="mb-2 text-sm font-medium text-gray-900 dark:text-gray-100">' +
+                            title +
                             '</div>' +
-                            '<div class="mt-1 text-gray-500 dark:text-gray-400">Gold ' +
-                            esc(ln.metal_mmk) +
-                            ' · Labor ' +
-                            esc(ln.labor_mmk) +
-                            ' · Gems ' +
-                            esc(ln.gems_mmk) +
+                            '<div class="flex flex-wrap gap-2">' +
+                            '<span class="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300">Gold ' +
+                            metal +
+                            '</span>' +
+                            '<span class="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300">Labor ' +
+                            labor +
+                            '</span>' +
+                            '<span class="rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300">Gems ' +
+                            gems +
+                            '</span>' +
                             '</div>' +
-                            '<div class="mt-1 text-right text-primary-600 dark:text-primary-400">Line ' +
-                            esc(ln.line_total_mmk) +
+                            '<div class="mt-2 text-right text-xs text-primary-600 dark:text-primary-400">Line ' +
+                            lineTot +
                             '</div>' +
                             '</div>';
                     });
+                    var totalFmt = fmtMmk(data.total_mmk);
                     return (
-                        '<div class="max-w-full rounded-2xl border border-gray-300 bg-white p-4 text-left shadow-sm dark:border-gray-600 dark:bg-gray-900">' +
-                        '<div class="mb-2 flex items-center gap-2 text-primary-600 dark:text-primary-400"><span class="text-lg">◇</span> <span class="font-semibold">Quote ' +
+                        '<div class="max-w-full rounded-2xl border-2 border-primary-500/30 bg-gradient-to-br from-white via-white to-gray-50 p-4 text-left shadow-md dark:border-primary-500/40 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950">' +
+                        '<div class="mb-3 flex items-center gap-2 text-primary-600 dark:text-primary-400">' +
+                        '<svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>' +
+                        '<span class="font-semibold tracking-tight">Quote ' +
                         esc(data.quote_number) +
                         '</span></div>' +
-                        '<div class="mb-2 text-[10px] uppercase tracking-wider text-gray-500">Estimate (MMK)</div>' +
+                        '<p class="mb-2 text-[10px] font-semibold uppercase tracking-widest text-primary-600/80 dark:text-primary-400/80">Estimate (MMK)</p>' +
                         rows +
-                        '<div class="mt-2 flex justify-between border-t border-gray-200 pt-2 text-sm dark:border-gray-700"><span class="text-gray-500">Total</span><span class="font-semibold text-primary-600 dark:text-primary-400">' +
-                        esc(data.total_mmk) +
+                        '<div class="mt-3 flex items-center justify-between border-t border-gray-200 pt-3 text-sm dark:border-gray-700">' +
+                        '<span class="text-gray-500 dark:text-gray-400">Total</span>' +
+                        '<span class="text-lg font-semibold text-primary-600 dark:text-primary-400">' +
+                        totalFmt +
                         '</span></div>' +
-                        '<p class="mt-2 text-[11px] text-gray-500">Customer accepts or declines in the mobile app.</p>' +
+                        '<p class="mt-2 text-[11px] text-gray-500 dark:text-gray-400">Customer accepts or declines in the mobile app.</p>' +
                         '</div>'
                     );
                 }
 
                 function row(msg) {
-                    const type = msg.type || '';
-                    if (type === 'quote_card') {
-                        const wrap = document.createElement('div');
-                        wrap.className = 'mb-4 flex w-full justify-center px-1';
-                        const inner = document.createElement('div');
-                        inner.className = 'w-full max-w-lg';
-                        inner.innerHTML = quoteCardHtml(msg);
-                        wrap.appendChild(inner);
-                        return wrap;
+                    if (isQuoteCardPayload(msg)) {
+                        var wrapQ = document.createElement('div');
+                        wrapQ.className = 'mb-4 flex w-full flex-col items-center px-1';
+                        var innerQ = document.createElement('div');
+                        innerQ.className = 'w-full max-w-lg';
+                        innerQ.innerHTML = quoteCardHtml(msg);
+                        wrapQ.appendChild(innerQ);
+                        var capQ = document.createElement('p');
+                        capQ.className = 'mt-2 text-center text-[11px] text-gray-500 dark:text-gray-400';
+                        capQ.textContent = roleTimeCaption(msg);
+                        wrapQ.appendChild(capQ);
+                        return wrapQ;
                     }
-                    if (type === 'payment_info_card') {
-                        const wrap = document.createElement('div');
-                        wrap.className = 'mb-4 flex w-full justify-center px-1';
-                        const inner = document.createElement('div');
-                        inner.className = 'w-full max-w-lg';
-                        inner.innerHTML = paymentCardHtml(msg);
-                        wrap.appendChild(inner);
-                        return wrap;
+                    if (isPaymentInfoPayload(msg)) {
+                        var wrapP = document.createElement('div');
+                        wrapP.className = 'mb-4 flex w-full flex-col items-center px-1';
+                        var innerP = document.createElement('div');
+                        innerP.className = 'w-full max-w-lg';
+                        innerP.innerHTML = paymentCardHtml(msg);
+                        wrapP.appendChild(innerP);
+                        var capP = document.createElement('p');
+                        capP.className = 'mt-2 text-center text-[11px] text-gray-500 dark:text-gray-400';
+                        capP.textContent = roleTimeCaption(msg);
+                        wrapP.appendChild(capP);
+                        return wrapP;
                     }
-                    if (type === 'image') {
-                        const wrap = document.createElement('div');
-                        wrap.className = 'mb-4 flex w-full justify-start';
-                        const inner = document.createElement('div');
-                        inner.className =
+                    if (messageTypeKey(msg) === 'image') {
+                        var wrapI = document.createElement('div');
+                        wrapI.className = 'mb-4 flex w-full flex-col items-start';
+                        var innerI = document.createElement('div');
+                        innerI.className =
                             'max-w-[min(100%,24rem)] rounded-2xl border border-gray-200 bg-gray-50 p-2 shadow-sm dark:border-gray-600 dark:bg-gray-800';
-                        const img = document.createElement('img');
+                        var img = document.createElement('img');
                         img.src = msg.image_url || '';
                         img.className = 'max-h-72 w-full rounded-lg object-cover';
                         img.alt = '';
-                        const cap = document.createElement('p');
-                        cap.className = 'mt-2 px-1 text-xs text-gray-500 dark:text-gray-400';
-                        cap.textContent = msg.caption || '';
-                        inner.appendChild(img);
-                        inner.appendChild(cap);
-                        wrap.appendChild(inner);
-                        return wrap;
+                        var capI = document.createElement('p');
+                        capI.className = 'mt-2 px-1 text-xs text-gray-600 dark:text-gray-300';
+                        capI.textContent = msg.caption || '';
+                        innerI.appendChild(img);
+                        innerI.appendChild(capI);
+                        wrapI.appendChild(innerI);
+                        var capTime = document.createElement('p');
+                        capTime.className = 'mt-1.5 pl-1 text-[11px] text-gray-500 dark:text-gray-400';
+                        capTime.textContent = roleTimeCaption(msg);
+                        wrapI.appendChild(capTime);
+                        return wrapI;
                     }
-                    const role = msg.sender_role || '';
-                    const text = msg.text || '';
-                    const wrap = document.createElement('div');
-                    wrap.className = 'mb-3 flex w-full ' + (role === 'admin' ? 'justify-end' : 'justify-start');
-                    const bubble = document.createElement('div');
+                    var role = msg.sender_role || '';
+                    var text = msg.text || '';
+                    var wrap = document.createElement('div');
+                    wrap.className =
+                        'mb-3 flex w-full flex-col ' + (role === 'admin' ? 'items-end' : 'items-start');
+                    var bubble = document.createElement('div');
                     bubble.className =
                         role === 'admin'
                             ? 'max-w-[min(100%,28rem)] rounded-2xl border-2 border-primary-500/50 bg-white px-4 py-2.5 text-left text-sm text-gray-900 shadow-sm dark:border-primary-400/50 dark:bg-gray-800 dark:text-gray-100'
                             : 'max-w-[min(100%,28rem)] rounded-2xl border border-gray-200 bg-gray-100 px-4 py-2.5 text-left text-sm text-gray-900 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-100';
-                    const label = document.createElement('div');
+                    var label = document.createElement('div');
                     label.className =
                         'mb-1 text-[10px] font-semibold uppercase tracking-wider ' +
                         (role === 'admin' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400');
                     label.textContent = role === 'admin' ? 'Concierge' : 'Customer';
-                    const body = document.createElement('div');
+                    var body = document.createElement('div');
                     body.className = 'whitespace-pre-wrap break-words text-[15px] leading-relaxed';
                     body.textContent = text;
+                    var foot = document.createElement('div');
+                    foot.className = 'mt-2 text-[11px] text-gray-500 dark:text-gray-400';
+                    foot.textContent = roleTimeCaption(msg);
                     bubble.appendChild(label);
                     bubble.appendChild(body);
+                    bubble.appendChild(foot);
                     wrap.appendChild(bubble);
                     return wrap;
+                }
+
+                function appendMysqlCardBlock(container, htmlString, captionText) {
+                    var wrap = document.createElement('div');
+                    wrap.className = 'mb-4 flex w-full flex-col items-center px-1';
+                    var inner = document.createElement('div');
+                    inner.className = 'w-full max-w-lg';
+                    inner.innerHTML = htmlString;
+                    wrap.appendChild(inner);
+                    var cap = document.createElement('p');
+                    cap.className =
+                        'mt-2 text-center text-[11px] font-medium text-amber-800 dark:text-amber-300';
+                    cap.textContent = captionText;
+                    wrap.appendChild(cap);
+                    container.appendChild(wrap);
+                }
+
+                function renderMysqlCards(serverCardsEl) {
+                    var hq = null;
+                    var hp = null;
+                    if (!serverCardsEl) {
+                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                    }
+                    serverCardsEl.innerHTML = '';
+                    var rawEl = document.getElementById('jh-admin-static-json');
+                    if (!rawEl || !String(rawEl.textContent || '').trim()) {
+                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                    }
+                    var data;
+                    try {
+                        data = JSON.parse(rawEl.textContent);
+                    } catch (e) {
+                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                    }
+                    if (!data) {
+                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                    }
+                    var capBase = data.recordCaption || 'Record';
+                    if (data.quote) {
+                        appendMysqlCardBlock(
+                            serverCardsEl,
+                            quoteCardHtml(data.quote),
+                            'Concierge · ' + capBase
+                        );
+                        if (data.quote.quote_id != null) {
+                            hq = Number(data.quote.quote_id);
+                        }
+                    }
+                    if (data.payment) {
+                        appendMysqlCardBlock(
+                            serverCardsEl,
+                            paymentCardHtml(data.payment),
+                            'Concierge · ' + capBase
+                        );
+                        if (data.payment.order_number) {
+                            hp = String(data.payment.order_number);
+                        }
+                    }
+                    return { hideQuoteId: hq, hidePaymentOrder: hp };
+                }
+
+                var hideQuoteId = null;
+                var hidePaymentOrder = null;
+                function shouldSkipFirestoreMsg(msg) {
+                    if (
+                        hideQuoteId != null &&
+                        isQuoteCardPayload(msg) &&
+                        msg.quote_id != null &&
+                        Number(msg.quote_id) === hideQuoteId
+                    ) {
+                        return true;
+                    }
+                    if (
+                        hidePaymentOrder &&
+                        isPaymentInfoPayload(msg) &&
+                        String(msg.order_number || '') === hidePaymentOrder
+                    ) {
+                        return true;
+                    }
+                    return false;
+                }
+
+                const scrollRoot = document.querySelector('.jh-scroll-thread');
+                const serverCardsEl = document.getElementById('jh-server-cards');
+                const box = document.getElementById('jh-messages');
+                const form = document.getElementById('jh-form');
+                const input = document.getElementById('jh-input');
+                if (!box || !form || !input) {
+                    return;
+                }
+
+                var _jhDedupe = renderMysqlCards(serverCardsEl);
+                hideQuoteId = _jhDedupe.hideQuoteId;
+                hidePaymentOrder = _jhDedupe.hidePaymentOrder;
+
+                window.jhAdminChatRefreshStatic = function () {
+                    var el = document.getElementById('jh-server-cards');
+                    if (!el) {
+                        return;
+                    }
+                    var d = renderMysqlCards(el);
+                    hideQuoteId = d.hideQuoteId;
+                    hidePaymentOrder = d.hidePaymentOrder;
+                };
+
+                if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+                    box.textContent =
+                        'Firebase web config is incomplete. Set FIREBASE_WEB_API_KEY and FIREBASE_PROJECT_ID in backend .env, then run: php artisan config:clear';
+                    return;
+                }
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
                 }
 
                 firebase
@@ -547,9 +776,14 @@
                         ref.onSnapshot(function (snap) {
                             box.innerHTML = '';
                             snap.forEach(function (d) {
-                                box.appendChild(row(d.data()));
+                                var msg = d.data();
+                                if (shouldSkipFirestoreMsg(msg)) {
+                                    return;
+                                }
+                                box.appendChild(row(msg));
                             });
-                            box.scrollTop = box.scrollHeight;
+                            var root = scrollRoot || box;
+                            root.scrollTop = root.scrollHeight;
                         });
                     })
                     .catch(function (e) {
