@@ -65,6 +65,7 @@ class CustomerQuoteController extends Controller
         if ($quote->inquiry_id) {
             $inquiry = Inquiry::query()->find($quote->inquiry_id);
             if ($inquiry !== null) {
+                $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- Quote Accepted by Customer ---');
                 $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
             }
         }

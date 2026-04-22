@@ -60,6 +60,7 @@ class PaymentVerificationService
                 $this->firebaseInquiry->publishReceiptCardMessage($inquiry, $issuedReceipt);
             }
             if ($shouldBroadcastUpdate) {
+                $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- Deposit Confirmed ---');
                 $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
             }
         }
@@ -78,6 +79,7 @@ class PaymentVerificationService
 
         $inquiry = $payment->order->resolveInquiry();
         if ($inquiry !== null) {
+            $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- Payment Rejected ---');
             $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }
 

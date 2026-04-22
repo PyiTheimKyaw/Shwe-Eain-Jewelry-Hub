@@ -30,6 +30,7 @@ class OrderWorkflowController extends Controller
 
         $inquiry = $order->fresh()->resolveInquiry();
         if ($inquiry !== null) {
+            $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- Production Started ---');
             $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }
 

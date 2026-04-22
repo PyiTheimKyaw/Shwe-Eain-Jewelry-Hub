@@ -69,6 +69,7 @@ class InquiryQuotePublishController extends Controller
 
         $quote->load(['lineItems.product', 'goldPriceSnapshot', 'exchangeRateSnapshot']);
         $this->firebaseInquiry->publishQuoteCardMessage($inquiry, $quote);
+        $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- New Quote Published ---');
         $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
 
         $payload = ['data' => $quote];

@@ -279,6 +279,7 @@ class ChatInquiry extends Page
             $quote->load(['lineItems.product', 'goldPriceSnapshot', 'exchangeRateSnapshot']);
             $firebase = app(FirebaseInquiryService::class);
             $firebase->publishQuoteCardMessage($inquiry, $quote);
+            $firebase->publishTimelineLogMessage($inquiry, '--- New Quote Published ---');
             $firebase->syncInquiryThreadDocument($inquiry);
         } catch (\Throwable $e) {
             report($e);
@@ -409,6 +410,7 @@ class ChatInquiry extends Page
             $order->fresh(),
             $profile
         );
+        $firebase->publishTimelineLogMessage($inquiry, '--- Payment Instructions Provided ---');
         $firebase->syncInquiryThreadDocument($inquiry);
 
         $this->refreshPipeline();

@@ -488,6 +488,28 @@
                     }
                 }
 
+                function createdAtMs(msg) {
+                    var ts = msg && msg.created_at;
+                    if (!ts) {
+                        return null;
+                    }
+                    try {
+                        if (typeof ts.toDate === 'function') {
+                            var d = ts.toDate();
+                            return d && !isNaN(d.getTime()) ? d.getTime() : null;
+                        }
+                        if (ts.seconds != null) {
+                            return Number(ts.seconds) * 1000;
+                        }
+                        if (typeof ts === 'number') {
+                            return ts;
+                        }
+                    } catch (e) {
+                        return null;
+                    }
+                    return null;
+                }
+
                 function roleTimeCaption(msg) {
                     var role = msg.sender_role || '';
                     var who = role === 'admin' ? 'Concierge' : 'Customer';
@@ -621,6 +643,24 @@
                 }
 
                 function row(msg) {
+                    if (messageTypeKey(msg) === 'timeline_log') {
+                        var timelineText = String(msg.text || '').trim();
+                        if (!timelineText) {
+                            timelineText = '--- Workflow Update ---';
+                        }
+                        var wrapT = document.createElement('div');
+                        wrapT.className = 'mb-3 flex w-full flex-col items-center';
+                        var textT = document.createElement('p');
+                        textT.className = 'text-center text-xs text-gray-500 dark:text-gray-400';
+                        textT.textContent = timelineText;
+                        var capT = document.createElement('p');
+                        capT.className = 'mt-0.5 text-center text-[11px] text-gray-500 dark:text-gray-400';
+                        var timeT = formatMessageTime(msg);
+                        capT.textContent = timeT ? 'Workflow update · ' + timeT : 'Workflow update';
+                        wrapT.appendChild(textT);
+                        wrapT.appendChild(capT);
+                        return wrapT;
+                    }
                     if (isQuoteCardPayload(msg)) {
                         var wrapQ = document.createElement('div');
                         wrapQ.className = 'mb-4 flex w-full flex-col items-center px-1';
@@ -766,6 +806,81 @@
 
                 var hideQuoteId = null;
                 var hidePaymentOrder = null;
+                var localWorkflowLogs = [];
+                var lastThreadDepositState = null;
+
+                function appendLocalWorkflowLog(text) {
+                    var clean = String(text || '').trim();
+                    if (!clean) {
+                        return;
+                    }
+                    var now = Date.now();
+                    for (var i = 0; i < localWorkflowLogs.length; i++) {
+                        var e = localWorkflowLogs[i];
+                        if (e.text === clean && Math.abs(now - e.ms) <= 12000) {
+                            return;
+                        }
+                    }
+                    localWorkflowLogs.push({ text: clean, ms: now });
+                }
+
+                function renderThreadMessages(snap) {
+                    box.innerHTML = '';
+                    var msgs = [];
+                    snap.forEach(function (d) {
+                        var msg = d.data();
+                        if (shouldSkipFirestoreMsg(msg)) {
+                            return;
+                        }
+                        msgs.push(msg);
+                    });
+                    msgs.sort(function (a, b) {
+                        var am = createdAtMs(a);
+                        var bm = createdAtMs(b);
+                        if (am != null && bm != null) {
+                            return am - bm;
+                        }
+                        if (am != null) {
+                            return -1;
+                        }
+                        if (bm != null) {
+                            return 1;
+                        }
+                        return 0;
+                    });
+                    for (var i = 0; i < msgs.length; i++) {
+                        box.appendChild(row(msgs[i]));
+                    }
+
+                    var fsTimeline = {};
+                    for (var j = 0; j < msgs.length; j++) {
+                        if (messageTypeKey(msgs[j]) !== 'timeline_log') {
+                            continue;
+                        }
+                        var t = String(msgs[j].text || '').trim();
+                        if (t) {
+                            fsTimeline[t] = true;
+                        }
+                    }
+                    for (var k = 0; k < localWorkflowLogs.length; k++) {
+                        var l = localWorkflowLogs[k];
+                        if (fsTimeline[l.text]) {
+                            continue;
+                        }
+                        box.appendChild(
+                            row({
+                                type: 'timeline_log',
+                                sender_role: 'system',
+                                text: l.text,
+                                created_at: { seconds: Math.floor(l.ms / 1000) },
+                            })
+                        );
+                    }
+
+                    var root = scrollRoot || box;
+                    root.scrollTop = root.scrollHeight;
+                }
+
                 function shouldSkipFirestoreMsg(msg) {
                     if (
                         hideQuoteId != null &&
@@ -885,23 +1000,26 @@
                     .auth()
                     .signInWithCustomToken(token)
                     .then(function () {
-                        const ref = firebase
+                        const threadRef = firebase
                             .firestore()
                             .collection('inquiry_threads')
-                            .doc(threadId)
-                            .collection('messages')
-                            .orderBy('created_at', 'asc');
-                        ref.onSnapshot(function (snap) {
-                            box.innerHTML = '';
-                            snap.forEach(function (d) {
-                                var msg = d.data();
-                                if (shouldSkipFirestoreMsg(msg)) {
-                                    return;
+                            .doc(threadId);
+                        threadRef.onSnapshot(function (snap) {
+                            var d = (snap && typeof snap.data === 'function') ? (snap.data() || {}) : {};
+                            var ds = String(d.deposit_state || '');
+                            if (lastThreadDepositState !== null && ds !== lastThreadDepositState) {
+                                if (ds === 'rejected') {
+                                    appendLocalWorkflowLog('--- Payment Rejected ---');
+                                } else if (ds === 'confirmed') {
+                                    appendLocalWorkflowLog('--- Deposit Confirmed ---');
                                 }
-                                box.appendChild(row(msg));
-                            });
-                            var root = scrollRoot || box;
-                            root.scrollTop = root.scrollHeight;
+                            }
+                            lastThreadDepositState = ds;
+                        });
+
+                        const ref = threadRef.collection('messages');
+                        ref.onSnapshot(function (snap) {
+                            renderThreadMessages(snap);
                         });
                     })
                     .catch(function (e) {

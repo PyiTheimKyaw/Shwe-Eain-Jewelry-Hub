@@ -318,18 +318,48 @@ class FirebaseInquiryService
         }
 
         try {
-            $db = $firestore->database();
-            $db->collection('inquiry_threads')
-                ->document($inquiry->firebase_thread_id)
-                ->collection('messages')
-                ->add([
-                    'type' => 'text',
-                    'sender_role' => 'admin',
-                    'text' => trim($message),
-                    'created_at' => new Timestamp(new \DateTimeImmutable),
-                ]);
+            $this->addThreadMessage($firestore, (string) $inquiry->firebase_thread_id, [
+                'type' => 'text',
+                'sender_role' => 'admin',
+                'text' => trim($message),
+                'created_at' => new Timestamp(new \DateTimeImmutable),
+            ]);
         } catch (Throwable $e) {
             Log::warning('firebase.system_text_failed', [
+                'message' => $e->getMessage(),
+                'inquiry_id' => $inquiry->id,
+            ]);
+        }
+    }
+
+    /**
+     * Server-side centered timeline log for major workflow milestones.
+     */
+    public function publishTimelineLogMessage(Inquiry $inquiry, string $message): void
+    {
+        $firestore = $this->firestoreClient();
+        if ($firestore === null) {
+            Log::warning('firebase.timeline_log_skipped', [
+                'reason' => 'firestore_client_unavailable',
+                'inquiry_id' => $inquiry->id,
+            ]);
+
+            return;
+        }
+
+        if ($inquiry->firebase_thread_id === null || trim($message) === '') {
+            return;
+        }
+
+        try {
+            $this->addThreadMessage($firestore, (string) $inquiry->firebase_thread_id, [
+                'type' => 'timeline_log',
+                'sender_role' => 'system',
+                'text' => trim($message),
+                'created_at' => new Timestamp(new \DateTimeImmutable),
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('firebase.timeline_log_failed', [
                 'message' => $e->getMessage(),
                 'inquiry_id' => $inquiry->id,
             ]);
@@ -379,5 +409,17 @@ class FirebaseInquiryService
                 'receipt_id' => $receipt->id,
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function addThreadMessage(FirestoreContract $firestore, string $threadId, array $payload): void
+    {
+        $firestore->database()
+            ->collection('inquiry_threads')
+            ->document($threadId)
+            ->collection('messages')
+            ->add($payload);
     }
 }

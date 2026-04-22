@@ -53,6 +53,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
   QuerySnapshot<Map<String, dynamic>>? _lastMessageSnapForSync;
   bool _messagesPipelinePrimed = false;
   int _lastIngestedMessageCount = 0;
+  String? _lastSeenDepositState;
+  String? _lastSeenRestDepositState;
+  final List<_LocalTimelineLog> _localTimelineLogs = [];
 
   /// Firestore stream instances must be stable across [setState] rebuilds. Recreating
   /// `.snapshots()` in [build] makes [StreamBuilder] cancel/resubscribe every rebuild
@@ -73,10 +76,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         .collection('inquiry_threads')
         .doc(threadId);
     _threadDocStream = ref.snapshots();
-    _messagesStream = ref
-        .collection('messages')
-        .orderBy('created_at', descending: false)
-        .snapshots();
+    // Do not order at query-time: older/manual Firestore docs may miss `created_at`,
+    // and Firestore would exclude them from ordered queries (history appears empty).
+    _messagesStream = ref.collection('messages').snapshots();
   }
 
   /// When the thread document changes (Laravel / metadata), re-fetch merged pipeline from REST.
@@ -144,6 +146,15 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     }
     final oid = threadData['order_id'];
     final aq = threadData['active_quote_id'];
+    final depositState = (threadData['deposit_state'] ?? '').toString();
+    if (_lastSeenDepositState != null && depositState != _lastSeenDepositState) {
+      if (depositState == 'rejected') {
+        _appendLocalTimelineLog('--- Payment Rejected ---');
+      } else if (depositState == 'confirmed') {
+        _appendLocalTimelineLog('--- Deposit Confirmed ---');
+      }
+    }
+    _lastSeenDepositState = depositState;
     final key = <String>[
       (threadData['order_status'] ?? '').toString(),
       (threadData['pipeline_step'] ?? '').toString(),
@@ -161,6 +172,29 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       return;
     }
     _schedulePipelineRefresh();
+  }
+
+  void _appendLocalTimelineLog(String text) {
+    if (!mounted || text.trim().isEmpty) {
+      return;
+    }
+    final now = DateTime.now();
+    final recentlyExists = _localTimelineLogs.any(
+      (e) =>
+          e.text == text &&
+          now.difference(e.at).inSeconds.abs() <= 5,
+    );
+    if (recentlyExists) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _localTimelineLogs.add(_LocalTimelineLog(text: text, at: now));
+      });
+    });
   }
 
   void _ingestMessageSnapshotForPipeline(
@@ -309,12 +343,22 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         bearerToken: bearer,
         inquiryId: widget.inquiry.id,
       );
+      final next = p ??
+          InquiryPipeline(
+            step: widget.inquiry.status == 'quoted' ? 'quoted' : 'consulting',
+          );
+      final ds = next.depositState ?? '';
+      if (_lastSeenRestDepositState != null && ds != _lastSeenRestDepositState) {
+        if (ds == 'rejected') {
+          _appendLocalTimelineLog('--- Payment Rejected ---');
+        } else if (ds == 'confirmed') {
+          _appendLocalTimelineLog('--- Deposit Confirmed ---');
+        }
+      }
+      _lastSeenRestDepositState = ds;
       if (mounted) {
         setState(() {
-          _restPipeline = p ??
-              InquiryPipeline(
-                step: widget.inquiry.status == 'quoted' ? 'quoted' : 'consulting',
-              );
+          _restPipeline = next;
         });
       }
     } catch (_) {
@@ -704,7 +748,60 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                 _ingestMessageSnapshotForPipeline(
                                   msgSnap.data!,
                                 );
-                                final docs = msgSnap.data!.docs;
+                                final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
+                                  msgSnap.data!.docs,
+                                )..sort((a, b) {
+                                    DateTime? toDate(dynamic v) {
+                                      if (v is Timestamp) {
+                                        return v.toDate();
+                                      }
+                                      return null;
+                                    }
+
+                                    final aAt = toDate(a.data()['created_at']);
+                                    final bAt = toDate(b.data()['created_at']);
+                                    if (aAt != null && bAt != null) {
+                                      return aAt.compareTo(bAt);
+                                    }
+                                    if (aAt != null) {
+                                      return -1;
+                                    }
+                                    if (bAt != null) {
+                                      return 1;
+                                    }
+                                    return a.id.compareTo(b.id);
+                                  });
+                                final fsTimelineEvents = docs
+                                    .where(
+                                      (d) => _messageTypeKey(d.data()) == 'timeline_log',
+                                    )
+                                    .map((d) {
+                                      final m = d.data();
+                                      final text = _firestoreString(m['text']) ?? '';
+                                      final ts = m['created_at'];
+                                      DateTime? at;
+                                      if (ts is Timestamp) {
+                                        at = ts.toDate();
+                                      }
+                                      return (text: text, at: at);
+                                    })
+                                    .where((e) => e.text.isNotEmpty)
+                                    .toList(growable: false);
+                                final fallbackTimelineLogs = _localTimelineLogs.where((local) {
+                                  for (final remote in fsTimelineEvents) {
+                                    if (remote.text != local.text) {
+                                      continue;
+                                    }
+                                    if (remote.at == null) {
+                                      continue;
+                                    }
+                                    final diff = remote.at!.difference(local.at).inSeconds.abs();
+                                    if (diff <= 12) {
+                                      return false;
+                                    }
+                                  }
+                                  return true;
+                                }).toList(growable: false);
                                 final activeQuoteId =
                                     effectivePipeline.activeQuoteId;
                                 final hasFsQuoteCard = activeQuoteId != null &&
@@ -777,6 +874,20 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                           child: _apiDepositPaymentFromPipeline(
                                             effectivePipeline,
                                           ),
+                                        ),
+                                      ),
+                                    if (fallbackTimelineLogs.isNotEmpty)
+                                      SliverToBoxAdapter(
+                                        child: Column(
+                                          children: fallbackTimelineLogs
+                                              .map(
+                                                (e) => _TimelineLogLine(
+                                                  text: e.text,
+                                                  at: e.at,
+                                                  timeFmt: timeFmt,
+                                                ),
+                                              )
+                                              .toList(growable: false),
                                         ),
                                       ),
                                     SliverPadding(
@@ -1064,6 +1175,38 @@ class _MessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = _messageTypeKey(data);
+    if (type == 'timeline_log') {
+      final text = _firestoreString(data['text']) ?? '';
+      if (text.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      final ts = data['created_at'];
+      DateTime? at;
+      if (ts is Timestamp) {
+        at = ts.toDate();
+      }
+      final timeLabel = at != null ? ' · ${timeFmt.format(at.toLocal())}' : '';
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PremiumText.caption(
+                text,
+                color: AppColors.textSecondary,
+                textAlign: TextAlign.center,
+              ),
+              PremiumText.caption(
+                'Workflow update$timeLabel',
+                color: AppColors.textSecondary.withValues(alpha: 0.8),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (_isPaymentInfoPayload(data)) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
@@ -1237,6 +1380,52 @@ class _MessageTile extends StatelessWidget {
           text: text,
           caption:
               '$label${at != null ? ' · ${timeFmt.format(at.toLocal())}' : ''}',
+        ),
+      ),
+    );
+  }
+}
+
+class _LocalTimelineLog {
+  const _LocalTimelineLog({
+    required this.text,
+    required this.at,
+  });
+
+  final String text;
+  final DateTime at;
+}
+
+class _TimelineLogLine extends StatelessWidget {
+  const _TimelineLogLine({
+    required this.text,
+    required this.at,
+    required this.timeFmt,
+  });
+
+  final String text;
+  final DateTime at;
+  final DateFormat timeFmt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PremiumText.caption(
+              text,
+              color: AppColors.textSecondary,
+              textAlign: TextAlign.center,
+            ),
+            PremiumText.caption(
+              'Workflow update · ${timeFmt.format(at.toLocal())}',
+              color: AppColors.textSecondary.withValues(alpha: 0.8),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

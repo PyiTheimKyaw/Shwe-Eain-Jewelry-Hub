@@ -65,6 +65,7 @@ class OrderPaymentInstructionController extends Controller
                 $order->fresh(),
                 $profile
             );
+            $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- Payment Instructions Provided ---');
             $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }
 
