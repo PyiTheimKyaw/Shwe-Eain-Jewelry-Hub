@@ -339,3 +339,56 @@ Implemented the **concierge** inquiry flow: **derived pipeline** from MySQL, **c
 - **`GET /api/v1/artisan/notifications`**: list recent notifications for the mobile artisan app.
 - **Admin chat `paymentCardHtml`**: optional **order total / recognized paid / balance** block when **`credited_deposit_mmk`** &gt; 0.
 - **Flutter `InquiryPaymentInfoCard`**: same optional breakdown for REST and Firestore payloads.
+
+---
+
+## 2026-04-22 — Production & QC workflow completion (Filament + Flutter + Firestore)
+
+### Summary
+
+Completed the missing production/QC workflow surface by adding **Filament order detail actions** for artisan assignment and QC approval, introducing a shared backend lifecycle service for assignment/start/review/QC transitions, adding artisan notification deep-linking in Flutter, and publishing a required QC-ready system message to customer chat.
+
+### Backend
+
+- New shared service: **`App\Services\OrderLifecycleService`**
+  - `assignArtisan(...)`
+  - `startProduction(...)`
+  - `markReadyForReview(...)`
+  - `approveQc(...)`
+- API controllers now reuse lifecycle methods:
+  - **`Admin\OrderController::storeAssignment`**
+  - **`Artisan\OrderWorkflowController::start|readyForReview`**
+  - **`Admin\OrderQcController::approve`**
+- Firebase service added **`publishSystemTextMessage(Inquiry $inquiry, string $message)`** in **`FirebaseInquiryService`**.
+- QC approve now posts exact text to chat thread:
+  - *`Your order has passed Quality Control and is now Ready for Collection!`*
+  - then syncs thread metadata/pipeline.
+
+### Filament
+
+- Added **Order** resource:
+  - **`OrderResource`**
+  - **`ListOrders`**
+  - **`ViewOrder`**
+  - **`OrdersTable`**
+- Order detail actions:
+  - **Assign artisan** (with task scope + optional line item/instructions)
+  - **QC approve** (only valid from `pending_qc`)
+
+### Flutter (Artisan)
+
+- Added artisan notifications domain + API + UI:
+  - **`ArtisanNotificationItem`**
+  - **`ArtisanApi.fetchNotifications`**
+  - **`ArtisanNotificationsScreen`**
+- Added deep-link behavior:
+  - tapping notification resolves assignment by `order_id`
+  - navigates to **`ArtisanJobDetailScreen(assignmentId: ...)`**
+  - shows fallback snackbar if no linked assignment is available.
+
+### Validation
+
+- Backend tests pass:
+  - **`InquiryQuoteFlowTest`**
+  - **`BespokeOrderWorkflowTest`**
+- Flutter static checks pass (`flutter analyze`) on modified artisan/inquiry files.

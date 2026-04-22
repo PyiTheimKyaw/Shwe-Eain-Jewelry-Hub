@@ -149,6 +149,7 @@ Do not commit `vendor/`; every fresh clone needs this step before `php artisan` 
 1. Backend: `composer install` → `.env` + `key:generate` → DB file or MySQL → `migrate` → `db:seed` → `storage:link` → `php artisan serve`
 2. Mobile: `flutter pub get` → `flutter run` with `--dart-define=API_BASE_URL=...` if not using `127.0.0.1`
 3. Open **Filament** at `/admin` with `admin@jewelryhub.test` / `password`
+4. Optional artisan login for mobile testing:
+   - `artisan@jewelryhub.test` / `password` (create via tinker if missing in your local DB)
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.
-php artisan serve --host=0.0.0.0 --port=8000

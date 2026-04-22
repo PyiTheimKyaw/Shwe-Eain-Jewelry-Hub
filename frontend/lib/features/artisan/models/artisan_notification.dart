@@ -37,6 +37,20 @@ class ArtisanNotificationItem {
     return parts.join(' · ');
   }
 
+  int? get orderId {
+    final raw = data['order_id'];
+    if (raw is int) {
+      return raw;
+    }
+    if (raw is num) {
+      return raw.toInt();
+    }
+    if (raw is String) {
+      return int.tryParse(raw);
+    }
+    return null;
+  }
+
   factory ArtisanNotificationItem.fromJson(Map<String, dynamic> json) {
     DateTime? parseDate(dynamic value) {
       if (value is! String || value.trim().isEmpty) {

@@ -296,4 +296,42 @@ class FirebaseInquiryService
             ]);
         }
     }
+
+    /**
+     * Server-side plain text/system message.
+     */
+    public function publishSystemTextMessage(Inquiry $inquiry, string $message): void
+    {
+        $firestore = $this->firestoreClient();
+        if ($firestore === null) {
+            Log::warning('firebase.system_text_skipped', [
+                'reason' => 'firestore_client_unavailable',
+                'inquiry_id' => $inquiry->id,
+            ]);
+
+            return;
+        }
+
+        if ($inquiry->firebase_thread_id === null || trim($message) === '') {
+            return;
+        }
+
+        try {
+            $db = $firestore->database();
+            $db->collection('inquiry_threads')
+                ->document($inquiry->firebase_thread_id)
+                ->collection('messages')
+                ->add([
+                    'type' => 'text',
+                    'sender_role' => 'admin',
+                    'text' => trim($message),
+                    'created_at' => new Timestamp(new \DateTimeImmutable),
+                ]);
+        } catch (Throwable $e) {
+            Log::warning('firebase.system_text_failed', [
+                'message' => $e->getMessage(),
+                'inquiry_id' => $inquiry->id,
+            ]);
+        }
+    }
 }

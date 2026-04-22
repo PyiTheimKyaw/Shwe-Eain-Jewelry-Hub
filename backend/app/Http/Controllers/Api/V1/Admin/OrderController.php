@@ -7,10 +7,11 @@ use App\Models\Order;
 use App\Models\OrderAssignment;
 use App\Models\Payment;
 use App\Models\Quote;
-use App\Models\User;
+use App\Services\OrderLifecycleService;
 use App\Services\OrderBuilderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
@@ -27,7 +28,8 @@ class OrderController extends Controller
     ];
 
     public function __construct(
-        protected OrderBuilderService $orders
+        protected OrderBuilderService $orders,
+        protected OrderLifecycleService $lifecycle
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -127,39 +129,20 @@ class OrderController extends Controller
             'instructions' => ['nullable', 'string', 'max:5000'],
         ]);
 
-        if ($data['task_scope'] === 'line_item' && $data['order_item_id']) {
-            $belongs = $order->items()->whereKey($data['order_item_id'])->exists();
-            if (! $belongs) {
-                return response()->json(['message' => 'Order item does not belong to this order.'], 422);
-            }
+        try {
+            $assignment = $this->lifecycle->assignArtisan(
+                $order,
+                (int) $data['artisan_user_id'],
+                (string) $data['task_scope'],
+                isset($data['order_item_id']) ? (int) $data['order_item_id'] : null,
+                $data['instructions'] ?? null
+            );
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => $e->errors(),
+            ], 422);
         }
-
-        if ($order->status !== 'deposit_confirmed') {
-            return response()->json(['message' => 'Deposit must be confirmed before assigning an artisan.'], 422);
-        }
-
-        $depositOk = Payment::query()
-            ->where('order_id', $order->id)
-            ->where('type', Payment::TYPE_DEPOSIT)
-            ->where('status', Payment::STATUS_CONFIRMED)
-            ->exists();
-        if (! $depositOk) {
-            return response()->json(['message' => 'A confirmed deposit payment is required.'], 422);
-        }
-
-        $artisan = User::query()->findOrFail($data['artisan_user_id']);
-        if (! $artisan->isArtisan()) {
-            return response()->json(['message' => 'User is not an artisan.'], 422);
-        }
-
-        $assignment = OrderAssignment::create([
-            'order_id' => $order->id,
-            'artisan_user_id' => $data['artisan_user_id'],
-            'task_scope' => $data['task_scope'],
-            'order_item_id' => $data['order_item_id'] ?? null,
-            'instructions' => $data['instructions'] ?? null,
-            'status' => 'assigned',
-        ]);
 
         return response()->json(['data' => $assignment->load('artisan')], 201);
     }

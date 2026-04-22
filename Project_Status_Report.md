@@ -5,6 +5,11 @@
 This project is in a strong **advanced prototype / pre-production** state with a mostly complete bespoke jewelry workflow across Laravel backend, Filament admin, and Flutter customer/artisan apps.  
 Core business flow (Inquiry -> Quote -> Order -> Deposit -> Assignment -> Production -> QC -> Ready) is implemented and supported by backend feature tests.  
 
+Update as of 2026-04-22:
+- Filament Order detail now includes **Assign Artisan** and **QC Approve** actions.
+- QC approve now posts a required Firestore chat text message: **`Your order has passed Quality Control and is now Ready for Collection!`**.
+- Flutter artisan app now includes notification deep-linking from notification list to job detail by related order assignment.
+
 The main remaining work is not foundational architecture, but **hardening and productization**:
 - reliability under realtime/live UI conditions,
 - consistent state transitions and stricter guardrails,

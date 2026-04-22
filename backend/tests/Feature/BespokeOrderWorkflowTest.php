@@ -12,11 +12,13 @@ use App\Models\Payment;
 use App\Models\PaymentProfile;
 use App\Models\Quote;
 use App\Models\User;
+use App\Services\FirebaseInquiryService;
 use App\Services\InquiryQuoteCommitmentGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
+use Mockery;
 use Tests\TestCase;
 
 class BespokeOrderWorkflowTest extends TestCase
@@ -645,6 +647,69 @@ class BespokeOrderWorkflowTest extends TestCase
         $this->assertDatabaseHas('notifications', [
             'notifiable_type' => User::class,
             'notifiable_id' => $artisan->id,
+        ]);
+    }
+
+    public function test_qc_approve_publishes_required_firestore_system_message(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'QC ready message',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-qc-msg',
+        ]);
+
+        $quote = Quote::create([
+            'inquiry_id' => $inquiry->id,
+            'customer_user_id' => $customer->id,
+            'gold_price_snapshot_id' => GoldPriceSnapshot::query()->firstOrFail()->id,
+            'exchange_rate_snapshot_id' => ExchangeRateSnapshot::query()->firstOrFail()->id,
+            'quote_number' => 'Q-QC-MSG-1',
+            'status' => 'accepted',
+            'total_mmk' => 100000,
+            'total_usd_snapshot' => 47.6,
+        ]);
+
+        $order = Order::create([
+            'customer_user_id' => $customer->id,
+            'quote_id' => $quote->id,
+            'order_number' => 'O-QC-MSG-1',
+            'status' => 'pending_qc',
+            'deposit_amount_mmk' => 0,
+            'total_mmk' => 100000,
+            'total_usd_snapshot' => 47.6,
+            'exchange_rate_snapshot_id' => ExchangeRateSnapshot::query()->firstOrFail()->id,
+        ]);
+
+        $firebase = Mockery::mock(FirebaseInquiryService::class);
+        $firebase
+            ->shouldReceive('publishSystemTextMessage')
+            ->once()
+            ->withArgs(function ($argInquiry, $message) use ($inquiry) {
+                return $argInquiry instanceof Inquiry
+                    && $argInquiry->id === $inquiry->id
+                    && $message === 'Your order has passed Quality Control and is now Ready for Collection!';
+            });
+        $firebase->shouldReceive('syncInquiryThreadDocument')->once();
+        app()->instance(FirebaseInquiryService::class, $firebase);
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$order->id}/qc/approve",
+            [],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'status' => 'ready',
         ]);
     }
 }
