@@ -35,7 +35,7 @@
         <x-filament::section>
             <div
                 class="jh-concierge-root flex min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-950"
-                wire:key="concierge-chat-shell"
+                wire:key="concierge-chat-shell-{{ $inquiry->id }}"
             >
                 <div class="flex min-h-0 flex-1 flex-col-reverse lg:flex-row lg:min-h-[min(70vh,36rem)]">
                     {{-- Sidebar: journey + inquiry --}}
@@ -160,7 +160,7 @@
                         <div
                             class="jh-scroll-thread jh-scroll min-h-0 flex-1 overflow-y-auto scroll-smooth"
                         >
-                            <div id="jh-server-cards" class="space-y-1 px-3 pt-4 sm:px-5"></div>
+                            <div id="jh-server-cards" class="space-y-1 px-3 pt-4 sm:px-5" wire:ignore></div>
                             <div
                                 id="jh-messages"
                                 class="min-h-[6rem] px-3 pb-4 sm:px-5"
@@ -385,6 +385,14 @@
 
 @if ($showChat)
     @push('scripts')
+        <style>
+            dialog.jh-quote-dialog[open],
+            dialog.jh-dialog-payment[open] {
+                position: fixed;
+                inset: 0;
+                margin: auto;
+            }
+        </style>
         @php
             $__firebaseWebConfig = [
                 'apiKey' => trim((string) config('services.firebase.web_api_key')),
@@ -701,44 +709,52 @@
                     var hq = null;
                     var hp = null;
                     if (!serverCardsEl) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
                     }
-                    serverCardsEl.innerHTML = '';
                     var rawEl = document.getElementById('jh-admin-static-json');
                     if (!rawEl || !String(rawEl.textContent || '').trim()) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
                     }
                     var data;
                     try {
                         data = JSON.parse(rawEl.textContent);
                     } catch (e) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
                     }
                     if (!data) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
                     }
+
+                    var nextCardsHtml = '';
                     var capBase = data.recordCaption || 'Record';
                     if (data.quote) {
+                        var quoteWrap = document.createElement('div');
                         appendMysqlCardBlock(
-                            serverCardsEl,
+                            quoteWrap,
                             quoteCardHtml(data.quote),
                             'Concierge · ' + capBase
                         );
+                        nextCardsHtml += quoteWrap.innerHTML;
                         if (data.quote.quote_id != null) {
                             hq = Number(data.quote.quote_id);
                         }
                     }
                     if (data.payment) {
+                        var paymentWrap = document.createElement('div');
                         appendMysqlCardBlock(
-                            serverCardsEl,
+                            paymentWrap,
                             paymentCardHtml(data.payment),
                             'Concierge · ' + capBase
                         );
+                        nextCardsHtml += paymentWrap.innerHTML;
                         if (data.payment.order_number) {
                             hp = String(data.payment.order_number);
                         }
                     }
-                    return { hideQuoteId: hq, hidePaymentOrder: hp };
+
+                    serverCardsEl.innerHTML = nextCardsHtml;
+
+                    return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: true };
                 }
 
                 var hideQuoteId = null;
@@ -772,8 +788,10 @@
                 }
 
                 var _jhDedupe = renderMysqlCards(serverCardsEl);
-                hideQuoteId = _jhDedupe.hideQuoteId;
-                hidePaymentOrder = _jhDedupe.hidePaymentOrder;
+                if (_jhDedupe.didRender) {
+                    hideQuoteId = _jhDedupe.hideQuoteId;
+                    hidePaymentOrder = _jhDedupe.hidePaymentOrder;
+                }
 
                 window.jhAdminChatRefreshStatic = function () {
                     var el = document.getElementById('jh-server-cards');
@@ -781,9 +799,71 @@
                         return;
                     }
                     var d = renderMysqlCards(el);
-                    hideQuoteId = d.hideQuoteId;
-                    hidePaymentOrder = d.hidePaymentOrder;
+                    if (d.didRender) {
+                        hideQuoteId = d.hideQuoteId;
+                        hidePaymentOrder = d.hidePaymentOrder;
+                    }
                 };
+
+                document.addEventListener('jh-admin-static-refresh', function () {
+                    window.jhAdminChatRefreshStatic?.();
+                });
+
+                // Keep MySQL-backed cards resilient across Livewire morph timing.
+                // When the static JSON/script node is re-rendered, refresh cards automatically.
+                var refreshTimer = null;
+                function scheduleStaticRefresh() {
+                    if (refreshTimer !== null) {
+                        clearTimeout(refreshTimer);
+                    }
+                    refreshTimer = setTimeout(function () {
+                        window.jhAdminChatRefreshStatic?.();
+                    }, 0);
+                }
+
+                if (window.__jhAdminCardsObserver) {
+                    try {
+                        window.__jhAdminCardsObserver.disconnect();
+                    } catch (e) {
+                        // no-op
+                    }
+                }
+                window.__jhAdminCardsObserver = new MutationObserver(function (mutations) {
+                    for (var i = 0; i < mutations.length; i++) {
+                        var m = mutations[i];
+                        if (m.type === 'characterData') {
+                            var p = m.target && m.target.parentElement;
+                            if (p && p.id === 'jh-admin-static-json') {
+                                scheduleStaticRefresh();
+                                return;
+                            }
+                        }
+                        if (m.type === 'childList') {
+                            var nodes = Array.prototype.slice.call(m.addedNodes || []);
+                            for (var j = 0; j < nodes.length; j++) {
+                                var n = nodes[j];
+                                if (!n || n.nodeType !== 1) {
+                                    continue;
+                                }
+                                if (
+                                    n.id === 'jh-admin-static-json' ||
+                                    n.id === 'jh-server-cards' ||
+                                    (typeof n.querySelector === 'function' &&
+                                        (n.querySelector('#jh-admin-static-json') ||
+                                            n.querySelector('#jh-server-cards')))
+                                ) {
+                                    scheduleStaticRefresh();
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                });
+                window.__jhAdminCardsObserver.observe(document.body, {
+                    childList: true,
+                    subtree: true,
+                    characterData: true,
+                });
 
                 if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
                     box.textContent =

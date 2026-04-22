@@ -19,6 +19,7 @@ use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
 
 class ChatInquiry extends Page
 {
@@ -77,6 +78,7 @@ class ChatInquiry extends Page
         ];
 
         $this->refreshPipeline();
+        $this->dispatch('jh-admin-static-refresh');
 
         $firebase = app(FirebaseInquiryService::class);
         $webKey = trim((string) config('services.firebase.web_api_key'));
@@ -181,6 +183,21 @@ class ChatInquiry extends Page
             if (isset($row['product_id']) && $row['product_id'] === '') {
                 $this->quoteFormLines[$k]['product_id'] = null;
             }
+            if (isset($row['labor_fee_mmk']) && $row['labor_fee_mmk'] === '') {
+                $this->quoteFormLines[$k]['labor_fee_mmk'] = null;
+            }
+            if (isset($row['gem_price_mmk']) && $row['gem_price_mmk'] === '') {
+                $this->quoteFormLines[$k]['gem_price_mmk'] = null;
+            }
+            if (isset($row['custom_title']) && $row['custom_title'] === '') {
+                $this->quoteFormLines[$k]['custom_title'] = null;
+            }
+        }
+        if ($this->quoteValidUntil === '') {
+            $this->quoteValidUntil = null;
+        }
+        if ($this->quoteNotes === '') {
+            $this->quoteNotes = null;
         }
 
         $pricing = app(PricingService::class);
@@ -196,7 +213,11 @@ class ChatInquiry extends Page
             return;
         }
 
-        $validated = $this->validate([
+        $validator = Validator::make([
+            'quoteFormLines' => $this->quoteFormLines,
+            'quoteValidUntil' => $this->quoteValidUntil,
+            'quoteNotes' => $this->quoteNotes,
+        ], [
             'quoteFormLines' => ['required', 'array', 'min:1'],
             'quoteFormLines.*.weight_grams' => ['required', 'numeric', 'min:0'],
             'quoteFormLines.*.labor_fee_mmk' => ['nullable', 'numeric', 'min:0'],
@@ -206,6 +227,20 @@ class ChatInquiry extends Page
             'quoteValidUntil' => ['nullable', 'date'],
             'quoteNotes' => ['nullable', 'string'],
         ]);
+
+        if ($validator->fails()) {
+            Notification::make()
+                ->title(__('Quote form has invalid values'))
+                ->body((string) $validator->errors()->first())
+                ->danger()
+                ->send();
+
+            $this->js('document.getElementById("jh-dialog-quote")?.showModal();');
+
+            return;
+        }
+
+        $validated = $validator->validated();
 
         $lines = [];
         foreach ($validated['quoteFormLines'] as $row) {
@@ -227,25 +262,38 @@ class ChatInquiry extends Page
             return;
         }
 
-        $quote = app(QuoteBuilderService::class)->createQuote(
-            $customer,
-            $gold,
-            $fx,
-            $lines,
-            $inquiry->id,
-            $validated['quoteNotes'] ?? null,
-            isset($validated['quoteValidUntil']) ? new \DateTimeImmutable($validated['quoteValidUntil']) : null,
-            'sent'
-        );
+        try {
+            $quote = app(QuoteBuilderService::class)->createQuote(
+                $customer,
+                $gold,
+                $fx,
+                $lines,
+                $inquiry->id,
+                $validated['quoteNotes'] ?? null,
+                isset($validated['quoteValidUntil']) ? new \DateTimeImmutable($validated['quoteValidUntil']) : null,
+                'sent'
+            );
 
-        $inquiry->update(['status' => 'quoted']);
+            $inquiry->update(['status' => 'quoted']);
 
-        $quote->load(['lineItems.product', 'goldPriceSnapshot', 'exchangeRateSnapshot']);
-        $firebase = app(FirebaseInquiryService::class);
-        $firebase->publishQuoteCardMessage($inquiry, $quote);
-        $firebase->syncInquiryThreadDocument($inquiry);
+            $quote->load(['lineItems.product', 'goldPriceSnapshot', 'exchangeRateSnapshot']);
+            $firebase = app(FirebaseInquiryService::class);
+            $firebase->publishQuoteCardMessage($inquiry, $quote);
+            $firebase->syncInquiryThreadDocument($inquiry);
+        } catch (\Throwable $e) {
+            report($e);
+            Notification::make()
+                ->title(__('Failed to publish quote'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+            $this->js('document.getElementById("jh-dialog-quote")?.showModal();');
+
+            return;
+        }
 
         $this->refreshPipeline();
+        $this->dispatch('jh-admin-static-refresh');
 
         if ($publishWarning !== null) {
             Notification::make()
