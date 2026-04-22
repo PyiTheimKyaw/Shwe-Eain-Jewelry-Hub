@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\CustomerOrderController;
 use App\Http\Controllers\Api\V1\CustomerOrderDepositController;
+use App\Http\Controllers\Api\V1\CustomerReceiptController;
 use App\Http\Controllers\Api\V1\CustomerQuoteController;
 use App\Http\Controllers\Api\V1\InquiryController;
 use App\Http\Controllers\Api\V1\OrderProgressController;
@@ -59,6 +60,9 @@ Route::prefix('v1')->group(function () {
             Route::get('orders/mine', [CustomerOrderController::class, 'mine']);
             Route::get('orders/{order}', [CustomerOrderController::class, 'show']);
             Route::post('orders/{order}/deposit-proof', [CustomerOrderDepositController::class, 'store']);
+            Route::get('orders/{order}/receipts', [CustomerReceiptController::class, 'index']);
+            Route::get('orders/{order}/receipts/{receipt}', [CustomerReceiptController::class, 'show']);
+            Route::get('orders/{order}/receipts/{receipt}/download', [CustomerReceiptController::class, 'download']);
         });
 
         Route::post('conversations/{inquiry}/firebase-bootstrap', [ConversationController::class, 'firebaseBootstrap']);

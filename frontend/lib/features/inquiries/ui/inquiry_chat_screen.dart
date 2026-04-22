@@ -17,6 +17,8 @@ import 'package:jewelry_hub/features/inquiries/widgets/concierge_pipeline_steppe
 import 'package:jewelry_hub/features/inquiries/widgets/inquiry_api_quote_banner.dart';
 import 'package:jewelry_hub/features/inquiries/widgets/inquiry_payment_info_card.dart';
 import 'package:jewelry_hub/features/inquiries/widgets/inquiry_quote_card.dart';
+import 'package:jewelry_hub/features/orders/models/payment_receipt.dart';
+import 'package:jewelry_hub/features/orders/ui/receipt_detail_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:jewelry_hub/features/inquiries/widgets/inquiry_status_badge.dart';
@@ -55,6 +57,36 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         _loadPipeline();
       }
     });
+  }
+
+  void _openReceiptFromChat(Map<String, dynamic> data) {
+    final rawReceiptId = data['receipt_id'];
+    final receiptId = rawReceiptId is num
+        ? rawReceiptId.toInt()
+        : int.tryParse('$rawReceiptId');
+    final rawOrderId = data['order_id'];
+    final orderId = rawOrderId is num ? rawOrderId.toInt() : int.tryParse('$rawOrderId');
+    if (receiptId == null || orderId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Receipt information is unavailable.')),
+      );
+      return;
+    }
+    final rawAmount = data['amount_mmk'];
+    final amountMmk = rawAmount is num
+        ? rawAmount.toDouble()
+        : double.tryParse('$rawAmount') ?? 0;
+    final receipt = PaymentReceipt(
+      id: receiptId,
+      receiptNumber: (data['receipt_number'] ?? 'Receipt').toString(),
+      orderId: orderId,
+      amountMmk: amountMmk,
+      currencyCode: 'MMK',
+      issuedAt: null,
+    );
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => ReceiptDetailScreen(receipt: receipt)),
+    );
   }
 
   void _attachPipelineSyncListeners(String threadId) {
@@ -213,11 +245,15 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       depositInstructionsSentAt:
           fromFirestore.depositInstructionsSentAt ?? rest.depositInstructionsSentAt,
       depositPayment: rest.depositPayment,
+      latestReceipt: rest.latestReceipt ?? fromFirestore.latestReceipt,
     );
   }
 
   bool _canUploadDeposit(InquiryPipeline p) {
     if (p.orderId == null) {
+      return false;
+    }
+    if (p.orderStatus != 'awaiting_deposit') {
       return false;
     }
     final ds = p.depositState ?? '';
@@ -233,9 +269,6 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       }
       return false;
     }
-    if (p.orderStatus != 'awaiting_deposit') {
-      return false;
-    }
     if (ds == 'confirmed') {
       return false;
     }
@@ -243,6 +276,20 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       return true;
     }
     return p.depositInstructionsSentAt != null;
+  }
+
+  bool _canViewReceipt(InquiryPipeline p) {
+    if (p.orderId == null) {
+      return false;
+    }
+    if (p.latestReceipt == null) {
+      return false;
+    }
+    if (p.orderStatus == 'deposit_confirmed') {
+      return true;
+    }
+    final due = p.resolvedAdditionalDepositDueMmk();
+    return due != null && due <= 0;
   }
 
   Future<void> _pickAndUploadDeposit(InquiryPipeline pipeline) async {
@@ -629,6 +676,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                               timeFmt: timeFmt,
                                               onAcceptQuote: _acceptQuote,
                                               onDeclineQuote: _declineQuote,
+                                              onViewReceipt: _openReceiptFromChat,
                                               quoteBusyId: _quoteActionBusyId,
                                               actedQuoteIds: _actedQuoteIds,
                                               pipeline: effectivePipeline,
@@ -666,6 +714,48 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                       ? 'Uploading…'
                                       : 'Upload payment proof',
                                 ),
+                              ),
+                            ),
+                          if (!_canUploadDeposit(effectivePipeline) &&
+                              _canViewReceipt(effectivePipeline))
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  final receipt = effectivePipeline.latestReceipt;
+                                  final receiptIdRaw = receipt?['id'];
+                                  final receiptId = receiptIdRaw is num
+                                      ? receiptIdRaw.toInt()
+                                      : int.tryParse('$receiptIdRaw');
+                                  final orderId = effectivePipeline.orderId;
+                                  if (receiptId == null || orderId == null) {
+                                    return;
+                                  }
+                                  final amountRaw = receipt?['amount_mmk'];
+                                  final amount = amountRaw is num
+                                      ? amountRaw.toDouble()
+                                      : double.tryParse('$amountRaw') ?? 0;
+                                  final receiptModel = PaymentReceipt(
+                                    id: receiptId,
+                                    receiptNumber:
+                                        (receipt?['receipt_number'] ?? 'Receipt')
+                                            .toString(),
+                                    orderId: orderId,
+                                    amountMmk: amount,
+                                    currencyCode: 'MMK',
+                                    issuedAt: DateTime.tryParse(
+                                      (receipt?['issued_at'] ?? '').toString(),
+                                    ),
+                                  );
+                                  Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          ReceiptDetailScreen(receipt: receiptModel),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.receipt_long_rounded),
+                                label: const Text('View Receipt'),
                               ),
                             ),
                           Padding(
@@ -826,6 +916,7 @@ class _MessageTile extends StatelessWidget {
     required this.timeFmt,
     required this.onAcceptQuote,
     required this.onDeclineQuote,
+    required this.onViewReceipt,
     required this.quoteBusyId,
     required this.actedQuoteIds,
     required this.pipeline,
@@ -835,6 +926,7 @@ class _MessageTile extends StatelessWidget {
   final DateFormat timeFmt;
   final Future<void> Function(int) onAcceptQuote;
   final Future<void> Function(int) onDeclineQuote;
+  final void Function(Map<String, dynamic>) onViewReceipt;
   final int? quoteBusyId;
   final Set<int> actedQuoteIds;
   final InquiryPipeline? pipeline;
@@ -952,6 +1044,44 @@ class _MessageTile extends StatelessWidget {
               onDecline: showActions && quoteId != null
                   ? () => onDeclineQuote(quoteId)
                   : null,
+            ),
+          ),
+        ),
+      );
+    }
+    if (type == 'receipt_card') {
+      final receiptNumber = _firestoreString(data['receipt_number']) ?? 'Receipt';
+      final amountMmk = _firestoreString(data['amount_mmk']) ?? '0';
+      final ctaLabel = _firestoreString(data['cta_label']) ?? 'View Receipt';
+
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.94,
+            ),
+            child: AppGlassCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  PremiumText.headline('Payment receipt issued', maxLines: 1),
+                  const SizedBox(height: 6),
+                  PremiumText.body(receiptNumber),
+                  const SizedBox(height: 4),
+                  PremiumText.caption(
+                    '$amountMmk MMK',
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(height: 12),
+                  AppGoldButton(
+                    label: ctaLabel,
+                    icon: Icons.receipt_long_rounded,
+                    onPressed: () => onViewReceipt(data),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

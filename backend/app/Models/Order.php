@@ -76,6 +76,11 @@ class Order extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function receipts(): HasMany
+    {
+        return $this->hasMany(Receipt::class);
+    }
+
     public function depositPayment(): ?Payment
     {
         return $this->payments()->where('type', Payment::TYPE_DEPOSIT)->orderByDesc('id')->first();

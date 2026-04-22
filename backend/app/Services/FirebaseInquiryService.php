@@ -8,6 +8,7 @@ use App\Models\OrderProgressAttachment;
 use App\Models\OrderProgressEvent;
 use App\Models\PaymentProfile;
 use App\Models\Quote;
+use App\Models\Receipt;
 use App\Models\User;
 use Google\Cloud\Core\Timestamp;
 use Illuminate\Support\Facades\Log;
@@ -331,6 +332,51 @@ class FirebaseInquiryService
             Log::warning('firebase.system_text_failed', [
                 'message' => $e->getMessage(),
                 'inquiry_id' => $inquiry->id,
+            ]);
+        }
+    }
+
+    /**
+     * Server-side receipt card with CTA metadata for customer chat.
+     */
+    public function publishReceiptCardMessage(Inquiry $inquiry, Receipt $receipt): void
+    {
+        $firestore = $this->firestoreClient();
+        if ($firestore === null) {
+            Log::warning('firebase.receipt_card_skipped', [
+                'reason' => 'firestore_client_unavailable',
+                'inquiry_id' => $inquiry->id,
+                'receipt_id' => $receipt->id,
+            ]);
+
+            return;
+        }
+
+        if ($inquiry->firebase_thread_id === null) {
+            return;
+        }
+
+        try {
+            $db = $firestore->database();
+            $db->collection('inquiry_threads')
+                ->document($inquiry->firebase_thread_id)
+                ->collection('messages')
+                ->add([
+                    'type' => 'receipt_card',
+                    'sender_role' => 'admin',
+                    'created_at' => new Timestamp(new \DateTimeImmutable),
+                    'text' => 'Your payment receipt is ready.',
+                    'order_id' => $receipt->order_id,
+                    'receipt_id' => $receipt->id,
+                    'receipt_number' => $receipt->receipt_number,
+                    'amount_mmk' => (string) $receipt->amount_mmk,
+                    'cta_label' => 'View Receipt',
+                ]);
+        } catch (Throwable $e) {
+            Log::warning('firebase.receipt_card_failed', [
+                'message' => $e->getMessage(),
+                'inquiry_id' => $inquiry->id,
+                'receipt_id' => $receipt->id,
             ]);
         }
     }

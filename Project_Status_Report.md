@@ -9,6 +9,9 @@ Update as of 2026-04-22:
 - Filament Order detail now includes **Assign Artisan** and **QC Approve** actions.
 - QC approve now posts a required Firestore chat text message: **`Your order has passed Quality Control and is now Ready for Collection!`**.
 - Flutter artisan app now includes notification deep-linking from notification list to job detail by related order assignment.
+- Admin **View Order** now includes expanded transparency details (customer profile, itemized specs/pricing, workflow timeline, payment ledger).
+- Customer app now includes formal **Payment Receipt** assurance with in-app receipt view + authenticated PDF download for confirmed payments.
+- When a receipt is issued, customer chat now receives a Firestore **`receipt_card`** system message with a **View Receipt** CTA that opens the in-app receipt detail view.
 
 The main remaining work is not foundational architecture, but **hardening and productization**:
 - reliability under realtime/live UI conditions,

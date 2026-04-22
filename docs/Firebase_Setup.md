@@ -162,6 +162,11 @@ After `firebase deploy --only firestore:rules`, open **Firebase Console → Fire
 2. Admin sees it in Filament (and vice versa) on the same `inquiry_threads/{threadId}/messages` path.
 3. After admin QC approve (`POST /api/v1/admin/orders/{order}/qc/approve`), confirm a chat text message appears:
    - `Your order has passed Quality Control and is now Ready for Collection!`
+4. After admin confirms a deposit payment (`POST /api/v1/admin/payments/{payment}/confirm`), confirm a receipt card appears in chat:
+   - `type: receipt_card`
+   - message text indicates receipt readiness
+   - CTA button label: `View Receipt`
+   - tapping CTA in Flutter opens the in-app receipt detail screen.
 
 ---
 

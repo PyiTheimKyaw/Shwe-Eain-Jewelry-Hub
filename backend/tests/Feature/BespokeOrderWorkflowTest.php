@@ -11,6 +11,7 @@ use App\Models\OrderAssignment;
 use App\Models\Payment;
 use App\Models\PaymentProfile;
 use App\Models\Quote;
+use App\Models\Receipt;
 use App\Models\User;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryQuoteCommitmentGate;
@@ -711,5 +712,152 @@ class BespokeOrderWorkflowTest extends TestCase
             'id' => $order->id,
             'status' => 'ready',
         ]);
+    }
+
+    public function test_confirm_payment_issues_single_receipt_and_customer_can_download(): void
+    {
+        $this->seedPricing();
+        Storage::fake('public');
+        Storage::fake('local');
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('t')->plainTextToken;
+        $customerToken = $customer->createToken('t')->plainTextToken;
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Receipt flow',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-receipt-1',
+        ]);
+
+        Sanctum::actingAs($admin);
+        $publish = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => [['weight_grams' => 5, 'labor_fee_mmk' => 10000, 'gem_price_mmk' => 5000]]],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+        $quoteId = (int) $publish->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId}/accept")->assertOk();
+        $order = Order::query()->where('quote_id', $quoteId)->firstOrFail();
+
+        Sanctum::actingAs($admin);
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+        $this->postJson(
+            "/api/v1/admin/orders/{$order->id}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        Sanctum::actingAs($customer);
+        $this->postJson(
+            "/api/v1/orders/{$order->id}/deposit-proof",
+            ['proof' => UploadedFile::fake()->image('proof.jpg')],
+            ['Authorization' => 'Bearer '.$customerToken]
+        )->assertCreated();
+        $payment = Payment::query()->where('order_id', $order->id)->firstOrFail();
+
+        $firebase = Mockery::mock(FirebaseInquiryService::class);
+        $firebase
+            ->shouldReceive('publishReceiptCardMessage')
+            ->once()
+            ->withArgs(function ($argInquiry, $argReceipt) use ($inquiry, $order) {
+                return $argInquiry instanceof Inquiry
+                    && $argInquiry->id === $inquiry->id
+                    && $argReceipt instanceof Receipt
+                    && $argReceipt->order_id === $order->id;
+            });
+        $firebase->shouldReceive('syncInquiryThreadDocument')->once();
+        app()->instance(FirebaseInquiryService::class, $firebase);
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            [],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+        $this->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            [],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $this->assertDatabaseCount('receipts', 1);
+        $receipt = Receipt::query()->where('payment_id', $payment->id)->firstOrFail();
+        $this->assertTrue(Storage::disk('local')->exists($receipt->pdf_storage_path));
+
+        Sanctum::actingAs($customer);
+        $this->getJson(
+            "/api/v1/orders/{$order->id}/receipts",
+            ['Authorization' => 'Bearer '.$customerToken]
+        )->assertOk()->assertJsonPath('data.0.id', $receipt->id);
+
+        $this->get(
+            "/api/v1/orders/{$order->id}/receipts/{$receipt->id}/download",
+            ['Authorization' => 'Bearer '.$customerToken]
+        )->assertOk();
+    }
+
+    public function test_customer_cannot_access_other_customer_receipt(): void
+    {
+        $this->seedPricing();
+        Storage::fake('local');
+
+        $owner = User::factory()->create(['role' => UserRole::Customer]);
+        $other = User::factory()->create(['role' => UserRole::Customer]);
+        $quote = Quote::create([
+            'inquiry_id' => null,
+            'customer_user_id' => $owner->id,
+            'gold_price_snapshot_id' => GoldPriceSnapshot::query()->firstOrFail()->id,
+            'exchange_rate_snapshot_id' => ExchangeRateSnapshot::query()->firstOrFail()->id,
+            'quote_number' => 'Q-RESTRICT-1',
+            'status' => 'accepted',
+            'total_mmk' => 120000,
+            'total_usd_snapshot' => 50,
+        ]);
+        $order = Order::create([
+            'customer_user_id' => $owner->id,
+            'quote_id' => $quote->id,
+            'order_number' => 'O-RESTRICT-1',
+            'status' => 'deposit_confirmed',
+            'deposit_amount_mmk' => 0,
+            'total_mmk' => 120000,
+            'total_usd_snapshot' => 50,
+            'exchange_rate_snapshot_id' => ExchangeRateSnapshot::query()->firstOrFail()->id,
+        ]);
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'currency' => 'MMK',
+            'amount_mmk' => 50000,
+            'status' => Payment::STATUS_CONFIRMED,
+            'type' => Payment::TYPE_DEPOSIT,
+            'verified_at' => now(),
+            'verified_by_user_id' => null,
+        ]);
+        $receipt = Receipt::create([
+            'receipt_number' => 'RCP-TEST-0001',
+            'payment_id' => $payment->id,
+            'order_id' => $order->id,
+            'customer_user_id' => $owner->id,
+            'currency_code' => 'MMK',
+            'amount_mmk' => 50000,
+            'amount_usd_snapshot' => 25,
+            'branding_name' => 'Shwe Eain Jewelry Hub',
+            'pdf_storage_path' => 'receipts/test.pdf',
+            'sha256' => str_repeat('a', 64),
+            'meta_json' => ['payment_type' => 'deposit'],
+            'issued_at' => now(),
+        ]);
+
+        Sanctum::actingAs($other);
+        $otherToken = $other->createToken('t')->plainTextToken;
+        $this->getJson(
+            "/api/v1/orders/{$order->id}/receipts/{$receipt->id}",
+            ['Authorization' => 'Bearer '.$otherToken]
+        )->assertForbidden();
     }
 }

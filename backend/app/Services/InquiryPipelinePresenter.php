@@ -51,6 +51,7 @@ class InquiryPipelinePresenter
      */
     public function present(Inquiry $inquiry): array
     {
+        /** @var Order|null $latestOrder */
         $latestOrder = Order::query()
             ->whereHas('quote', fn ($q) => $q->where('inquiry_id', $inquiry->id))
             ->with([
@@ -95,6 +96,7 @@ class InquiryPipelinePresenter
                     : null,
                 'deposit_instructions_sent_at' => $latestOrder->deposit_instructions_sent_at?->toIso8601String(),
                 'deposit_payment' => $this->depositPaymentDisplay($latestOrder),
+                'latest_receipt' => $this->latestReceiptDisplay($latestOrder),
                 'primary_assignment_id' => $latestOrder->assignments->first()?->id,
                 'primary_artisan_user_id' => $latestOrder->assignments->first()?->artisan_user_id,
             ];
@@ -117,6 +119,7 @@ class InquiryPipelinePresenter
                 'deposit_amount_mmk' => null,
                 'deposit_instructions_sent_at' => null,
                 'deposit_payment' => null,
+                'latest_receipt' => null,
                 'primary_assignment_id' => null,
                 'primary_artisan_user_id' => null,
             ];
@@ -139,6 +142,7 @@ class InquiryPipelinePresenter
                 'deposit_amount_mmk' => null,
                 'deposit_instructions_sent_at' => null,
                 'deposit_payment' => null,
+                'latest_receipt' => null,
                 'primary_assignment_id' => null,
                 'primary_artisan_user_id' => null,
             ];
@@ -156,6 +160,7 @@ class InquiryPipelinePresenter
             'deposit_amount_mmk' => null,
             'deposit_instructions_sent_at' => null,
             'deposit_payment' => null,
+            'latest_receipt' => null,
             'primary_assignment_id' => null,
             'primary_artisan_user_id' => null,
         ];
@@ -221,6 +226,24 @@ class InquiryPipelinePresenter
             'credited_deposit_mmk' => $creditedStr,
             'balance_remaining_mmk' => (string) $balanceRemaining,
             'additional_deposit_due_mmk' => (string) ($order->deposit_amount_mmk ?? '0'),
+        ];
+    }
+
+    /**
+     * @return array<string, string|int|null>|null
+     */
+    protected function latestReceiptDisplay(Order $order): ?array
+    {
+        $receipt = $order->receipts()->latest('id')->first();
+        if ($receipt === null) {
+            return null;
+        }
+
+        return [
+            'id' => $receipt->id,
+            'receipt_number' => $receipt->receipt_number,
+            'amount_mmk' => (string) $receipt->amount_mmk,
+            'issued_at' => $receipt->issued_at?->toIso8601String(),
         ];
     }
 

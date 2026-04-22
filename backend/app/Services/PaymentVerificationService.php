@@ -5,11 +5,14 @@ namespace App\Services;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class PaymentVerificationService
 {
     public function __construct(
-        protected FirebaseInquiryService $firebaseInquiry
+        protected FirebaseInquiryService $firebaseInquiry,
+        protected ReceiptService $receipts
     ) {}
 
     public function confirm(User $user, Payment $payment): Payment
@@ -18,30 +21,50 @@ class PaymentVerificationService
             abort(422, 'Unsupported payment type.');
         }
 
-        if ($payment->status === Payment::STATUS_CONFIRMED) {
-            return $payment;
+        $order = $payment->order;
+        $alreadyConfirmed = $payment->status === Payment::STATUS_CONFIRMED;
+
+        if (! $alreadyConfirmed) {
+            DB::transaction(function () use ($payment, $user, $order) {
+                $payment->update([
+                    'status' => Payment::STATUS_CONFIRMED,
+                    'verified_at' => now(),
+                    'verified_by_user_id' => $user->id,
+                    'rejection_reason' => null,
+                ]);
+
+                $order->update(['status' => 'deposit_confirmed']);
+            });
+        } elseif ($order->status !== 'deposit_confirmed') {
+            $order->update(['status' => 'deposit_confirmed']);
         }
 
-        $order = $payment->order;
-
-        DB::transaction(function () use ($payment, $user, $order) {
-            $payment->update([
-                'status' => Payment::STATUS_CONFIRMED,
-                'verified_at' => now(),
-                'verified_by_user_id' => $user->id,
-                'rejection_reason' => null,
-            ]);
-
-            $order->update(['status' => 'deposit_confirmed']);
-        });
-
+        $hadReceiptBeforeIssue = $payment->receipt()->exists();
         $payment->refresh();
+
+        $issuedReceipt = null;
+        try {
+            $issuedReceipt = $this->receipts->issueForConfirmedPayment($payment);
+        } catch (Throwable $e) {
+            Log::warning('receipt.issue_failed', [
+                'payment_id' => $payment->id,
+                'order_id' => $payment->order_id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         $inquiry = $order->fresh()->resolveInquiry();
         if ($inquiry !== null) {
-            $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
+            $shouldBroadcastUpdate = ! $alreadyConfirmed || ! $hadReceiptBeforeIssue;
+            if ($issuedReceipt !== null && $shouldBroadcastUpdate) {
+                $this->firebaseInquiry->publishReceiptCardMessage($inquiry, $issuedReceipt);
+            }
+            if ($shouldBroadcastUpdate) {
+                $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
+            }
         }
 
-        return $payment->load('order');
+        return $payment->load(['order', 'receipt']);
     }
 
     public function reject(Payment $payment, ?string $reason): Payment

@@ -392,3 +392,68 @@ Completed the missing production/QC workflow surface by adding **Filament order 
   - **`InquiryQuoteFlowTest`**
   - **`BespokeOrderWorkflowTest`**
 - Flutter static checks pass (`flutter analyze`) on modified artisan/inquiry files.
+
+---
+
+## 2026-04-22 — Admin Order transparency + formal receipt workflow
+
+### Summary
+
+Implemented the next customer-confidence/admin-visibility milestone:
+- expanded Filament `View Order` into a complete operational overview surface
+- introduced a formal receipt domain in Laravel
+- generated canonical PDF receipts server-side on confirmed payments
+- exposed secure customer receipt APIs and added Flutter order/receipt UX with PDF download.
+
+### Backend
+
+- Added receipt persistence:
+  - `receipts` table migration
+  - `App\\Models\\Receipt` with `Order`/`Payment` relations
+- Added `App\\Services\\ReceiptService::issueForConfirmedPayment(Payment $payment)`:
+  - idempotent by `payment_id`
+  - immutable snapshot fields
+  - server PDF render (`barryvdh/laravel-dompdf`)
+  - private storage path + SHA256 checksum.
+- Integrated receipt issuance into `PaymentVerificationService::confirm`.
+- Added backfill command:
+  - `php artisan receipts:generate-missing`
+- Added customer receipt endpoints:
+  - `GET /api/v1/orders/{order}/receipts`
+  - `GET /api/v1/orders/{order}/receipts/{receipt}`
+  - `GET /api/v1/orders/{order}/receipts/{receipt}/download`
+  with strict owner checks.
+
+### Filament
+
+- Upgraded `OrderResource` eager loading for deeper relations (`customerProfile`, `items`, `payments.receipt`, assignments, progress events).
+- Expanded `OrderInfolist` to include:
+  - customer contact + address
+  - workflow stage label
+  - financial summary (confirmed payments / remaining balance)
+  - itemized spec/pricing summary
+  - artisan assignment summary
+  - payment ledger (including receipt number)
+  - workflow timeline.
+
+### Flutter (Customer)
+
+- Added `Orders` tab in `CustomerShell`.
+- Added customer order/receipt API layer and receipt model.
+- Added premium screens:
+  - `CustomerOrdersScreen`
+  - `ReceiptDetailScreen`
+- Added authenticated PDF download/open flow for receipts.
+
+### Receipt chat CTA update
+
+- On payment confirmation, backend now also publishes a Firestore system card message:
+  - `type: receipt_card`
+  - includes `receipt_id`, `order_id`, `receipt_number`, `amount_mmk`
+  - CTA label: `View Receipt`
+- `PaymentVerificationService::confirm` now calls:
+  - `ReceiptService::issueForConfirmedPayment(...)`
+  - `FirebaseInquiryService::publishReceiptCardMessage(...)`
+  - then thread sync.
+- Flutter `InquiryChatScreen` now renders `receipt_card` and opens `ReceiptDetailScreen` when the customer taps **View Receipt**.
+

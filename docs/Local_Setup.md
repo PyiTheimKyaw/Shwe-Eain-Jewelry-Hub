@@ -151,5 +151,9 @@ Do not commit `vendor/`; every fresh clone needs this step before `php artisan` 
 3. Open **Filament** at `/admin` with `admin@jewelryhub.test` / `password`
 4. Optional artisan login for mobile testing:
    - `artisan@jewelryhub.test` / `password` (create via tinker if missing in your local DB)
+5. Receipt/PDF feature notes:
+   - Backend uses `barryvdh/laravel-dompdf` for canonical server-generated payment receipts.
+   - To backfill receipts for previously confirmed payments: `php artisan receipts:generate-missing`
+   - Customer app includes an **Orders** tab where receipts can be viewed and downloaded.
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.
