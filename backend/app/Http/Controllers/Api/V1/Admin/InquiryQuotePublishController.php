@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use App\Models\User;
 use App\Services\FirebaseInquiryService;
+use App\Services\InquiryQuoteCommitmentGate;
 use App\Services\PricingService;
 use App\Services\QuoteBuilderService;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,8 @@ class InquiryQuotePublishController extends Controller
     public function __invoke(Request $request, Inquiry $inquiry): JsonResponse
     {
         $this->authorize('publishQuote', $inquiry);
+
+        $warning = app(InquiryQuoteCommitmentGate::class)->warningForPublishing($inquiry);
 
         $gold = $this->pricing->currentGoldSnapshot();
         $fx = $this->pricing->currentFxSnapshot();
@@ -68,6 +71,11 @@ class InquiryQuotePublishController extends Controller
         $this->firebaseInquiry->publishQuoteCardMessage($inquiry, $quote);
         $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
 
-        return response()->json(['data' => $quote], 201);
+        $payload = ['data' => $quote];
+        if ($warning !== null) {
+            $payload['meta'] = ['warning' => $warning];
+        }
+
+        return response()->json($payload, 201);
     }
 }

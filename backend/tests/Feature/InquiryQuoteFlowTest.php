@@ -237,7 +237,7 @@ class InquiryQuoteFlowTest extends TestCase
         $this->assertNotEquals($total1, $total2);
     }
 
-    public function test_cannot_accept_new_quote_while_deposit_awaiting_verification(): void
+    public function test_can_publish_new_quote_while_deposit_awaiting_verification(): void
     {
         $this->seedPricing();
 
@@ -295,9 +295,7 @@ class InquiryQuoteFlowTest extends TestCase
             ],
             ['Authorization' => 'Bearer '.$adminToken]
         );
-        $quoteId2 = (int) $publish2->json('data.id');
-
-        Sanctum::actingAs($customer);
-        $this->postJson("/api/v1/quotes/{$quoteId2}/accept")->assertStatus(422);
+        $publish2->assertCreated();
+        $this->assertArrayNotHasKey('warning', $publish2->json('meta') ?? []);
     }
 }

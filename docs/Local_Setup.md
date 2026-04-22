@@ -151,3 +151,4 @@ Do not commit `vendor/`; every fresh clone needs this step before `php artisan` 
 3. Open **Filament** at `/admin` with `admin@jewelryhub.test` / `password`
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.
+php artisan serve --host=0.0.0.0 --port=8000

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use App\Models\Quote;
 use App\Models\User;
+use App\Services\InquiryQuoteCommitmentGate;
 use App\Services\PricingService;
 use App\Services\QuoteBuilderService;
 use Illuminate\Http\JsonResponse;
@@ -65,6 +66,12 @@ class QuoteController extends Controller
             return response()->json(['message' => 'Quotes can only target customer accounts.'], 422);
         }
 
+        $warning = null;
+        if (! empty($data['inquiry_id'])) {
+            $inquiry = Inquiry::query()->findOrFail($data['inquiry_id']);
+            $warning = app(InquiryQuoteCommitmentGate::class)->warningForPublishing($inquiry);
+        }
+
         $quote = $this->quotes->createQuote(
             $customer,
             $gold,
@@ -79,7 +86,12 @@ class QuoteController extends Controller
             Inquiry::query()->whereKey($data['inquiry_id'])->update(['status' => 'quoted']);
         }
 
-        return response()->json(['data' => $quote], 201);
+        $payload = ['data' => $quote];
+        if ($warning !== null) {
+            $payload['meta'] = ['warning' => $warning];
+        }
+
+        return response()->json($payload, 201);
     }
 
     public function update(Request $request, Quote $quote): JsonResponse
@@ -88,10 +100,20 @@ class QuoteController extends Controller
             'status' => ['sometimes', 'in:draft,sent,accepted,expired,void'],
         ]);
 
+        $warning = null;
         if (isset($data['status'])) {
+            if ($data['status'] === 'sent' && $quote->status !== 'sent' && $quote->inquiry_id !== null) {
+                $inquiry = Inquiry::query()->find($quote->inquiry_id);
+                $warning = app(InquiryQuoteCommitmentGate::class)->warningForPublishing($inquiry);
+            }
             $quote->update(['status' => $data['status']]);
         }
 
-        return response()->json(['data' => $quote->fresh()->load('lineItems')]);
+        $payload = ['data' => $quote->fresh()->load('lineItems')];
+        if ($warning !== null) {
+            $payload['meta'] = ['warning' => $warning];
+        }
+
+        return response()->json($payload);
     }
 }

@@ -286,3 +286,56 @@ Implemented the **concierge** inquiry flow: **derived pipeline** from MySQL, **c
 
 - **`tests/Feature/BespokeOrderWorkflowTest.php`**: end-to-end deposit → confirm → assign → start → progress → ready-for-review → QC.
 - **`InquiryQuoteFlowTest`**: order **`awaiting_deposit`** after accept.
+
+---
+
+## 2026-04-11 — Quote supersession, deposit API mirror, concierge chat hardening
+
+### Summary
+
+**Accepting a newer quote** supersedes **all non-cancelled** orders on the inquiry: **confirmed** deposits are **credited** and **deposit payments are reparented** to the new order. **Publishing** is always allowed; **confirmed** deposit → **`meta.warning`** / Filament warning. **`meta.pipeline.deposit_payment`** includes optional **total / credited / balance** fields. **Filament** + **Flutter** payment cards show breakdown when applicable. *(Supersedes the stricter publish/accept rules described in earlier drafts of this entry; see **2026-04-16**.)*
+
+### Backend — quote publish advisor
+
+- **`App\Services\InquiryQuoteCommitmentGate`**: **`warningForPublishing`** only — **`meta.warning`** on publish endpoints when a **confirmed** deposit exists on an active order for the inquiry.
+
+### Backend — quote accept & orders
+
+- **`OrderBuilderService`**: supersede **all** non-**cancelled** inquiry orders; sum **confirmed** deposit credit; **`insertOrderAndItemsFromQuote`** applies credit to **`deposit_amount_mmk`** / **`status`**; **reparent** deposit **`Payment`** rows; **cancel** old orders; **migrate** **`OrderAssignment`**; **`QuoteRevisedAcceptedForArtisan`**.
+- **`CustomerQuoteController::accept`** → **`acceptSentQuoteAndCreateOrder`**.
+
+### Backend — pipeline & payments
+
+- **`InquiryPipelinePresenter`**: **`paymentBalanceBreakdown`** merged into **`deposit_payment`**; **`FirebaseInquiryService::publishPaymentInfoCard`** sends the same optional keys.
+
+### Flutter — customer chat
+
+- **`InquiryPipeline.depositPayment`**, **`InquiryApi.fetchPipeline`**, **`_effectivePipeline`** keeps REST **`deposit_payment`** when merging with Firestore thread metadata.
+- **`inquiry_chat_screen.dart`**: **`CustomScrollView`** slivers (stepper, **`InquiryApiQuoteBanner`**, **`InquiryPaymentInfoCard`** from pipeline when no matching Firestore card, **`SliverList`** messages chronological); **`_attachPipelineSyncListeners`** + **450ms debounce** → **`_loadPipeline()`** on thread/doc + messages snapshots; **`resizeToAvoidBottomInset: true`**; composer inside scroll column’s sibling flex region (see earlier layout fix).
+
+### Filament — admin chat (`chat-inquiry.blade.php` + `ChatInquiry.php`)
+
+- **`$adminQuoteCardPayload`** on **`ChatInquiry`**, refreshed in **`refreshPipeline()`** from active sent/accepted quote line items.
+- Blade: **`#jh-admin-static-json`** + **`#jh-server-cards`** above **`#jh-messages`** inside **`.jh-scroll-thread`**; JS **`renderMysqlCards`** + **`quoteCardHtml` / `paymentCardHtml`**; **`shouldSkipFirestoreMsg`** when Firestore duplicates MySQL **`quote_id`** / **`order_number`**.
+- **`window.jhAdminChatRefreshStatic`**; **`$this->js`** after publish quote / send payment: staggered **`setTimeout(0,200,600)`** so Livewire DOM includes updated JSON before redraw.
+
+### Tests
+
+- **`InquiryQuoteFlowTest`**: supersede + **publish allowed** while deposit **awaiting verification** (no **`meta.warning`** without confirmed deposit).
+- **`BespokeOrderWorkflowTest`**: **`meta.warning`** when republishing after **confirmed** deposit; accept-after-confirm **reparents** payment and reduces **due**; assignment **migration** + **`notifications`** row for artisan.
+
+### Operational note
+
+- **Firestore** (`quote_card`, `payment_info_card`, thread sync) still requires **`google/cloud-firestore`** and often **PHP ext-grpc** on the server; when absent, Laravel logs skips—**MySQL + `meta.pipeline.deposit_payment`** and admin **server cards** keep UX usable. **`.cursorrules`** is kept in sync with these rules for AI-assisted work.
+
+---
+
+## 2026-04-16 — Relaxed quote publishing, deposit credit, artisan notifications
+
+### Summary
+
+- **Migration** **`2026_04_16_100000_create_notifications_table`**: standard Laravel **`notifications`** for database channel.
+- **`QuoteRevisedAcceptedForArtisan`**: notifies assigned artisans when a customer accept supersedes an order they were on.
+- **`GET /api/v1/artisan/notifications`**: list recent notifications for the mobile artisan app.
+- **Admin chat `paymentCardHtml`**: optional **order total / recognized paid / balance** block when **`credited_deposit_mmk`** &gt; 0.
+- **Flutter `InquiryPaymentInfoCard`**: same optional breakdown for REST and Firestore payloads.

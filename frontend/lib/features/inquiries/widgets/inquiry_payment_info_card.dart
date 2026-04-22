@@ -16,6 +16,9 @@ class InquiryPaymentInfoCard extends StatelessWidget {
     required this.bankAccountName,
     this.paymentMethodLabel,
     this.qrImageUrl,
+    this.orderTotalMmk,
+    this.creditedDepositMmk,
+    this.balanceRemainingMmk,
   });
 
   final String orderNumber;
@@ -26,6 +29,17 @@ class InquiryPaymentInfoCard extends StatelessWidget {
   final String bankAccountName;
   final String? paymentMethodLabel;
   final String? qrImageUrl;
+
+  /// Optional breakdown when a prior deposit was recognized (API / Firestore).
+  final String? orderTotalMmk;
+  final String? creditedDepositMmk;
+  final String? balanceRemainingMmk;
+
+  bool get _showCreditBreakdown {
+    final c = double.tryParse(creditedDepositMmk ?? '') ?? 0;
+    final t = orderTotalMmk?.trim() ?? '';
+    return c > 0 && t.isNotEmpty;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +69,39 @@ class InquiryPaymentInfoCard extends StatelessWidget {
               color: AppColors.goldMuted,
             ),
           ],
+          if (_showCreditBreakdown) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadii.sm),
+                border: Border.all(
+                  color: AppColors.gold.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _balanceRow('Order total', '${orderTotalMmk!.trim()} MMK'),
+                  const SizedBox(height: 6),
+                  _balanceRow('Recognized paid', '${creditedDepositMmk!.trim()} MMK'),
+                  if (balanceRemainingMmk != null &&
+                      balanceRemainingMmk!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _balanceRow(
+                      'Balance on order',
+                      '${balanceRemainingMmk!.trim()} MMK',
+                      emphasize: true,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
+          PremiumText.caption('PAY NOW (DEPOSIT DUE)', color: AppColors.goldMuted),
+          const SizedBox(height: 4),
           PremiumText.body(
             '$amountMmk MMK',
             color: AppColors.gold,
@@ -102,6 +148,27 @@ class InquiryPaymentInfoCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  static Widget _balanceRow(String label, String value, {bool emphasize = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: PremiumText.caption(
+            label,
+            color: AppColors.goldMuted,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: PremiumText.body(
+            value,
+            color: emphasize ? AppColors.gold : AppColors.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 }

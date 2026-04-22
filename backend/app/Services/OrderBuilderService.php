@@ -3,16 +3,20 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Models\OrderAssignment;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Quote;
+use App\Models\User;
+use App\Notifications\QuoteRevisedAcceptedForArtisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
 class OrderBuilderService
 {
     /**
-     * Customer path: quote is still "sent"; marks accepted, supersedes open deposit orders on same inquiry, creates order.
+     * Customer path: quote is still "sent"; marks accepted, supersedes prior orders on same inquiry, creates order.
      */
     public function acceptSentQuoteAndCreateOrder(Quote $quote): Order
     {
@@ -23,8 +27,16 @@ class OrderBuilderService
 
             $quote->load('lineItems');
 
+            $supersedeOrderIds = [];
+            $creditConfirmedMmk = '0';
+            $artisanUserIds = [];
+
             if ($quote->inquiry_id !== null) {
-                $this->supersedeAwaitingDepositOrdersForInquiry((int) $quote->inquiry_id);
+                $ctx = $this->lockedSupersedeContextForInquiry((int) $quote->inquiry_id);
+                $supersedeOrderIds = $ctx['orderIds'];
+                $creditConfirmedMmk = $ctx['creditConfirmedMmk'];
+                $artisanUserIds = $ctx['artisanUserIds'];
+
                 Quote::query()
                     ->where('inquiry_id', $quote->inquiry_id)
                     ->where('status', 'accepted')
@@ -33,7 +45,18 @@ class OrderBuilderService
 
             $quote->update(['status' => 'accepted']);
 
-            return $this->insertOrderAndItemsFromQuote($quote->fresh(['lineItems']));
+            $order = $this->insertOrderAndItemsFromQuote($quote->fresh(['lineItems']), $creditConfirmedMmk);
+
+            if ($supersedeOrderIds !== []) {
+                $this->applySupersedeSideEffects(
+                    $supersedeOrderIds,
+                    $order,
+                    (int) $quote->inquiry_id,
+                    $artisanUserIds
+                );
+            }
+
+            return $order;
         });
     }
 
@@ -49,70 +72,175 @@ class OrderBuilderService
         return DB::transaction(function () use ($quote) {
             $quote->load('lineItems');
 
-            if ($quote->inquiry_id !== null) {
-                $this->supersedeAwaitingDepositOrdersForInquiry((int) $quote->inquiry_id);
+            $supersedeOrderIds = [];
+            $creditConfirmedMmk = '0';
+            $artisanUserIds = [];
+            $inquiryId = $quote->inquiry_id;
+
+            if ($inquiryId !== null) {
+                $ctx = $this->lockedSupersedeContextForInquiry((int) $inquiryId);
+                $supersedeOrderIds = $ctx['orderIds'];
+                $creditConfirmedMmk = $ctx['creditConfirmedMmk'];
+                $artisanUserIds = $ctx['artisanUserIds'];
+
                 Quote::query()
-                    ->where('inquiry_id', $quote->inquiry_id)
+                    ->where('inquiry_id', $inquiryId)
                     ->whereKeyNot($quote->id)
                     ->where('status', 'accepted')
                     ->update(['status' => 'void']);
             }
 
-            return $this->insertOrderAndItemsFromQuote($quote);
+            $order = $this->insertOrderAndItemsFromQuote($quote, $creditConfirmedMmk);
+
+            if ($supersedeOrderIds !== [] && $inquiryId !== null) {
+                $this->applySupersedeSideEffects(
+                    $supersedeOrderIds,
+                    $order,
+                    (int) $inquiryId,
+                    $artisanUserIds
+                );
+            }
+
+            return $order;
         });
     }
 
     /**
-     * Cancel prior awaiting-deposit orders for this inquiry unless deposit is already in flight or confirmed.
+     * @return array{orderIds: array<int, int>, creditConfirmedMmk: string, artisanUserIds: array<int, int>}
      */
-    protected function supersedeAwaitingDepositOrdersForInquiry(int $inquiryId): void
+    protected function lockedSupersedeContextForInquiry(int $inquiryId): array
     {
         $orderIds = Order::query()
             ->whereHas('quote', fn ($q) => $q->where('inquiry_id', $inquiryId))
-            ->where('status', 'awaiting_deposit')
+            ->where('status', '!=', 'cancelled')
             ->lockForUpdate()
-            ->pluck('id');
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
 
-        foreach ($orderIds as $orderId) {
-            /** @var Order $order */
-            $order = Order::query()->lockForUpdate()->findOrFail($orderId);
-
-            $deposit = $order->payments()
+        $creditConfirmedMmk = '0';
+        if ($orderIds !== []) {
+            $sum = Payment::query()
+                ->whereIn('order_id', $orderIds)
                 ->where('type', Payment::TYPE_DEPOSIT)
-                ->orderByDesc('id')
-                ->first();
+                ->where('status', Payment::STATUS_CONFIRMED)
+                ->sum('amount_mmk');
+            $creditConfirmedMmk = (string) ($sum ?? '0');
+        }
 
-            if ($deposit !== null && in_array($deposit->status, [
-                Payment::STATUS_CONFIRMED,
-                Payment::STATUS_AWAITING_VERIFICATION,
-            ], true)) {
-                abort(422, 'Cannot replace this order while a deposit is submitted or confirmed. Contact concierge.');
-            }
+        $artisanUserIds = [];
+        if ($orderIds !== []) {
+            $artisanUserIds = OrderAssignment::query()
+                ->whereIn('order_id', $orderIds)
+                ->whereIn('status', ['assigned', 'in_progress'])
+                ->distinct()
+                ->pluck('artisan_user_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
 
-            if ($deposit !== null && in_array($deposit->status, [
-                Payment::STATUS_PENDING_PROOF,
-                Payment::STATUS_REJECTED,
-            ], true)) {
-                $deposit->delete();
-            }
+        return [
+            'orderIds' => $orderIds,
+            'creditConfirmedMmk' => $creditConfirmedMmk,
+            'artisanUserIds' => $artisanUserIds,
+        ];
+    }
 
-            $order->update([
-                'status' => 'cancelled',
-                'deposit_instructions_sent_at' => null,
+    /**
+     * @param  array<int, int>  $supersededOrderIds
+     * @param  array<int, int>  $artisanUserIds
+     */
+    protected function applySupersedeSideEffects(
+        array $supersededOrderIds,
+        Order $newOrder,
+        int $inquiryId,
+        array $artisanUserIds
+    ): void {
+        Payment::query()
+            ->whereIn('order_id', $supersededOrderIds)
+            ->where('type', Payment::TYPE_DEPOSIT)
+            ->update(['order_id' => $newOrder->id]);
+
+        Order::query()->whereIn('id', $supersededOrderIds)->update([
+            'status' => 'cancelled',
+            'deposit_instructions_sent_at' => null,
+        ]);
+
+        $this->migrateAssignmentsToOrder($supersededOrderIds, $newOrder->id);
+        $this->notifyArtisansOfQuoteRevision($artisanUserIds, $inquiryId, $newOrder);
+    }
+
+    /**
+     * @param  array<int, int>  $fromOrderIds
+     */
+    protected function migrateAssignmentsToOrder(array $fromOrderIds, int $newOrderId): void
+    {
+        if ($fromOrderIds === []) {
+            return;
+        }
+
+        $suffix = ' Quote revised — review design changes.';
+
+        $assignments = OrderAssignment::query()
+            ->whereIn('order_id', $fromOrderIds)
+            ->whereIn('status', ['assigned', 'in_progress'])
+            ->get();
+
+        foreach ($assignments as $assignment) {
+            $current = trim((string) $assignment->instructions);
+            $instructions = str_contains($current, 'Quote revised — review design changes')
+                ? $current
+                : trim($current.$suffix);
+
+            $assignment->update([
+                'order_id' => $newOrderId,
+                'order_item_id' => null,
+                'instructions' => $instructions !== '' ? $instructions : trim($suffix),
             ]);
         }
     }
 
-    protected function insertOrderAndItemsFromQuote(Quote $quote): Order
+    /**
+     * @param  array<int, int>  $artisanUserIds
+     */
+    protected function notifyArtisansOfQuoteRevision(array $artisanUserIds, int $inquiryId, Order $order): void
+    {
+        if ($artisanUserIds === []) {
+            return;
+        }
+
+        $users = User::query()->whereKey($artisanUserIds)->get();
+        if ($users->isEmpty()) {
+            return;
+        }
+
+        Notification::send($users, new QuoteRevisedAcceptedForArtisan($inquiryId, $order));
+    }
+
+    /**
+     * @param  string  $creditConfirmedMmk  Sum of confirmed deposit payments from superseded orders (applied before reparent).
+     */
+    protected function insertOrderAndItemsFromQuote(Quote $quote, string $creditConfirmedMmk = '0'): Order
     {
         $depositPct = (float) config('jewelry.default_deposit_percentage', 50);
-        $depositAmount = round((float) $quote->total_mmk * ($depositPct / 100), 4);
+        $total = (float) $quote->total_mmk;
+        $credit = (float) $creditConfirmedMmk;
+
+        // Customer paid at least the full order total already — treat deposit milestone as satisfied.
+        if ($credit >= $total) {
+            $depositAmount = 0.0;
+            $status = 'deposit_confirmed';
+        } else {
+            $requiredDeposit = round($total * ($depositPct / 100), 4);
+            $depositAmount = max(0.0, round($requiredDeposit - $credit, 4));
+            $status = $depositAmount > 0 ? 'awaiting_deposit' : 'deposit_confirmed';
+        }
 
         $order = Order::create([
             'customer_user_id' => $quote->customer_user_id,
             'quote_id' => $quote->id,
             'order_number' => $this->uniqueOrderNumber(),
-            'status' => 'awaiting_deposit',
+            'status' => $status,
             'deposit_amount_mmk' => $depositAmount,
             'total_mmk' => $quote->total_mmk,
             'total_usd_snapshot' => $quote->total_usd_snapshot,

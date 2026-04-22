@@ -191,7 +191,37 @@ class InquiryPipelinePresenter
         $fields['order_number'] = $order->order_number;
         $fields['amount_mmk'] = (string) ($order->deposit_amount_mmk ?? '0');
 
+        foreach ($this->paymentBalanceBreakdown($order) as $k => $v) {
+            $fields[$k] = $v;
+        }
+
         return $fields;
+    }
+
+    /**
+     * Recognized confirmed deposits vs order total (for payment cards).
+     *
+     * @return array<string, string>
+     */
+    public function paymentBalanceBreakdown(Order $order): array
+    {
+        $credited = Payment::query()
+            ->where('order_id', $order->id)
+            ->where('type', Payment::TYPE_DEPOSIT)
+            ->where('status', Payment::STATUS_CONFIRMED)
+            ->sum('amount_mmk');
+
+        $creditedStr = (string) ($credited ?? '0');
+        $total = (float) $order->total_mmk;
+        $credF = (float) $creditedStr;
+        $balanceRemaining = max(0.0, round($total - $credF, 4));
+
+        return [
+            'order_total_mmk' => (string) $order->total_mmk,
+            'credited_deposit_mmk' => $creditedStr,
+            'balance_remaining_mmk' => (string) $balanceRemaining,
+            'additional_deposit_due_mmk' => (string) ($order->deposit_amount_mmk ?? '0'),
+        ];
     }
 
     protected function resolveDepositState(Order $order): string

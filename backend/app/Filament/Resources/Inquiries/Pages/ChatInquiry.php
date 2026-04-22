@@ -11,6 +11,7 @@ use App\Models\Quote;
 use App\Models\User;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryPipelinePresenter;
+use App\Services\InquiryQuoteCommitmentGate;
 use App\Services\PricingService;
 use App\Services\QuoteBuilderService;
 use Filament\Notifications\Notification;
@@ -106,6 +107,12 @@ class ChatInquiry extends Page
         $this->adminQuoteCardPayload = $this->buildAdminQuoteCardPayload($inquiry);
     }
 
+    /** Informational: confirmed deposit exists (publish is still allowed). */
+    public function getQuotePublishWarningProperty(): ?string
+    {
+        return app(InquiryQuoteCommitmentGate::class)->warningForPublishing($this->getRecord());
+    }
+
     /**
      * @return array<string, mixed>|null
      */
@@ -167,6 +174,8 @@ class ChatInquiry extends Page
         /** @var Inquiry $inquiry */
         $inquiry = $this->getRecord();
         Gate::authorize('publishQuote', $inquiry);
+
+        $publishWarning = app(InquiryQuoteCommitmentGate::class)->warningForPublishing($inquiry);
 
         foreach ($this->quoteFormLines as $k => $row) {
             if (isset($row['product_id']) && $row['product_id'] === '') {
@@ -237,6 +246,13 @@ class ChatInquiry extends Page
         $firebase->syncInquiryThreadDocument($inquiry);
 
         $this->refreshPipeline();
+
+        if ($publishWarning !== null) {
+            Notification::make()
+                ->title($publishWarning)
+                ->warning()
+                ->send();
+        }
 
         Notification::make()
             ->title(__('Quote sent to the customer chat'))

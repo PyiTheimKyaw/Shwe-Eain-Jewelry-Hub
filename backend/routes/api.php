@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\Admin\ProductImageController as AdminProductImag
 use App\Http\Controllers\Api\V1\Admin\QuoteController as AdminQuoteController;
 use App\Http\Controllers\Api\V1\Admin\ReportController;
 use App\Http\Controllers\Api\V1\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Api\V1\Artisan\ArtisanNotificationController;
 use App\Http\Controllers\Api\V1\Artisan\AssignmentController;
 use App\Http\Controllers\Api\V1\Artisan\OrderWorkflowController;
 use App\Http\Controllers\Api\V1\AuthController;
@@ -66,6 +67,7 @@ Route::prefix('v1')->group(function () {
         Route::get('orders/{order}/progress', [OrderProgressController::class, 'index']);
 
         Route::middleware('role:artisan')->group(function () {
+            Route::get('artisan/notifications', [ArtisanNotificationController::class, 'index']);
             Route::get('artisan/assignments', [AssignmentController::class, 'index']);
             Route::get('artisan/assignments/{assignment}', [AssignmentController::class, 'show']);
             Route::patch('artisan/assignments/{assignment}', [AssignmentController::class, 'update']);

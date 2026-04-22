@@ -241,6 +241,11 @@
                 </button>
             </div>
             <div class="p-5">
+                @if ($this->quotePublishWarning)
+                    <p class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+                        {{ $this->quotePublishWarning }}
+                    </p>
+                @endif
                 <form wire:submit.prevent="publishQuoteFromConsole" class="space-y-3">
                     @foreach ($quoteFormLines as $index => $line)
                         <div
@@ -491,6 +496,30 @@
                           '" alt="" class="mx-auto max-h-48 max-w-full rounded-lg border border-primary-500/20 object-contain dark:border-primary-500/30" /></div>'
                         : '';
                     var amt = fmtMmk(data.amount_mmk);
+                    var creditRaw = data.credited_deposit_mmk;
+                    var creditNum = parseFloat(String(creditRaw || '').replace(/,/g, ''));
+                    var balanceBreakdown = '';
+                    if (
+                        data.order_total_mmk != null &&
+                        String(data.order_total_mmk) !== '' &&
+                        !isNaN(creditNum) &&
+                        creditNum > 0
+                    ) {
+                        balanceBreakdown =
+                            '<div class="mb-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50/90 p-2 text-[11px] text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">' +
+                            '<div class="flex justify-between gap-2"><span>Order total</span><span>' +
+                            fmtMmk(data.order_total_mmk) +
+                            ' MMK</span></div>' +
+                            '<div class="flex justify-between gap-2"><span>Recognized paid</span><span>' +
+                            fmtMmk(creditRaw) +
+                            ' MMK</span></div>' +
+                            (data.balance_remaining_mmk != null && String(data.balance_remaining_mmk) !== ''
+                                ? '<div class="flex justify-between gap-2 font-medium"><span>Balance on order</span><span>' +
+                                  fmtMmk(data.balance_remaining_mmk) +
+                                  ' MMK</span></div>'
+                                : '') +
+                            '</div>';
+                    }
                     return (
                         '<div class="max-w-full rounded-2xl border-2 border-primary-500/30 bg-gradient-to-br from-white via-white to-gray-50 p-4 text-left shadow-md dark:border-primary-500/40 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950">' +
                         '<div class="mb-3 flex items-center gap-2 text-primary-600 dark:text-primary-400">' +
@@ -503,6 +532,8 @@
                               method +
                               '</p>'
                             : '') +
+                        balanceBreakdown +
+                        '<p class="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Pay now (deposit due)</p>' +
                         '<p class="mb-3 text-base font-medium text-primary-600 dark:text-primary-400">' +
                         amt +
                         ' MMK</p>' +

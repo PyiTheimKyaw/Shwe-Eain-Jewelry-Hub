@@ -196,9 +196,11 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       orderId: fromFirestore.orderId ?? rest.orderId,
       orderStatus: fromFirestore.orderStatus ?? rest.orderStatus,
       activeQuoteId: fromFirestore.activeQuoteId ?? rest.activeQuoteId,
+      activeQuoteStatus:
+          rest.activeQuoteStatus ?? fromFirestore.activeQuoteStatus,
       orderNumber: fromFirestore.orderNumber ?? rest.orderNumber,
       depositState: fromFirestore.depositState ?? rest.depositState,
-      depositAmountMmk: fromFirestore.depositAmountMmk ?? rest.depositAmountMmk,
+      depositAmountMmk: rest.depositAmountMmk ?? fromFirestore.depositAmountMmk,
       depositInstructionsSentAt:
           fromFirestore.depositInstructionsSentAt ?? rest.depositInstructionsSentAt,
       depositPayment: rest.depositPayment,
@@ -213,7 +215,19 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       return false;
     }
     final ds = p.depositState ?? '';
-    if (ds == 'confirmed' || ds == 'proof_submitted') {
+    if (ds == 'proof_submitted') {
+      return false;
+    }
+    final due = p.resolvedAdditionalDepositDueMmk();
+    if (due != null) {
+      if (due <= 0) {
+        return false;
+      }
+      // Supersede: prior confirmed deposit is reparented; pipeline may still say `confirmed`
+      // while `deposit_amount_mmk` / additional_deposit_due_mmk > 0 on the new order.
+      return true;
+    }
+    if (ds == 'confirmed') {
       return false;
     }
     if (ds == 'instructions_sent' || ds == 'rejected') {
@@ -770,7 +784,31 @@ Widget _apiDepositPaymentFromPipeline(InquiryPipeline pipeline) {
     bankAccountName: m['bank_account_name'] as String? ?? '',
     paymentMethodLabel: m['payment_method_label'] as String?,
     qrImageUrl: m['qr_image_url'] as String?,
+    orderTotalMmk: m['order_total_mmk']?.toString(),
+    creditedDepositMmk: m['credited_deposit_mmk']?.toString(),
+    balanceRemainingMmk: m['balance_remaining_mmk']?.toString(),
   );
+}
+
+/// Accept/Decline only when this card is the pipeline active quote in `sent` state,
+/// not merely when there is no order (superseding quotes after an order still need actions).
+bool _quoteCardShowActions({
+  required int? quoteId,
+  required InquiryPipeline? pipeline,
+  required bool acted,
+}) {
+  if (quoteId == null || acted) {
+    return false;
+  }
+  final activeId = pipeline?.activeQuoteId;
+  final st = pipeline?.activeQuoteStatus;
+  if (activeId == quoteId) {
+    return st == 'sent' || st == null;
+  }
+  if (activeId == null && pipeline?.orderId == null) {
+    return true;
+  }
+  return false;
 }
 
 class _MessageTile extends StatelessWidget {
@@ -814,6 +852,10 @@ class _MessageTile extends StatelessWidget {
               bankAccountName: _firestoreString(data['bank_account_name']) ?? '',
               paymentMethodLabel: _firestoreString(data['payment_method_label']),
               qrImageUrl: _firestoreString(data['qr_image_url']),
+              orderTotalMmk: _firestoreString(data['order_total_mmk']),
+              creditedDepositMmk: _firestoreString(data['credited_deposit_mmk']),
+              balanceRemainingMmk:
+                  _firestoreString(data['balance_remaining_mmk']),
             ),
           ),
         ),
@@ -874,10 +916,12 @@ class _MessageTile extends StatelessWidget {
       final lines = rawLines
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
-      final hasOrder = pipeline?.orderId != null;
       final acted = quoteId != null && actedQuoteIds.contains(quoteId);
-      final showActions =
-          quoteId != null && !hasOrder && !acted;
+      final showActions = _quoteCardShowActions(
+        quoteId: quoteId,
+        pipeline: pipeline,
+        acted: acted,
+      );
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
@@ -893,10 +937,10 @@ class _MessageTile extends StatelessWidget {
               lines: lines,
               actionsEnabled: showActions,
               busy: quoteBusyId == quoteId,
-              onAccept: showActions
+              onAccept: showActions && quoteId != null
                   ? () => onAcceptQuote(quoteId)
                   : null,
-              onDecline: showActions
+              onDecline: showActions && quoteId != null
                   ? () => onDeclineQuote(quoteId)
                   : null,
             ),

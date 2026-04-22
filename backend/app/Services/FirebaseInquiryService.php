@@ -232,6 +232,9 @@ class FirebaseInquiryService
             foreach ($fields as $k => $v) {
                 $payload[(string) $k] = $v;
             }
+            foreach (app(InquiryPipelinePresenter::class)->paymentBalanceBreakdown($order) as $k => $v) {
+                $payload[(string) $k] = $v;
+            }
             $messages->add($payload);
         } catch (Throwable $e) {
             Log::warning('firebase.payment_info_card_failed', [

@@ -7,9 +7,12 @@ use App\Models\ExchangeRateSnapshot;
 use App\Models\GoldPriceSnapshot;
 use App\Models\Inquiry;
 use App\Models\Order;
+use App\Models\OrderAssignment;
 use App\Models\Payment;
 use App\Models\PaymentProfile;
+use App\Models\Quote;
 use App\Models\User;
+use App\Services\InquiryQuoteCommitmentGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -212,5 +215,436 @@ class BespokeOrderWorkflowTest extends TestCase
             ],
             ['Authorization' => 'Bearer '.$adminToken]
         )->assertStatus(422);
+    }
+
+    public function test_can_publish_revised_quote_while_deposit_pending_proof(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Necklace',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-revise',
+        ]);
+
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $lines = [
+            [
+                'weight_grams' => 10,
+                'labor_fee_mmk' => 50000,
+                'gem_price_mmk' => 10000,
+            ],
+        ];
+
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $publish1->assertCreated();
+        $quoteId = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId}/accept")->assertOk();
+        $orderId = (int) Order::query()->first()->id;
+
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$orderId}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $publish2 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $publish2->assertCreated();
+    }
+
+    public function test_can_publish_quote_while_deposit_awaiting_verification(): void
+    {
+        $this->seedPricing();
+        Storage::fake('public');
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Bracelet',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-awaiting',
+        ]);
+
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $lines = [
+            [
+                'weight_grams' => 8,
+                'labor_fee_mmk' => 40000,
+                'gem_price_mmk' => 5000,
+            ],
+        ];
+
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $publish1->assertCreated();
+        $quoteId = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId}/accept")->assertOk();
+        $orderId = (int) Order::query()->first()->id;
+
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$orderId}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        Sanctum::actingAs($customer);
+        $this->postJson(
+            "/api/v1/orders/{$orderId}/deposit-proof",
+            ['proof' => UploadedFile::fake()->image('proof.jpg')],
+            ['Authorization' => 'Bearer '.$customer->createToken('c')->plainTextToken]
+        )->assertCreated();
+
+        Sanctum::actingAs($admin);
+        $republish = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $republish->assertCreated();
+        $this->assertArrayNotHasKey('warning', $republish->json('meta') ?? []);
+    }
+
+    public function test_publish_quote_after_deposit_confirmed_returns_warning_meta(): void
+    {
+        $this->seedPricing();
+        Storage::fake('public');
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Earrings',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-confirmed',
+        ]);
+
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $lines = [
+            [
+                'weight_grams' => 5,
+                'labor_fee_mmk' => 30000,
+                'gem_price_mmk' => 20000,
+            ],
+        ];
+
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $publish1->assertCreated();
+        $quoteId = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId}/accept")->assertOk();
+        $orderId = (int) Order::query()->first()->id;
+
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$orderId}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        Sanctum::actingAs($customer);
+        $this->postJson(
+            "/api/v1/orders/{$orderId}/deposit-proof",
+            ['proof' => UploadedFile::fake()->image('proof.jpg')],
+            ['Authorization' => 'Bearer '.$customer->createToken('c')->plainTextToken]
+        )->assertCreated();
+
+        $payment = Payment::query()->where('order_id', $orderId)->first();
+        $this->assertNotNull($payment);
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            [],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $republish = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $republish->assertCreated();
+        $republish->assertJsonPath('meta.warning', InquiryQuoteCommitmentGate::WARNING_CONFIRMED_DEPOSIT);
+    }
+
+    public function test_promote_draft_quote_to_sent_after_deposit_confirmed_returns_warning_meta(): void
+    {
+        $this->seedPricing();
+        Storage::fake('public');
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Pendant',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-patch',
+        ]);
+
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $lines = [
+            [
+                'weight_grams' => 6,
+                'labor_fee_mmk' => 20000,
+                'gem_price_mmk' => 15000,
+            ],
+        ];
+
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $publish1->assertCreated();
+        $quoteId = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId}/accept")->assertOk();
+        $orderId = (int) Order::query()->first()->id;
+
+        Sanctum::actingAs($admin);
+        $draft = $this->postJson(
+            '/api/v1/admin/quotes',
+            [
+                'customer_user_id' => $customer->id,
+                'inquiry_id' => $inquiry->id,
+                'lines' => $lines,
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $draft->assertCreated();
+        $draftQuoteId = (int) $draft->json('data.id');
+
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$orderId}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        Sanctum::actingAs($customer);
+        $this->postJson(
+            "/api/v1/orders/{$orderId}/deposit-proof",
+            ['proof' => UploadedFile::fake()->image('proof.jpg')],
+            ['Authorization' => 'Bearer '.$customer->createToken('c')->plainTextToken]
+        )->assertCreated();
+
+        $payment = Payment::query()->where('order_id', $orderId)->first();
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            [],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $patch = $this->patchJson(
+            "/api/v1/admin/quotes/{$draftQuoteId}",
+            ['status' => 'sent'],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $patch->assertOk();
+        $patch->assertJsonPath('meta.warning', InquiryQuoteCommitmentGate::WARNING_CONFIRMED_DEPOSIT);
+    }
+
+    public function test_accepting_newer_quote_after_confirmed_deposit_reparents_payment_and_reduces_deposit_due(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Ring credit',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-credit',
+        ]);
+
+        $lines1 = [
+            ['weight_grams' => 10, 'labor_fee_mmk' => 50000, 'gem_price_mmk' => 10000],
+        ];
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines1],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+        $quoteId1 = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId1}/accept")->assertOk();
+        $order1 = Order::query()->where('quote_id', $quoteId1)->firstOrFail();
+        $confirmedAmount = (float) $order1->deposit_amount_mmk;
+
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$order1->id}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $payment = Payment::query()->where('order_id', $order1->id)->firstOrFail();
+        $payment->update([
+            'status' => Payment::STATUS_CONFIRMED,
+            'verified_at' => now(),
+            'verified_by_user_id' => $admin->id,
+        ]);
+        $order1->update(['status' => 'deposit_confirmed']);
+
+        $lines2 = [
+            ['weight_grams' => 12, 'labor_fee_mmk' => 60000, 'gem_price_mmk' => 12000],
+        ];
+        Sanctum::actingAs($admin);
+        $publish2 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines2],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+        $quoteId2 = (int) $publish2->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId2}/accept")->assertOk();
+
+        $this->assertDatabaseHas('orders', ['id' => $order1->id, 'status' => 'cancelled']);
+
+        $order2 = Order::query()->where('quote_id', $quoteId2)->firstOrFail();
+        $this->assertSame('awaiting_deposit', $order2->status);
+
+        $payment->refresh();
+        $this->assertSame($order2->id, $payment->order_id);
+        $this->assertSame(Payment::STATUS_CONFIRMED, $payment->status);
+
+        $quote2 = Quote::query()->findOrFail($quoteId2);
+        $required2 = round((float) $quote2->total_mmk * 0.5, 4);
+        $expectedDue = max(0, round($required2 - $confirmedAmount, 4));
+        $this->assertEqualsWithDelta($expectedDue, (float) $order2->deposit_amount_mmk, 0.02);
+    }
+
+    public function test_accepting_newer_quote_notifies_assigned_artisan_and_migrates_assignment(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $artisan = User::factory()->create(['role' => UserRole::Artisan]);
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Notify',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-notify',
+        ]);
+
+        $lines = [
+            ['weight_grams' => 4, 'labor_fee_mmk' => 20000, 'gem_price_mmk' => 0],
+        ];
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+        $quoteId1 = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId1}/accept")->assertOk();
+        $order1 = Order::query()->where('quote_id', $quoteId1)->firstOrFail();
+
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$order1->id}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $pay = Payment::query()->where('order_id', $order1->id)->firstOrFail();
+        $pay->update([
+            'status' => Payment::STATUS_CONFIRMED,
+            'verified_at' => now(),
+            'verified_by_user_id' => $admin->id,
+        ]);
+        $order1->update(['status' => 'deposit_confirmed']);
+
+        $this->postJson(
+            "/api/v1/admin/orders/{$order1->id}/assignments",
+            [
+                'artisan_user_id' => $artisan->id,
+                'task_scope' => 'full_order',
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+
+        $assignment = OrderAssignment::query()->where('order_id', $order1->id)->firstOrFail();
+
+        Sanctum::actingAs($admin);
+        $publish2 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            ['lines' => $lines],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+        $quoteId2 = (int) $publish2->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId2}/accept")->assertOk();
+
+        $order2 = Order::query()->where('quote_id', $quoteId2)->firstOrFail();
+        $assignment->refresh();
+        $this->assertSame($order2->id, $assignment->order_id);
+        $this->assertStringContainsString('Quote revised', (string) $assignment->instructions);
+
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_type' => User::class,
+            'notifiable_id' => $artisan->id,
+        ]);
     }
 }

@@ -53,6 +53,10 @@ class _InquiryApiQuoteBannerState extends State<InquiryApiQuoteBanner> {
     }
     if (widget.pipeline?.orderId != oldWidget.pipeline?.orderId) {
       _load();
+      return;
+    }
+    if (widget.pipeline?.activeQuoteId != oldWidget.pipeline?.activeQuoteId) {
+      _load();
     }
   }
 
@@ -136,10 +140,12 @@ class _InquiryApiQuoteBannerState extends State<InquiryApiQuoteBanner> {
 
     final quote = _quote!;
     final status = quote['status'] as String? ?? '';
-    final hasOrder = widget.pipeline?.orderId != null;
     final acted = widget.actedQuoteIds.contains(widget.quoteId);
-    final showActions =
-        status == 'sent' && !hasOrder && !acted;
+    final activeId = widget.pipeline?.activeQuoteId;
+    final showActions = status == 'sent' &&
+        !acted &&
+        activeId != null &&
+        activeId == widget.quoteId;
 
     final quoteNumber = quote['quote_number'] as String? ?? '';
     final totalMmk = quote['total_mmk']?.toString() ?? '0';
