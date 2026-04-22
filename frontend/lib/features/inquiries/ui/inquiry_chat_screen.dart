@@ -46,16 +46,58 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
   int? _quoteActionBusyId;
   bool _didInitialScrollToBottom = false;
   Timer? _pipelineRefreshDebounce;
-  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _threadPipelineSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _messagesPipelineSub;
+  Timer? _pipelineHeartbeat;
+  bool _pipelineRequestInFlight = false;
+  String? _threadPipelineSyncKey;
+  DocumentSnapshot<Map<String, dynamic>>? _lastThreadSnapForSync;
+  QuerySnapshot<Map<String, dynamic>>? _lastMessageSnapForSync;
+  bool _messagesPipelinePrimed = false;
+  int _lastIngestedMessageCount = 0;
 
-  /// Keeps REST pipeline (quote API banner, deposit_payment) in sync when Firestore updates.
+  /// Firestore stream instances must be stable across [setState] rebuilds. Recreating
+  /// `.snapshots()` in [build] makes [StreamBuilder] cancel/resubscribe every rebuild
+  /// (e.g. after every [_loadPipeline]), which drops real-time delivery and can flash
+  /// the loading state over the message list.
+  String? _firestoreBoundThreadId;
+  Stream<DocumentSnapshot<Map<String, dynamic>>>? _threadDocStream;
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _messagesStream;
+
+  void _bindFirestoreStreamsIfNeeded(String threadId) {
+    if (_firestoreBoundThreadId == threadId &&
+        _threadDocStream != null &&
+        _messagesStream != null) {
+      return;
+    }
+    _firestoreBoundThreadId = threadId;
+    final ref = FirebaseFirestore.instance
+        .collection('inquiry_threads')
+        .doc(threadId);
+    _threadDocStream = ref.snapshots();
+    _messagesStream = ref
+        .collection('messages')
+        .orderBy('created_at', descending: false)
+        .snapshots();
+  }
+
+  /// When the thread document changes (Laravel / metadata), re-fetch merged pipeline from REST.
   void _schedulePipelineRefresh() {
     _pipelineRefreshDebounce?.cancel();
-    _pipelineRefreshDebounce = Timer(const Duration(milliseconds: 450), () {
+    _pipelineRefreshDebounce = Timer(const Duration(milliseconds: 200), () {
       if (mounted) {
         _loadPipeline();
       }
+    });
+  }
+
+  /// Safety net for environments where server-side Firestore card writes are delayed/missing.
+  /// Keeps quote/payment fallback cards and CTA visibility in near real-time from REST.
+  void _startPipelineHeartbeat() {
+    _pipelineHeartbeat?.cancel();
+    _pipelineHeartbeat = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted || _connecting || _error != null) {
+        return;
+      }
+      _loadPipeline();
     });
   }
 
@@ -89,21 +131,85 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     );
   }
 
-  void _attachPipelineSyncListeners(String threadId) {
-    _threadPipelineSub?.cancel();
-    _messagesPipelineSub?.cancel();
-    _threadPipelineSub = FirebaseFirestore.instance
-        .collection('inquiry_threads')
-        .doc(threadId)
-        .snapshots()
-        .listen((_) => _schedulePipelineRefresh());
-    _messagesPipelineSub = FirebaseFirestore.instance
-        .collection('inquiry_threads')
-        .doc(threadId)
-        .collection('messages')
-        .orderBy('created_at', descending: false)
-        .snapshots()
-        .listen((_) => _schedulePipelineRefresh());
+  void _ingestThreadSnapshotForPipeline(
+    DocumentSnapshot<Map<String, dynamic>> d,
+  ) {
+    if (identical(d, _lastThreadSnapForSync)) {
+      return;
+    }
+    _lastThreadSnapForSync = d;
+    final threadData = d.data();
+    if (threadData == null) {
+      return;
+    }
+    final oid = threadData['order_id'];
+    final aq = threadData['active_quote_id'];
+    final key = <String>[
+      (threadData['order_status'] ?? '').toString(),
+      (threadData['pipeline_step'] ?? '').toString(),
+      if (oid is num) oid.toString() else '',
+      if (aq is num) aq.toString() else '',
+      (threadData['active_quote_status'] ?? '').toString(),
+      (threadData['deposit_state'] ?? '').toString(),
+    ].join('|');
+    if (key == _threadPipelineSyncKey) {
+      return;
+    }
+    final hadKey = _threadPipelineSyncKey != null;
+    _threadPipelineSyncKey = key;
+    if (!hadKey) {
+      return;
+    }
+    _schedulePipelineRefresh();
+  }
+
+  void _ingestMessageSnapshotForPipeline(
+    QuerySnapshot<Map<String, dynamic>> snap,
+  ) {
+    if (identical(snap, _lastMessageSnapForSync)) {
+      return;
+    }
+    _lastMessageSnapForSync = snap;
+    if (!_messagesPipelinePrimed) {
+      _messagesPipelinePrimed = true;
+      _lastIngestedMessageCount = snap.docs.length;
+      return;
+    }
+    void scheduleRest() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _loadPipeline();
+        }
+      });
+    }
+    var didSchedule = false;
+    for (final change in snap.docChanges) {
+      if (change.type != DocumentChangeType.added &&
+          change.type != DocumentChangeType.modified) {
+        continue;
+      }
+      final data = change.doc.data();
+      if (data == null) {
+        continue;
+      }
+      if (_shouldRefetchRestPipelineFromMessage(data)) {
+        scheduleRest();
+        didSchedule = true;
+        break;
+      }
+    }
+    if (!didSchedule &&
+        snap.docChanges.isEmpty &&
+        snap.docs.length > _lastIngestedMessageCount) {
+      for (var i = _lastIngestedMessageCount; i < snap.docs.length; i++) {
+        final data = snap.docs[i].data();
+        if (_shouldRefetchRestPipelineFromMessage(data)) {
+          scheduleRest();
+          break;
+        }
+      }
+    }
+    _lastIngestedMessageCount = snap.docs.length;
   }
 
   void _scrollToBottom({bool animated = false}) {
@@ -161,8 +267,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         inquiryId: widget.inquiry.id,
       );
       await auth.FirebaseAuth.instance.signInWithCustomToken(creds.token);
+      _bindFirestoreStreamsIfNeeded(threadId);
+      _startPipelineHeartbeat();
       if (mounted) {
-        _attachPipelineSyncListeners(threadId);
         setState(() {
           _connecting = false;
           _error = null;
@@ -176,6 +283,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
               '${e.code}: ${e.message ?? "no message"}. If unknown: check Firebase App Check (Auth not enforced without debug), device internet, then full restart after flutter clean.';
         });
       }
+      _pipelineHeartbeat?.cancel();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -183,14 +291,19 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
           _error = '$e';
         });
       }
+      _pipelineHeartbeat?.cancel();
     }
   }
 
   Future<void> _loadPipeline() async {
+    if (_pipelineRequestInFlight) {
+      return;
+    }
     final bearer = context.read<AuthProvider>().token;
     if (bearer == null) {
       return;
     }
+    _pipelineRequestInFlight = true;
     try {
       final p = await InquiryApi.fetchPipeline(
         bearerToken: bearer,
@@ -212,6 +325,8 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
           );
         });
       }
+    } finally {
+      _pipelineRequestInFlight = false;
     }
   }
 
@@ -466,8 +581,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
   @override
   void dispose() {
     _pipelineRefreshDebounce?.cancel();
-    _threadPipelineSub?.cancel();
-    _messagesPipelineSub?.cancel();
+    _pipelineHeartbeat?.cancel();
     _composer.dispose();
     _scrollController.dispose();
     if (Firebase.apps.isNotEmpty) {
@@ -542,14 +656,23 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                 )
               else if (threadId == null)
                 const Expanded(child: Center(child: Text('No thread id')))
+              else if (_threadDocStream == null || _messagesStream == null)
+                const Expanded(
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.gold,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                )
               else
                 Expanded(
                   child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('inquiry_threads')
-                        .doc(threadId)
-                        .snapshots(),
+                    stream: _threadDocStream,
                     builder: (context, threadSnap) {
+                      if (threadSnap.hasData) {
+                        _ingestThreadSnapshotForPipeline(threadSnap.data!);
+                      }
                       final threadData = threadSnap.data?.data();
                       final fromFs = InquiryPipeline.fromFirestore(threadData);
                       final effectivePipeline = _effectivePipeline(fromFs);
@@ -560,12 +683,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                           Expanded(
                             child: StreamBuilder<
                                 QuerySnapshot<Map<String, dynamic>>>(
-                              stream: FirebaseFirestore.instance
-                                  .collection('inquiry_threads')
-                                  .doc(threadId)
-                                  .collection('messages')
-                                  .orderBy('created_at', descending: false)
-                                  .snapshots(),
+                              stream: _messagesStream,
                               builder: (context, msgSnap) {
                                 if (msgSnap.hasError) {
                                   return Center(
@@ -583,6 +701,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                     ),
                                   );
                                 }
+                                _ingestMessageSnapshotForPipeline(
+                                  msgSnap.data!,
+                                );
                                 final docs = msgSnap.data!.docs;
                                 final activeQuoteId =
                                     effectivePipeline.activeQuoteId;
@@ -829,6 +950,15 @@ String _messageTypeKey(Map<String, dynamic> data) {
     return raw;
   }
   return raw.toString();
+}
+
+/// Card / payment messages carry display data in Firestore; canonical state is on the REST pipeline.
+bool _shouldRefetchRestPipelineFromMessage(Map<String, dynamic> data) {
+  final t = _messageTypeKey(data);
+  if (t == 'quote_card' || t == 'payment_info_card' || t == 'receipt_card') {
+    return true;
+  }
+  return _isPaymentInfoPayload(data);
 }
 
 /// Recognises server-written payment cards even if [type] is missing (older writes / SDK quirks).
