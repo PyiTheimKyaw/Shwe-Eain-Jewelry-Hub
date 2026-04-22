@@ -391,6 +391,13 @@
                 position: fixed;
                 inset: 0;
                 margin: auto;
+                z-index: 70;
+            }
+
+            dialog.jh-quote-dialog::backdrop,
+            dialog.jh-dialog-payment::backdrop {
+                backdrop-filter: blur(6px);
+                background: rgba(2, 6, 23, 0.45);
             }
         </style>
         @php

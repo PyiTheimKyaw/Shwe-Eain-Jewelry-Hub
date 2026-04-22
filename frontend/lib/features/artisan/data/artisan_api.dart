@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:jewelry_hub/core/config/api_config.dart';
+import 'package:jewelry_hub/features/artisan/models/artisan_notification.dart';
 
 class ArtisanApiException implements Exception {
   ArtisanApiException(this.message);
@@ -48,6 +49,25 @@ class ArtisanApi {
     final map = json.decode(res.body) as Map<String, dynamic>;
     final list = map['data'] as List<dynamic>? ?? [];
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  static Future<List<ArtisanNotificationItem>> fetchNotifications(
+    String token,
+  ) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/artisan/notifications');
+    final res = await http.get(uri, headers: _authHeaders(token));
+    if (res.statusCode != 200) {
+      throw ArtisanApiException(
+        'Notifications ${res.statusCode}: ${_errorBody(res.body)}',
+      );
+    }
+    final map = json.decode(res.body) as Map<String, dynamic>;
+    final list = map['data'] as List<dynamic>? ?? [];
+    return list
+        .map((e) => ArtisanNotificationItem.fromJson(
+              Map<String, dynamic>.from(e as Map),
+            ))
+        .toList();
   }
 
   static Future<Map<String, dynamic>> fetchAssignment(

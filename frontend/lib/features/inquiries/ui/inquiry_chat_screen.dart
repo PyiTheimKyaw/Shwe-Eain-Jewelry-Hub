@@ -191,13 +191,22 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     if (fromFirestore == null) {
       return rest;
     }
+    final mergedActiveQuoteId = rest.activeQuoteId ?? fromFirestore.activeQuoteId;
+    String? mergedActiveQuoteStatus;
+    if (mergedActiveQuoteId != null && mergedActiveQuoteId == rest.activeQuoteId) {
+      mergedActiveQuoteStatus = rest.activeQuoteStatus;
+    } else if (mergedActiveQuoteId != null &&
+        mergedActiveQuoteId == fromFirestore.activeQuoteId) {
+      mergedActiveQuoteStatus = fromFirestore.activeQuoteStatus;
+    } else {
+      mergedActiveQuoteStatus = rest.activeQuoteStatus ?? fromFirestore.activeQuoteStatus;
+    }
     return InquiryPipeline(
       step: fromFirestore.step,
-      orderId: fromFirestore.orderId ?? rest.orderId,
-      orderStatus: fromFirestore.orderStatus ?? rest.orderStatus,
-      activeQuoteId: fromFirestore.activeQuoteId ?? rest.activeQuoteId,
-      activeQuoteStatus:
-          rest.activeQuoteStatus ?? fromFirestore.activeQuoteStatus,
+      orderId: rest.orderId ?? fromFirestore.orderId,
+      orderStatus: rest.orderStatus ?? fromFirestore.orderStatus,
+      activeQuoteId: mergedActiveQuoteId,
+      activeQuoteStatus: mergedActiveQuoteStatus,
       orderNumber: fromFirestore.orderNumber ?? rest.orderNumber,
       depositState: fromFirestore.depositState ?? rest.depositState,
       depositAmountMmk: rest.depositAmountMmk ?? fromFirestore.depositAmountMmk,
@@ -211,21 +220,21 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     if (p.orderId == null) {
       return false;
     }
-    if (p.orderStatus != 'awaiting_deposit') {
-      return false;
-    }
     final ds = p.depositState ?? '';
     if (ds == 'proof_submitted') {
       return false;
     }
     final due = p.resolvedAdditionalDepositDueMmk();
     if (due != null) {
-      if (due <= 0) {
-        return false;
+      if (due > 0) {
+        // Supersede/top-up path: if additional due remains positive, keep upload CTA available
+        // even if thread metadata/order status is briefly stale after a quote revision.
+        return true;
       }
-      // Supersede: prior confirmed deposit is reparented; pipeline may still say `confirmed`
-      // while `deposit_amount_mmk` / additional_deposit_due_mmk > 0 on the new order.
-      return true;
+      return false;
+    }
+    if (p.orderStatus != 'awaiting_deposit') {
+      return false;
     }
     if (ds == 'confirmed') {
       return false;

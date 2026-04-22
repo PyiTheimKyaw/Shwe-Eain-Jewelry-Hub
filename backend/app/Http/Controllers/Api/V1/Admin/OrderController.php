@@ -14,6 +14,18 @@ use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
+    /** @var array<string, list<string>> */
+    private const STATUS_TRANSITIONS = [
+        'awaiting_deposit' => ['deposit_confirmed', 'cancelled'],
+        'deposit_confirmed' => ['in_production', 'cancelled'],
+        'in_production' => ['pending_qc', 'cancelled'],
+        'pending_qc' => ['ready', 'in_production', 'cancelled'],
+        'ready' => ['shipped', 'completed', 'cancelled'],
+        'shipped' => ['completed', 'cancelled'],
+        'completed' => [],
+        'cancelled' => [],
+    ];
+
     public function __construct(
         protected OrderBuilderService $orders
     ) {}
@@ -62,6 +74,44 @@ class OrderController extends Controller
             'status' => ['sometimes', 'in:awaiting_deposit,deposit_confirmed,in_production,pending_qc,ready,shipped,completed,cancelled'],
             'shipping_notes' => ['nullable', 'string', 'max:10000'],
         ]);
+
+        if (array_key_exists('status', $data)) {
+            $nextStatus = $data['status'];
+            $currentStatus = (string) $order->status;
+            if ($nextStatus !== $currentStatus) {
+                $allowed = self::STATUS_TRANSITIONS[$currentStatus] ?? [];
+                if (! in_array($nextStatus, $allowed, true)) {
+                    return response()->json([
+                        'message' => "Invalid status transition: {$currentStatus} -> {$nextStatus}.",
+                    ], 422);
+                }
+
+                if ($nextStatus === 'in_production') {
+                    $depositConfirmed = Payment::query()
+                        ->where('order_id', $order->id)
+                        ->where('type', Payment::TYPE_DEPOSIT)
+                        ->where('status', Payment::STATUS_CONFIRMED)
+                        ->exists();
+                    if (! $depositConfirmed) {
+                        return response()->json([
+                            'message' => 'Cannot start production without a confirmed deposit payment.',
+                        ], 422);
+                    }
+                }
+
+                if ($nextStatus === 'pending_qc') {
+                    $inProgressAssignment = OrderAssignment::query()
+                        ->where('order_id', $order->id)
+                        ->where('status', 'in_progress')
+                        ->exists();
+                    if (! $inProgressAssignment) {
+                        return response()->json([
+                            'message' => 'Cannot move to quality review without an active in-progress assignment.',
+                        ], 422);
+                    }
+                }
+            }
+        }
 
         $order->update($data);
 
