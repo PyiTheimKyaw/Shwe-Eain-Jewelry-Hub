@@ -40,7 +40,7 @@ class ChatInquiry extends Page
     /** @var array<string, mixed> */
     public array $pipeline = [];
 
-    /** @var array<int, array{weight_grams: string, labor_fee_mmk: string, gem_price_mmk: string, product_id: string, custom_title: string}> */
+    /** @var array<int, array{weight_grams: string, labor_fee_mmk: string, gem_price_mmk: string, product_id: string, custom_title: string, metal_type: string, stone_details: string}> */
     public array $quoteFormLines = [];
 
     public ?string $quoteValidUntil = null;
@@ -74,6 +74,8 @@ class ChatInquiry extends Page
                 'gem_price_mmk' => '',
                 'product_id' => '',
                 'custom_title' => '',
+                'metal_type' => '',
+                'stone_details' => '',
             ],
         ];
 
@@ -165,6 +167,8 @@ class ChatInquiry extends Page
             'gem_price_mmk' => '',
             'product_id' => '',
             'custom_title' => '',
+            'metal_type' => '',
+            'stone_details' => '',
         ];
     }
 
@@ -198,6 +202,12 @@ class ChatInquiry extends Page
             if (isset($row['custom_title']) && $row['custom_title'] === '') {
                 $this->quoteFormLines[$k]['custom_title'] = null;
             }
+            if (isset($row['metal_type']) && $row['metal_type'] === '') {
+                $this->quoteFormLines[$k]['metal_type'] = null;
+            }
+            if (isset($row['stone_details']) && $row['stone_details'] === '') {
+                $this->quoteFormLines[$k]['stone_details'] = null;
+            }
         }
         if ($this->quoteValidUntil === '') {
             $this->quoteValidUntil = null;
@@ -230,6 +240,8 @@ class ChatInquiry extends Page
             'quoteFormLines.*.gem_price_mmk' => ['nullable', 'numeric', 'min:0'],
             'quoteFormLines.*.product_id' => ['nullable', 'integer', 'exists:products,id'],
             'quoteFormLines.*.custom_title' => ['nullable', 'string', 'max:255'],
+            'quoteFormLines.*.metal_type' => ['nullable', 'string', 'max:100'],
+            'quoteFormLines.*.stone_details' => ['nullable', 'string', 'max:1000'],
             'quoteValidUntil' => ['nullable', 'date'],
             'quoteNotes' => ['nullable', 'string'],
         ]);
@@ -258,6 +270,8 @@ class ChatInquiry extends Page
                     ? (int) $row['product_id']
                     : null,
                 'custom_title' => $row['custom_title'] ?? null,
+                'metal_type' => $row['metal_type'] ?? null,
+                'stone_details' => $row['stone_details'] ?? null,
             ];
         }
 

@@ -6,6 +6,7 @@ import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/orders/data/order_api.dart';
 import 'package:jewelry_hub/features/orders/models/payment_receipt.dart';
+import 'package:jewelry_hub/features/orders/ui/customer_order_detail_screen.dart';
 import 'package:jewelry_hub/features/orders/ui/customer_order_timeline_screen.dart';
 import 'package:jewelry_hub/features/orders/ui/receipt_detail_screen.dart';
 import 'package:provider/provider.dart';
@@ -161,6 +162,19 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                             spacing: 8,
                             runSpacing: 8,
                             children: [
+                              ActionChip(
+                                label: const Text('View details'),
+                                onPressed: () {
+                                  Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
+                                      builder: (_) => CustomerOrderDetailScreen(
+                                        orderId: orderId,
+                                        orderNumber: orderNumber,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                               ActionChip(
                                 label: const Text('View timeline'),
                                 onPressed: () {

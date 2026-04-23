@@ -290,6 +290,20 @@
                                 placeholder="{{ __('Title (optional)') }}"
                                 class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                             />
+                            <div class="grid grid-cols-2 gap-2">
+                                <input
+                                    type="text"
+                                    wire:model="quoteFormLines.{{ $index }}.metal_type"
+                                    placeholder="{{ __('Metal type (optional)') }}"
+                                    class="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                />
+                                <input
+                                    type="text"
+                                    wire:model="quoteFormLines.{{ $index }}.stone_details"
+                                    placeholder="{{ __('Stone details (optional)') }}"
+                                    class="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                />
+                            </div>
                             <input
                                 type="number"
                                 wire:model="quoteFormLines.{{ $index }}.product_id"

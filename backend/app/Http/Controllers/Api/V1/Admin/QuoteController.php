@@ -56,6 +56,8 @@ class QuoteController extends Controller
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.product_id' => ['nullable', 'exists:products,id'],
             'lines.*.custom_title' => ['nullable', 'string', 'max:255'],
+            'lines.*.metal_type' => ['nullable', 'string', 'max:100'],
+            'lines.*.stone_details' => ['nullable', 'string', 'max:1000'],
             'lines.*.weight_grams' => ['required', 'numeric', 'min:0'],
             'lines.*.labor_fee_mmk' => ['nullable', 'numeric', 'min:0'],
             'lines.*.gem_price_mmk' => ['nullable', 'numeric', 'min:0'],

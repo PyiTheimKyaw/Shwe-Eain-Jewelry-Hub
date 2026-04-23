@@ -252,6 +252,8 @@ class OrderBuilderService
                 'order_id' => $order->id,
                 'product_id' => $line->product_id,
                 'title_snapshot' => $line->custom_title ?? $line->product?->title ?? 'Custom item',
+                'metal_type_snapshot' => $line->metal_type,
+                'stone_details_snapshot' => $line->stone_details,
                 'weight_grams' => $line->weight_grams,
                 'metal_value_mmk' => $line->metal_value_mmk,
                 'labor_fee_mmk' => $line->labor_fee_mmk,

@@ -77,6 +77,25 @@ class OrderApi {
     return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  static Future<Map<String, dynamic>> fetchOrderDetail({
+    required String token,
+    required int orderId,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/orders/$orderId');
+    final res = await http.get(uri, headers: _authHeaders(token));
+    if (res.statusCode != 200) {
+      throw OrderApiException(
+        'Order detail ${res.statusCode}: ${_errorBody(res.body)}',
+      );
+    }
+    final map = json.decode(res.body) as Map<String, dynamic>;
+    final raw = map['data'];
+    if (raw is! Map) {
+      throw OrderApiException('Invalid order detail payload.');
+    }
+    return Map<String, dynamic>.from(raw);
+  }
+
   static Future<Uint8List> downloadReceiptPdf({
     required String token,
     required int orderId,

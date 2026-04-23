@@ -14,7 +14,7 @@ class CustomerOrderController extends Controller
         $items = Order::query()
             ->where('customer_user_id', $request->user()->id)
             ->with([
-                'items',
+                'items.product.images',
                 'receipts',
                 'quote:id,inquiry_id',
             ])
@@ -29,7 +29,7 @@ class CustomerOrderController extends Controller
         $this->authorize('view', $order);
 
         $order->load([
-            'items',
+            'items.product.images',
             'quote:id,inquiry_id',
             'assignments.artisan',
             'progressEvents.attachments',

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\UserRole;
+use App\Models\Category;
 use App\Models\ExchangeRateSnapshot;
 use App\Models\GoldPriceSnapshot;
 use App\Models\Inquiry;
@@ -10,6 +11,8 @@ use App\Models\Order;
 use App\Models\OrderAssignment;
 use App\Models\Payment;
 use App\Models\PaymentProfile;
+use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\Quote;
 use App\Models\Receipt;
 use App\Models\User;
@@ -867,5 +870,148 @@ class BespokeOrderWorkflowTest extends TestCase
             "/api/v1/orders/{$order->id}/receipts/{$receipt->id}",
             ['Authorization' => 'Bearer '.$otherToken]
         )->assertForbidden();
+    }
+
+    public function test_making_specs_and_design_photos_are_synced_for_artisan_and_customer_payloads(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $artisan = User::factory()->create(['role' => UserRole::Artisan]);
+        $adminToken = $admin->createToken('t')->plainTextToken;
+        $artisanToken = $artisan->createToken('a')->plainTextToken;
+        $customerToken = $customer->createToken('c')->plainTextToken;
+
+        $category = Category::create([
+            'name' => 'Rings',
+            'slug' => 'rings',
+            'sort_order' => 1,
+        ]);
+        $product = Product::create([
+            'category_id' => $category->id,
+            'sku' => 'RING-HALO-001',
+            'title' => 'Halo Ring',
+            'description' => 'Test product',
+            'weight_grams' => 6.25,
+            'labor_fee_mmk' => 25000,
+            'gem_price_mmk' => 10000,
+            'is_published' => true,
+            'is_custom_order_template' => true,
+        ]);
+        ProductImage::create([
+            'product_id' => $product->id,
+            'storage_path' => 'products/halo-ring.jpg',
+            'sort_order' => 1,
+        ]);
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => $product->id,
+            'message' => 'Sync payload',
+            'status' => 'open',
+            'firebase_thread_id' => 'thread-bespoke-sync',
+        ]);
+
+        Sanctum::actingAs($admin);
+        $publish = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            [
+                'lines' => [[
+                    'product_id' => $product->id,
+                    'weight_grams' => 6.25,
+                    'labor_fee_mmk' => 25000,
+                    'gem_price_mmk' => 10000,
+                    'metal_type' => '18K Yellow Gold',
+                    'stone_details' => 'Center diamond with side stones',
+                ]],
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+
+        $quoteId = (int) $publish->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId}/accept", [], ['Authorization' => 'Bearer '.$customerToken])
+            ->assertOk();
+        $order = Order::query()->where('quote_id', $quoteId)->firstOrFail();
+        $orderItem = $order->items()->firstOrFail();
+
+        $profile = PaymentProfile::factory()->create(['is_active' => true]);
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/orders/{$order->id}/payment-instructions",
+            ['payment_profile_id' => $profile->id],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        Sanctum::actingAs($customer);
+        $this->postJson(
+            "/api/v1/orders/{$order->id}/deposit-proof",
+            ['proof' => UploadedFile::fake()->image('proof.jpg')],
+            ['Authorization' => 'Bearer '.$customerToken]
+        )->assertCreated();
+        $payment = Payment::query()->where('order_id', $order->id)->firstOrFail();
+
+        Sanctum::actingAs($admin);
+        $this->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            [],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertOk();
+
+        $assign = $this->postJson(
+            "/api/v1/admin/orders/{$order->id}/assignments",
+            [
+                'artisan_user_id' => $artisan->id,
+                'task_scope' => 'line_item',
+                'order_item_id' => $orderItem->id,
+                'instructions' => 'Use customer-approved stone layout.',
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        )->assertCreated();
+
+        $assignmentId = (int) $assign->json('data.id');
+
+        Sanctum::actingAs($artisan);
+        $artisanShow = $this->getJson(
+            "/api/v1/artisan/assignments/{$assignmentId}",
+            ['Authorization' => 'Bearer '.$artisanToken]
+        )->assertOk();
+
+        Sanctum::actingAs($customer);
+        $customerShow = $this->getJson(
+            "/api/v1/orders/{$order->id}",
+            ['Authorization' => 'Bearer '.$customerToken]
+        )->assertOk();
+
+        $this->assertSame(
+            '18K Yellow Gold',
+            $artisanShow->json('data.order_item.metal_type_snapshot')
+        );
+        $this->assertSame(
+            '18K Yellow Gold',
+            $customerShow->json('data.items.0.metal_type_snapshot')
+        );
+        $this->assertSame(
+            'Center diamond with side stones',
+            $artisanShow->json('data.order_item.stone_details_snapshot')
+        );
+        $this->assertSame(
+            'Center diamond with side stones',
+            $customerShow->json('data.items.0.stone_details_snapshot')
+        );
+        $this->assertSame(
+            'products/halo-ring.jpg',
+            $artisanShow->json('data.order_item.product.images.0.storage_path')
+        );
+        $this->assertSame(
+            'products/halo-ring.jpg',
+            $customerShow->json('data.items.0.product.images.0.storage_path')
+        );
+        $this->assertSame(
+            'Use customer-approved stone layout.',
+            $customerShow->json('data.assignments.0.instructions')
+        );
     }
 }

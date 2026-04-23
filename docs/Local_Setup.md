@@ -154,6 +154,29 @@ php artisan view:cache
 Then hard-refresh the browser tab (`Cmd+Shift+R` on macOS).  
 This ensures updated polling/render logic is loaded.
 
+### Artisan/customer making specs or photos not appearing
+
+If newly added making specs (`metal_type`, `stone_details`) or product design photos do not show up in Artisan Job Detail or Customer Order Detail:
+
+1. Ensure migrations are applied:
+
+```bash
+php artisan migrate
+```
+
+2. Rebuild backend caches after deployment:
+
+```bash
+php artisan optimize:clear
+```
+
+3. Confirm payload shape quickly:
+   - `GET /api/v1/artisan/assignments/{id}`
+   - `GET /api/v1/orders/{orderId}`
+   - verify `metal_type_snapshot`, `stone_details_snapshot`, and `product.images[].storage_path` are present.
+
+4. In Flutter, refresh the app state (hot restart) after backend schema/API updates.
+
 ---
 
 ## Quick checklist
@@ -162,10 +185,16 @@ This ensures updated polling/render logic is loaded.
 2. Mobile: `flutter pub get` → `flutter run` with `--dart-define=API_BASE_URL=...` if not using `127.0.0.1`
 3. Open **Filament** at `/admin` with `admin@jewelryhub.test` / `password`
 4. Optional artisan login for mobile testing:
-   - `artisan@jewelryhub.test` / `password` (create via tinker if missing in your local DB)
+   - `artisan@jewelryhub.test` / `password`
 5. Receipt/PDF feature notes:
    - Backend uses `barryvdh/laravel-dompdf` for canonical server-generated payment receipts.
    - To backfill receipts for previously confirmed payments: `php artisan receipts:generate-missing`
    - Customer app includes an **Orders** tab where receipts can be viewed and downloaded.
+6. Three-way sync demo checklist (Admin → Artisan → Customer):
+   - Admin publishes quote lines with `metal_type` + `stone_details`.
+   - Customer accepts quote; admin confirms deposit.
+   - Admin assigns artisan with special instructions.
+   - Artisan opens job detail and sees specs + design photos + instructions.
+   - Customer opens **Order Details** and confirms the same specs/photos.
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.

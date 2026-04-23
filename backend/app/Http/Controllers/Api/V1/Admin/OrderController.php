@@ -126,7 +126,7 @@ class OrderController extends Controller
             'artisan_user_id' => ['required', 'exists:users,id'],
             'task_scope' => ['required', 'in:full_order,line_item'],
             'order_item_id' => ['nullable', 'required_if:task_scope,line_item', 'exists:order_items,id'],
-            'instructions' => ['nullable', 'string', 'max:5000'],
+            'instructions' => ['nullable', 'required_if:task_scope,line_item', 'string', 'max:5000'],
         ]);
 
         try {

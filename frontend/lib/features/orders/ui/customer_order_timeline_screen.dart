@@ -10,6 +10,7 @@ import 'package:jewelry_hub/features/inquiries/data/inquiry_api.dart';
 import 'package:jewelry_hub/features/orders/data/order_api.dart';
 import 'package:jewelry_hub/features/orders/models/order_progress_event.dart';
 import 'package:jewelry_hub/features/orders/models/order_timeline_item.dart';
+import 'package:jewelry_hub/features/orders/ui/customer_order_detail_screen.dart';
 import 'package:provider/provider.dart';
 
 class CustomerOrderTimelineScreen extends StatefulWidget {
@@ -202,6 +203,20 @@ class _CustomerOrderTimelineScreenState
                           const SizedBox(height: 6),
                           PremiumText.body(
                             widget.orderStatus.replaceAll('_', ' '),
+                          ),
+                          const SizedBox(height: 10),
+                          ActionChip(
+                            label: const Text('View order details'),
+                            onPressed: () {
+                              Navigator.of(context).push<void>(
+                                MaterialPageRoute(
+                                  builder: (_) => CustomerOrderDetailScreen(
+                                    orderId: widget.orderId,
+                                    orderNumber: widget.orderNumber,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

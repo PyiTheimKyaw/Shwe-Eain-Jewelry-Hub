@@ -13,7 +13,11 @@ class AssignmentController extends Controller
     {
         $items = OrderAssignment::query()
             ->where('artisan_user_id', $request->user()->id)
-            ->with(['order.customer', 'order.items', 'orderItem'])
+            ->with([
+                'order.customer',
+                'order.items.product.images',
+                'orderItem.product.images',
+            ])
             ->orderByDesc('created_at')
             ->paginate(30);
 
@@ -24,7 +28,11 @@ class AssignmentController extends Controller
     {
         $this->authorize('view', $assignment);
 
-        $assignment->load(['order.customer', 'order.items', 'orderItem']);
+        $assignment->load([
+            'order.customer',
+            'order.items.product.images',
+            'orderItem.product.images',
+        ]);
 
         return response()->json(['data' => $assignment]);
     }

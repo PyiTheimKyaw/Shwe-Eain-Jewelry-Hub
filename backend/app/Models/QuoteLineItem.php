@@ -11,6 +11,8 @@ class QuoteLineItem extends Model
         'quote_id',
         'product_id',
         'custom_title',
+        'metal_type',
+        'stone_details',
         'weight_grams',
         'gold_price_mmk_per_gram',
         'metal_value_mmk',

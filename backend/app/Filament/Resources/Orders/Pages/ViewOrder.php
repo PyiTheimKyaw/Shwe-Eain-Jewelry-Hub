@@ -50,6 +50,8 @@ class ViewOrder extends ViewRecord
                         ->visible(fn (callable $get): bool => $get('task_scope') === 'line_item')
                         ->required(fn (callable $get): bool => $get('task_scope') === 'line_item'),
                     Textarea::make('instructions')
+                        ->label('Special instructions')
+                        ->required(fn (callable $get): bool => $get('task_scope') === 'line_item')
                         ->rows(3),
                 ])
                 ->action(function (array $data): void {

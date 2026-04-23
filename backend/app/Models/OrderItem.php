@@ -12,6 +12,8 @@ class OrderItem extends Model
         'order_id',
         'product_id',
         'title_snapshot',
+        'metal_type_snapshot',
+        'stone_details_snapshot',
         'weight_grams',
         'metal_value_mmk',
         'labor_fee_mmk',

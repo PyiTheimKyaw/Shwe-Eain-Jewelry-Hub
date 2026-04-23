@@ -490,3 +490,56 @@ Resolved the customer quote-decline synchronization gap so admin and customer vi
 - `tests/Feature/InquiryQuoteFlowTest.php` decline case passes.
 - Blade templates compile successfully (`php artisan view:cache`).
 
+---
+
+## 2026-04-23 — Artisan Making Context + three-way sync contract
+
+### Summary
+
+Implemented a single source-of-truth flow for making specs so admin entry, artisan job context, and customer order detail all read the same snapshot data and image references.
+
+### Backend data contract
+
+- Added structured spec fields:
+  - `quote_line_items.metal_type`
+  - `quote_line_items.stone_details`
+  - `order_items.metal_type_snapshot`
+  - `order_items.stone_details_snapshot`
+- Quote creation now accepts and persists `metal_type` + `stone_details` on each line.
+- Order creation snapshots those fields from quote line items into order items.
+- Admin quote publish/draft APIs now validate and pass the structured spec fields.
+
+### Admin entry and assignment rules
+
+- Filament quote publish form (`ChatInquiry`) now captures optional **metal type** and **stone details** per line.
+- Assignment form labels instructions as **Special instructions** and requires instructions when `task_scope = line_item`.
+- API assignment endpoint now enforces `instructions` on `line_item` scope as part of the validation contract.
+
+### Artisan + customer payload parity
+
+- Artisan assignment endpoints now eager-load:
+  - `order.items.product.images`
+  - `orderItem.product.images`
+- Customer order endpoints now eager-load:
+  - `items.product.images`
+- Both payloads expose the same order-item snapshots (`metal_type_snapshot`, `stone_details_snapshot`) and product image `storage_path` data.
+
+### Flutter UI wiring
+
+- Artisan app (`ArtisanJobDetailScreen`) now shows:
+  - assignment status + order status
+  - admin instructions
+  - making specs per visible item (title, weight, metal type, stone details)
+  - design photo gallery sourced from product images
+- Customer app adds canonical `CustomerOrderDetailScreen` and links it from Orders + Timeline.
+- Timeline remains milestone/progress focused, with a direct link to order detail as the canonical spec/photo view.
+
+### Validation
+
+- Added parity coverage in `BespokeOrderWorkflowTest`:
+  - confirms the same snapshot values and image paths are returned to both artisan assignment show and customer order show payloads.
+- Test run:
+  - `php artisan test --filter=BespokeOrderWorkflowTest` ✅
+- Flutter static checks:
+  - `flutter analyze` on modified artisan/order files ✅
+

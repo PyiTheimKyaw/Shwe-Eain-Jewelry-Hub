@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
+import 'package:jewelry_hub/core/storage/public_storage_url.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
@@ -18,6 +20,41 @@ class ArtisanJobDetailScreen extends StatefulWidget {
 }
 
 class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
+  List<Map<String, dynamic>> _visibleItems() {
+    final order = _assignment?['order'] as Map<String, dynamic>?;
+    final allItemsRaw = order?['items'];
+    final allItems = (allItemsRaw is List ? allItemsRaw : const <dynamic>[])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
+    final scope = (_assignment?['task_scope'] ?? '').toString();
+    if (scope != 'line_item') {
+      return allItems;
+    }
+    final scoped = _assignment?['order_item'];
+    if (scoped is Map) {
+      return [Map<String, dynamic>.from(scoped)];
+    }
+    return allItems;
+  }
+
+  List<String> _itemImageUrls(Map<String, dynamic> item) {
+    final product = item['product'];
+    if (product is! Map) {
+      return const [];
+    }
+    final imagesRaw = product['images'];
+    final images = (imagesRaw is List ? imagesRaw : const <dynamic>[])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
+    return images
+        .map((img) => (img['storage_path'] ?? '').toString().trim())
+        .where((path) => path.isNotEmpty)
+        .map(publicStorageUrl)
+        .toList(growable: false);
+  }
+
   static const List<String> _progressStages = <String>[
     'casting',
     'filing',
@@ -345,6 +382,121 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      AppGlassCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            PremiumText.caption(
+                              'ADMIN INSTRUCTIONS',
+                              color: AppColors.goldMuted,
+                            ),
+                            const SizedBox(height: 6),
+                            PremiumText.body(
+                              ((_assignment?['instructions'] ?? '') as String)
+                                      .trim()
+                                      .isEmpty
+                                  ? 'No additional notes from admin.'
+                                  : (_assignment?['instructions'] as String),
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ..._visibleItems().map((item) {
+                        final title = (item['title_snapshot'] ?? 'Order item')
+                            .toString();
+                        final weight = (item['weight_grams'] ?? '').toString();
+                        final metal = (item['metal_type_snapshot'] ?? '')
+                            .toString();
+                        final stone = (item['stone_details_snapshot'] ?? '')
+                            .toString();
+                        final images = _itemImageUrls(item);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: AppGlassCard(
+                            padding: const EdgeInsets.all(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                PremiumText.caption(
+                                  'MAKING SPECS',
+                                  color: AppColors.goldMuted,
+                                ),
+                                const SizedBox(height: 6),
+                                PremiumText.body(title),
+                                const SizedBox(height: 10),
+                                PremiumText.caption(
+                                  'Weight',
+                                  color: AppColors.textSecondary,
+                                ),
+                                PremiumText.body(
+                                  weight.isEmpty ? '-' : '$weight g',
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(height: 8),
+                                PremiumText.caption(
+                                  'Metal type',
+                                  color: AppColors.textSecondary,
+                                ),
+                                PremiumText.body(
+                                  metal.isEmpty ? '-' : metal,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(height: 8),
+                                PremiumText.caption(
+                                  'Stone details',
+                                  color: AppColors.textSecondary,
+                                ),
+                                PremiumText.body(
+                                  stone.isEmpty ? '-' : stone,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(height: 10),
+                                PremiumText.caption(
+                                  'DESIGN PHOTOS',
+                                  color: AppColors.goldMuted,
+                                ),
+                                const SizedBox(height: 8),
+                                if (images.isEmpty)
+                                  PremiumText.body(
+                                    'No design photos attached.',
+                                    color: AppColors.textSecondary,
+                                  )
+                                else
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: images
+                                        .map(
+                                          (url) => ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              AppRadii.sm,
+                                            ),
+                                            child: CachedNetworkImage(
+                                              imageUrl: url,
+                                              width: 88,
+                                              height: 88,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        )
+                                        .toList(growable: false),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      if (_visibleItems().isEmpty)
+                        AppGlassCard(
+                          child: PremiumText.body(
+                            'No item details available for this assignment yet.',
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       const SizedBox(height: 12),
                       if (status == 'assigned' &&
                           orderStatus == 'deposit_confirmed')

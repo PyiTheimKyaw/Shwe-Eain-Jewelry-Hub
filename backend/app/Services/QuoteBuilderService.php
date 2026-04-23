@@ -18,7 +18,7 @@ class QuoteBuilderService
     ) {}
 
     /**
-     * @param  array<int, array{product_id?: int|null, custom_title?: string|null, weight_grams: float|string, labor_fee_mmk?: float|string|null, gem_price_mmk?: float|string|null}>  $lines
+     * @param  array<int, array{product_id?: int|null, custom_title?: string|null, metal_type?: string|null, stone_details?: string|null, weight_grams: float|string, labor_fee_mmk?: float|string|null, gem_price_mmk?: float|string|null}>  $lines
      * @param  'draft'|'sent'  $initialStatus
      */
     public function createQuote(
@@ -68,6 +68,8 @@ class QuoteBuilderService
                     'quote_id' => $quote->id,
                     'product_id' => $product?->id,
                     'custom_title' => $line['custom_title'] ?? $product?->title,
+                    'metal_type' => $line['metal_type'] ?? null,
+                    'stone_details' => $line['stone_details'] ?? null,
                     'weight_grams' => $weight,
                     'gold_price_mmk_per_gram' => $goldPrice,
                     'metal_value_mmk' => $metal,
