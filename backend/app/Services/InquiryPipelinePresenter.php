@@ -265,9 +265,14 @@ class InquiryPipelinePresenter
         }
 
         return [
+            'type' => 'receipt_card',
+            'sender_role' => 'admin',
             'id' => $receipt->id,
+            'receipt_id' => $receipt->id,
+            'order_id' => $order->id,
             'receipt_number' => $receipt->receipt_number,
             'amount_mmk' => (string) $receipt->amount_mmk,
+            'cta_label' => 'View Receipt',
             'issued_at' => $receipt->issued_at?->toIso8601String(),
         ];
     }

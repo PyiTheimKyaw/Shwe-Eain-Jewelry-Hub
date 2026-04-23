@@ -155,6 +155,7 @@
                             $__jhAdminStatic = [
                                 'quote' => $adminQuoteCardPayload,
                                 'payment' => $pipeline['deposit_payment'] ?? null,
+                                'receipt' => $pipeline['latest_receipt'] ?? null,
                                 'timeline_logs' => $pipeline['timeline_logs'] ?? [],
                                 'recordCaption' => __('Record (matches customer app)'),
                             ];
@@ -506,6 +507,20 @@
                     );
                 }
 
+                function isReceiptCardPayload(msg) {
+                    var t = messageTypeKey(msg);
+                    if (t === 'receipt_card') {
+                        return true;
+                    }
+                    if (msg.sender_role !== 'admin') {
+                        return false;
+                    }
+                    if (msg.receipt_id != null && msg.receipt_number != null && msg.amount_mmk != null) {
+                        return true;
+                    }
+                    return false;
+                }
+
                 function formatMessageTime(msg) {
                     var ts = msg.created_at;
                     if (!ts) {
@@ -684,6 +699,27 @@
                     );
                 }
 
+                function receiptCardHtml(data) {
+                    var amountFmt = fmtMmk(data.amount_mmk || '0');
+                    return (
+                        '<div class="max-w-full rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-br from-white via-white to-emerald-50 p-4 text-left shadow-md dark:border-emerald-400/40 dark:from-gray-900 dark:via-gray-900 dark:to-gray-950">' +
+                        '<div class="mb-3 flex items-center gap-2 text-emerald-700 dark:text-emerald-300">' +
+                        '<svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z" /></svg>' +
+                        '<span class="font-semibold tracking-tight">Payment Receipt</span>' +
+                        '</div>' +
+                        '<p class="text-[10px] font-semibold uppercase tracking-wider text-emerald-700/80 dark:text-emerald-300/80">Receipt number</p>' +
+                        '<p class="mb-3 mt-1 font-mono text-sm text-gray-900 dark:text-gray-100">' +
+                        esc(data.receipt_number || 'Receipt') +
+                        '</p>' +
+                        '<p class="text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Confirmed amount</p>' +
+                        '<p class="mt-1 text-base font-semibold text-emerald-700 dark:text-emerald-300">' +
+                        amountFmt +
+                        ' MMK</p>' +
+                        '<p class="mt-2 text-[11px] text-gray-500 dark:text-gray-400">Receipt issued and available for customer download.</p>' +
+                        '</div>'
+                    );
+                }
+
                 function row(msg) {
                     if (messageTypeKey(msg) === 'timeline_log') {
                         var timelineText = String(msg.text || '').trim();
@@ -728,6 +764,19 @@
                         capP.textContent = roleTimeCaption(msg);
                         wrapP.appendChild(capP);
                         return wrapP;
+                    }
+                    if (isReceiptCardPayload(msg)) {
+                        var wrapR = document.createElement('div');
+                        wrapR.className = 'mb-4 flex w-full flex-col items-center px-1';
+                        var innerR = document.createElement('div');
+                        innerR.className = 'w-full max-w-lg';
+                        innerR.innerHTML = receiptCardHtml(msg);
+                        wrapR.appendChild(innerR);
+                        var capR = document.createElement('p');
+                        capR.className = 'mt-2 text-center text-[11px] text-gray-500 dark:text-gray-400';
+                        capR.textContent = roleTimeCaption(msg);
+                        wrapR.appendChild(capR);
+                        return wrapR;
                     }
                     if (messageTypeKey(msg) === 'image') {
                         var wrapI = document.createElement('div');
@@ -822,21 +871,22 @@
                 function renderMysqlCards(serverCardsEl) {
                     var hq = null;
                     var hp = null;
+                    var hr = null;
                     if (!serverCardsEl) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, hideReceiptId: hr, didRender: false };
                     }
                     var rawEl = document.getElementById('jh-admin-static-json');
                     if (!rawEl || !String(rawEl.textContent || '').trim()) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, hideReceiptId: hr, didRender: false };
                     }
                     var data;
                     try {
                         data = JSON.parse(rawEl.textContent);
                     } catch (e) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, hideReceiptId: hr, didRender: false };
                     }
                     if (!data) {
-                        return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: false };
+                        return { hideQuoteId: hq, hidePaymentOrder: hp, hideReceiptId: hr, didRender: false };
                     }
 
                     var nextCardsHtml = '';
@@ -865,6 +915,20 @@
                             hp = String(data.payment.order_number);
                         }
                     }
+                    if (data.receipt) {
+                        var receiptWrap = document.createElement('div');
+                        appendMysqlCardBlock(
+                            receiptWrap,
+                            receiptCardHtml(data.receipt),
+                            'Concierge · ' + capBase
+                        );
+                        nextCardsHtml += receiptWrap.innerHTML;
+                        if (data.receipt.receipt_id != null) {
+                            hr = Number(data.receipt.receipt_id);
+                        } else if (data.receipt.id != null) {
+                            hr = Number(data.receipt.id);
+                        }
+                    }
                     if (Array.isArray(data.timeline_logs)) {
                         var timelineWrap = document.createElement('div');
                         data.timeline_logs.forEach(function (t) {
@@ -879,11 +943,12 @@
 
                     serverCardsEl.innerHTML = nextCardsHtml;
 
-                    return { hideQuoteId: hq, hidePaymentOrder: hp, didRender: true };
+                    return { hideQuoteId: hq, hidePaymentOrder: hp, hideReceiptId: hr, didRender: true };
                 }
 
                 var hideQuoteId = null;
                 var hidePaymentOrder = null;
+                var hideReceiptId = null;
                 var localWorkflowLogs = [];
                 var lastThreadDepositState = null;
 
@@ -975,6 +1040,14 @@
                     ) {
                         return true;
                     }
+                    if (
+                        hideReceiptId != null &&
+                        isReceiptCardPayload(msg) &&
+                        msg.receipt_id != null &&
+                        Number(msg.receipt_id) === hideReceiptId
+                    ) {
+                        return true;
+                    }
                     return false;
                 }
 
@@ -991,6 +1064,7 @@
                 if (_jhDedupe.didRender) {
                     hideQuoteId = _jhDedupe.hideQuoteId;
                     hidePaymentOrder = _jhDedupe.hidePaymentOrder;
+                    hideReceiptId = _jhDedupe.hideReceiptId;
                 }
 
                 window.jhAdminChatRefreshStatic = function () {
@@ -1002,6 +1076,7 @@
                     if (d.didRender) {
                         hideQuoteId = d.hideQuoteId;
                         hidePaymentOrder = d.hidePaymentOrder;
+                        hideReceiptId = d.hideReceiptId;
                     }
                 };
 

@@ -771,6 +771,14 @@ class BespokeOrderWorkflowTest extends TestCase
                     && $argReceipt instanceof Receipt
                     && $argReceipt->order_id === $order->id;
             });
+        $firebase
+            ->shouldReceive('publishTimelineLogMessage')
+            ->once()
+            ->withArgs(function ($argInquiry, $message) use ($inquiry) {
+                return $argInquiry instanceof Inquiry
+                    && $argInquiry->id === $inquiry->id
+                    && $message === '--- Deposit Confirmed ---';
+            });
         $firebase->shouldReceive('syncInquiryThreadDocument')->once();
         app()->instance(FirebaseInquiryService::class, $firebase);
 

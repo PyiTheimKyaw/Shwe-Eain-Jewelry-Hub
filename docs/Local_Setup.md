@@ -142,6 +142,18 @@ composer install
 
 Do not commit `vendor/`; every fresh clone needs this step before `php artisan` works.
 
+### Filament inquiry chat not updating / timeline missing after decline
+
+If the admin inquiry chat or timeline looks stale after deploying recent Blade/Livewire changes:
+
+```bash
+php artisan optimize:clear
+php artisan view:cache
+```
+
+Then hard-refresh the browser tab (`Cmd+Shift+R` on macOS).  
+This ensures updated polling/render logic is loaded.
+
 ---
 
 ## Quick checklist

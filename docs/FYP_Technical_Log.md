@@ -457,3 +457,36 @@ Implemented the next customer-confidence/admin-visibility milestone:
   - then thread sync.
 - Flutter `InquiryChatScreen` now renders `receipt_card` and opens `ReceiptDetailScreen` when the customer taps **View Receipt**.
 
+---
+
+## 2026-04-23 — Quote decline synchronization + persistent timeline reliability
+
+### Summary
+
+Resolved the customer quote-decline synchronization gap so admin and customer views stay aligned without manual refresh. Also fixed a timeline serialization bug that caused workflow logs to disappear after decline events.
+
+### Backend
+
+- **`CustomerQuoteController::decline`** now publishes a persistent workflow log and syncs thread metadata after status changes:
+  - `--- Quote was declined by Customer ---`
+  - `FirebaseInquiryService::syncInquiryThreadDocument(...)`
+- **`FirebaseInquiryService::publishTimelineLogMessage`** path is used for decline so timeline events are written to MySQL (`inquiry_timeline_logs`) first, then mirrored to Firestore best-effort.
+- **`InquiryPipelinePresenter::timelineLogs`** fixed with `->values()` after `sortBy('id')` so `timeline_logs` is always encoded as a JSON array (not an object with sparse keys).
+
+### Filament (Admin)
+
+- **`InquiriesTable`** polling tightened to `1s` for faster status reflection in the inquiries list.
+- **`ChatInquiry`** + `chat-inquiry.blade.php` polling hardened:
+  - periodic pipeline refresh for chat page
+  - modal-safe polling behavior so opening quote/payment dialogs no longer auto-closes them.
+
+### Flutter (Customer)
+
+- Customer decline action continues to call decline API then refresh pipeline.
+- Chat timeline rendering now correctly keeps persisted MySQL timeline logs (including decline) visible across app refresh/reopen when pipeline includes `timeline_logs` array.
+
+### Validation
+
+- `tests/Feature/InquiryQuoteFlowTest.php` decline case passes.
+- Blade templates compile successfully (`php artisan view:cache`).
+

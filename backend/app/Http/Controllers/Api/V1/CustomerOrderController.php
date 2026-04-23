@@ -13,7 +13,11 @@ class CustomerOrderController extends Controller
     {
         $items = Order::query()
             ->where('customer_user_id', $request->user()->id)
-            ->with(['items', 'receipts'])
+            ->with([
+                'items',
+                'receipts',
+                'quote:id,inquiry_id',
+            ])
             ->orderByDesc('created_at')
             ->paginate(20);
 
@@ -26,6 +30,7 @@ class CustomerOrderController extends Controller
 
         $order->load([
             'items',
+            'quote:id,inquiry_id',
             'assignments.artisan',
             'progressEvents.attachments',
             'progressEvents.artisan',

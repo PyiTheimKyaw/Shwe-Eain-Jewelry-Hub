@@ -12,6 +12,7 @@ use App\Models\Quote;
 use App\Models\Receipt;
 use App\Models\User;
 use Google\Cloud\Core\Timestamp;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Kreait\Firebase\Contract\Auth as FirebaseAuthContract;
@@ -271,7 +272,9 @@ class FirebaseInquiryService
         }
 
         $now = new \DateTimeImmutable;
-        $url = url(Storage::disk('public')->url($attachment->storage_path));
+        /** @var FilesystemAdapter $publicDisk */
+        $publicDisk = Storage::disk('public');
+        $url = url($publicDisk->url($attachment->storage_path));
 
         try {
             $db = $firestore->database();
@@ -286,6 +289,8 @@ class FirebaseInquiryService
                 'created_at' => new Timestamp($now),
                 'image_url' => $url,
                 'caption' => 'Workshop · '.$event->stage.' · '.($event->note ?? ''),
+                'stage' => $event->stage,
+                'note' => $event->note,
                 'order_id' => $event->order_id,
                 'progress_event_id' => $event->id,
                 'text' => 'Progress update',

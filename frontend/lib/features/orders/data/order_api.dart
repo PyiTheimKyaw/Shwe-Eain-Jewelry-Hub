@@ -55,8 +55,26 @@ class OrderApi {
     final map = json.decode(res.body) as Map<String, dynamic>;
     final list = map['data'] as List<dynamic>? ?? [];
     return list
-        .map((e) => PaymentReceipt.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map(
+          (e) => PaymentReceipt.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
         .toList();
+  }
+
+  static Future<List<Map<String, dynamic>>> fetchOrderProgress({
+    required String token,
+    required int orderId,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/orders/$orderId/progress');
+    final res = await http.get(uri, headers: _authHeaders(token));
+    if (res.statusCode != 200) {
+      throw OrderApiException(
+        'Progress ${res.statusCode}: ${_errorBody(res.body)}',
+      );
+    }
+    final map = json.decode(res.body) as Map<String, dynamic>;
+    final list = map['data'] as List<dynamic>? ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
   static Future<Uint8List> downloadReceiptPdf({
@@ -76,4 +94,3 @@ class OrderApi {
     return res.bodyBytes;
   }
 }
-

@@ -18,10 +18,114 @@ class ArtisanJobDetailScreen extends StatefulWidget {
 }
 
 class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
+  static const List<String> _progressStages = <String>[
+    'casting',
+    'filing',
+    'polishing',
+    'setting',
+    'qc',
+    'other',
+  ];
+
   Map<String, dynamic>? _assignment;
   bool _loading = true;
   String? _error;
   bool _busy = false;
+
+  String _formatStageLabel(String stage) {
+    switch (stage) {
+      case 'qc':
+        return 'QC';
+      default:
+        return stage.isEmpty
+            ? 'Other'
+            : '${stage[0].toUpperCase()}${stage.substring(1)}';
+    }
+  }
+
+  Future<({String stage, String? note})?> _pickProgressMeta() async {
+    var selectedStage = 'other';
+    final noteCtrl = TextEditingController();
+
+    final result = await showModalBottomSheet<({String stage, String? note})>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                12,
+                12,
+                MediaQuery.of(context).viewInsets.bottom + 12,
+              ),
+              child: AppGlassCard(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PremiumText.headline('Progress details', maxLines: 1),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedStage,
+                      decoration: const InputDecoration(labelText: 'Stage'),
+                      items: _progressStages
+                          .map(
+                            (stage) => DropdownMenuItem<String>(
+                              value: stage,
+                              child: Text(_formatStageLabel(stage)),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setSheetState(() => selectedStage = v);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: noteCtrl,
+                      maxLength: 160,
+                      decoration: const InputDecoration(
+                        labelText: 'Short note (optional)',
+                        counterText: '',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        AppGoldButton(
+                          label: 'Continue',
+                          icon: Icons.arrow_forward_rounded,
+                          onPressed: () {
+                            final note = noteCtrl.text.trim();
+                            Navigator.of(context).pop((
+                              stage: selectedStage,
+                              note: note.isEmpty ? null : note,
+                            ));
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    noteCtrl.dispose();
+    return result;
+  }
 
   @override
   void initState() {
@@ -65,7 +169,8 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
 
   Future<void> _start() async {
     final token = context.read<AuthProvider>().token;
-    final orderId = (_assignment?['order'] as Map<String, dynamic>?)?['id'] as int?;
+    final orderId =
+        (_assignment?['order'] as Map<String, dynamic>?)?['id'] as int?;
     if (token == null || orderId == null) {
       return;
     }
@@ -73,16 +178,16 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
     try {
       await ArtisanApi.startJob(bearerToken: token, orderId: orderId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Production started.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Production started.')));
       }
       await _load();
     } on ArtisanApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) {
@@ -93,8 +198,13 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
 
   Future<void> _progress() async {
     final token = context.read<AuthProvider>().token;
-    final orderId = (_assignment?['order'] as Map<String, dynamic>?)?['id'] as int?;
+    final orderId =
+        (_assignment?['order'] as Map<String, dynamic>?)?['id'] as int?;
     if (token == null || orderId == null) {
+      return;
+    }
+    final progressMeta = await _pickProgressMeta();
+    if (progressMeta == null) {
       return;
     }
     final files = await ImagePicker().pickMultiImage(imageQuality: 85);
@@ -106,20 +216,20 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
       await ArtisanApi.uploadProgress(
         bearerToken: token,
         orderId: orderId,
-        stage: 'other',
-        note: 'Progress photo',
+        stage: progressMeta.stage,
+        note: progressMeta.note,
         photos: files,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Progress uploaded.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Progress uploaded.')));
       }
     } on ArtisanApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) {
@@ -130,7 +240,8 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
 
   Future<void> _ready() async {
     final token = context.read<AuthProvider>().token;
-    final orderId = (_assignment?['order'] as Map<String, dynamic>?)?['id'] as int?;
+    final orderId =
+        (_assignment?['order'] as Map<String, dynamic>?)?['id'] as int?;
     if (token == null || orderId == null) {
       return;
     }
@@ -145,9 +256,9 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
       await _load();
     } on ArtisanApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) {
@@ -244,7 +355,9 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                         ),
                       if (orderStatus == 'in_production') ...[
                         AppGoldButton(
-                          label: _busy ? 'Please wait…' : 'Upload progress photos',
+                          label: _busy
+                              ? 'Please wait…'
+                              : 'Upload progress photos',
                           icon: Icons.photo_camera_outlined,
                           onPressed: _busy ? null : _progress,
                         ),

@@ -6,6 +6,7 @@ import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/orders/data/order_api.dart';
 import 'package:jewelry_hub/features/orders/models/payment_receipt.dart';
+import 'package:jewelry_hub/features/orders/ui/customer_order_timeline_screen.dart';
 import 'package:jewelry_hub/features/orders/ui/receipt_detail_screen.dart';
 import 'package:provider/provider.dart';
 
@@ -43,7 +44,10 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
         final idRaw = order['id'];
         final id = idRaw is num ? idRaw.toInt() : int.tryParse('$idRaw');
         if (id == null) continue;
-        receiptMap[id] = await OrderApi.fetchReceipts(token: token, orderId: id);
+        receiptMap[id] = await OrderApi.fetchReceipts(
+          token: token,
+          orderId: id,
+        );
       }
       if (!mounted) return;
       setState(() {
@@ -92,89 +96,121 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                   ),
                 )
               : _error != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: AppGlassCard(
-                        child: PremiumText.body(_error!, color: AppColors.textSecondary),
-                      ),
-                    )
-                  : _orders.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: AppGlassCard(
-                            child: PremiumText.body(
-                              'No orders yet.',
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                          itemCount: _orders.length,
-                          separatorBuilder: (_, i) => const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final order = _orders[index];
-                            final idRaw = order['id'];
-                            final orderId = idRaw is num
-                                ? idRaw.toInt()
-                                : int.tryParse('$idRaw') ?? 0;
-                            final status = (order['status'] ?? '-').toString();
-                            final orderNumber = (order['order_number'] ?? '#$orderId')
-                                .toString();
-                            final totalRaw = order['total_mmk'];
-                            final total = totalRaw is num
-                                ? totalRaw.toDouble()
-                                : double.tryParse('$totalRaw') ?? 0;
-                            final receipts = _receipts[orderId] ?? const [];
+              ? Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: AppGlassCard(
+                    child: PremiumText.body(
+                      _error!,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                )
+              : _orders.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: AppGlassCard(
+                    child: PremiumText.body(
+                      'No orders yet.',
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                  itemCount: _orders.length,
+                  separatorBuilder: (_, i) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final order = _orders[index];
+                    final idRaw = order['id'];
+                    final orderId = idRaw is num
+                        ? idRaw.toInt()
+                        : int.tryParse('$idRaw') ?? 0;
+                    final status = (order['status'] ?? '-').toString();
+                    final orderNumber = (order['order_number'] ?? '#$orderId')
+                        .toString();
+                    final totalRaw = order['total_mmk'];
+                    final total = totalRaw is num
+                        ? totalRaw.toDouble()
+                        : double.tryParse('$totalRaw') ?? 0;
+                    final receipts = _receipts[orderId] ?? const [];
+                    final quote = order['quote'] is Map
+                        ? Map<String, dynamic>.from(order['quote'] as Map)
+                        : const <String, dynamic>{};
+                    final inquiryRaw = quote['inquiry_id'];
+                    final inquiryId = inquiryRaw is num
+                        ? inquiryRaw.toInt()
+                        : int.tryParse('$inquiryRaw');
 
-                            return AppGlassCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  PremiumText.body('Order $orderNumber'),
-                                  const SizedBox(height: 4),
-                                  PremiumText.caption(
-                                    status.replaceAll('_', ' '),
-                                    color: AppColors.goldMuted,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  PremiumText.body(
-                                    'Total: ${_money.format(total)} MMK',
-                                    color: AppColors.textSecondary,
-                                  ),
-                                  const SizedBox(height: 10),
-                                  if (receipts.isEmpty)
-                                    PremiumText.caption(
-                                      'No formal receipt issued yet.',
-                                      color: AppColors.textSecondary,
-                                    )
-                                  else
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: receipts.map((receipt) {
-                                        return ActionChip(
-                                          label: Text(receipt.receiptNumber),
-                                          onPressed: () {
-                                            Navigator.of(context).push<void>(
-                                              MaterialPageRoute(
-                                                builder: (_) => ReceiptDetailScreen(
-                                                  receipt: receipt,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        );
-                                      }).toList(),
+                    return AppGlassCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          PremiumText.body('Order $orderNumber'),
+                          const SizedBox(height: 4),
+                          PremiumText.caption(
+                            status.replaceAll('_', ' '),
+                            color: AppColors.goldMuted,
+                          ),
+                          const SizedBox(height: 8),
+                          PremiumText.body(
+                            'Total: ${_money.format(total)} MMK',
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              ActionChip(
+                                label: const Text('View timeline'),
+                                onPressed: () {
+                                  Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          CustomerOrderTimelineScreen(
+                                            orderId: orderId,
+                                            orderNumber: orderNumber,
+                                            orderStatus: status,
+                                            inquiryId: inquiryId,
+                                          ),
                                     ),
-                                ],
+                                  );
+                                },
                               ),
-                            );
-                          },
-                        ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          if (receipts.isEmpty)
+                            PremiumText.caption(
+                              'No formal receipt issued yet.',
+                              color: AppColors.textSecondary,
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: receipts.map((receipt) {
+                                return ActionChip(
+                                  label: Text(receipt.receiptNumber),
+                                  onPressed: () {
+                                    Navigator.of(context).push<void>(
+                                      MaterialPageRoute(
+                                        builder: (_) => ReceiptDetailScreen(
+                                          receipt: receipt,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
         ),
       ),
     );
   }
 }
-

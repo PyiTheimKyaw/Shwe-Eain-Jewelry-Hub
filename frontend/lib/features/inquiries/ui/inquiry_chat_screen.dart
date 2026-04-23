@@ -109,7 +109,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         ? rawReceiptId.toInt()
         : int.tryParse('$rawReceiptId');
     final rawOrderId = data['order_id'];
-    final orderId = rawOrderId is num ? rawOrderId.toInt() : int.tryParse('$rawOrderId');
+    final orderId = rawOrderId is num
+        ? rawOrderId.toInt()
+        : int.tryParse('$rawOrderId');
     if (receiptId == null || orderId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Receipt information is unavailable.')),
@@ -147,7 +149,8 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     final oid = threadData['order_id'];
     final aq = threadData['active_quote_id'];
     final depositState = (threadData['deposit_state'] ?? '').toString();
-    if (_lastSeenDepositState != null && depositState != _lastSeenDepositState) {
+    if (_lastSeenDepositState != null &&
+        depositState != _lastSeenDepositState) {
       if (depositState == 'rejected') {
         _appendLocalTimelineLog('--- Payment Rejected ---');
       } else if (depositState == 'confirmed') {
@@ -180,9 +183,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     }
     final now = DateTime.now();
     final recentlyExists = _localTimelineLogs.any(
-      (e) =>
-          e.text == text &&
-          now.difference(e.at).inSeconds.abs() <= 5,
+      (e) => e.text == text && now.difference(e.at).inSeconds.abs() <= 5,
     );
     if (recentlyExists) {
       return;
@@ -216,6 +217,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         }
       });
     }
+
     var didSchedule = false;
     for (final change in snap.docChanges) {
       if (change.type != DocumentChangeType.added &&
@@ -343,12 +345,14 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         bearerToken: bearer,
         inquiryId: widget.inquiry.id,
       );
-      final next = p ??
+      final next =
+          p ??
           InquiryPipeline(
             step: widget.inquiry.status == 'quoted' ? 'quoted' : 'consulting',
           );
       final ds = next.depositState ?? '';
-      if (_lastSeenRestDepositState != null && ds != _lastSeenRestDepositState) {
+      if (_lastSeenRestDepositState != null &&
+          ds != _lastSeenRestDepositState) {
         if (ds == 'rejected') {
           _appendLocalTimelineLog('--- Payment Rejected ---');
         } else if (ds == 'confirmed') {
@@ -375,22 +379,26 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
   }
 
   InquiryPipeline _effectivePipeline(InquiryPipeline? fromFirestore) {
-    final rest = _restPipeline ??
+    final rest =
+        _restPipeline ??
         InquiryPipeline(
           step: widget.inquiry.status == 'quoted' ? 'quoted' : 'consulting',
         );
     if (fromFirestore == null) {
       return rest;
     }
-    final mergedActiveQuoteId = rest.activeQuoteId ?? fromFirestore.activeQuoteId;
+    final mergedActiveQuoteId =
+        rest.activeQuoteId ?? fromFirestore.activeQuoteId;
     String? mergedActiveQuoteStatus;
-    if (mergedActiveQuoteId != null && mergedActiveQuoteId == rest.activeQuoteId) {
+    if (mergedActiveQuoteId != null &&
+        mergedActiveQuoteId == rest.activeQuoteId) {
       mergedActiveQuoteStatus = rest.activeQuoteStatus;
     } else if (mergedActiveQuoteId != null &&
         mergedActiveQuoteId == fromFirestore.activeQuoteId) {
       mergedActiveQuoteStatus = fromFirestore.activeQuoteStatus;
     } else {
-      mergedActiveQuoteStatus = rest.activeQuoteStatus ?? fromFirestore.activeQuoteStatus;
+      mergedActiveQuoteStatus =
+          rest.activeQuoteStatus ?? fromFirestore.activeQuoteStatus;
     }
     return InquiryPipeline(
       step: fromFirestore.step,
@@ -402,7 +410,8 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       depositState: fromFirestore.depositState ?? rest.depositState,
       depositAmountMmk: rest.depositAmountMmk ?? fromFirestore.depositAmountMmk,
       depositInstructionsSentAt:
-          fromFirestore.depositInstructionsSentAt ?? rest.depositInstructionsSentAt,
+          fromFirestore.depositInstructionsSentAt ??
+          rest.depositInstructionsSentAt,
       depositPayment: rest.depositPayment,
       latestReceipt: rest.latestReceipt ?? fromFirestore.latestReceipt,
       timelineLogs: rest.timelineLogs,
@@ -478,21 +487,21 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment proof submitted.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Payment proof submitted.')));
       await _loadPipeline();
     } on InquiryApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } finally {
       if (mounted) {
@@ -607,7 +616,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
         _quoteActionBusyId = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quote declined. We will follow up soon.')),
+        const SnackBar(
+          content: Text('Quote declined. We will follow up soon.'),
+        ),
       );
       await _loadPipeline();
     } on InquiryApiException catch (e) {
@@ -726,267 +737,312 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
-                            child: StreamBuilder<
-                                QuerySnapshot<Map<String, dynamic>>>(
-                              stream: _messagesStream,
-                              builder: (context, msgSnap) {
-                                if (msgSnap.hasError) {
-                                  return Center(
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(24),
-                                      child: Text('${msgSnap.error}'),
-                                    ),
-                                  );
-                                }
-                                if (!msgSnap.hasData) {
-                                  return const Center(
-                                    child: CircularProgressIndicator(
-                                      color: AppColors.gold,
-                                      strokeWidth: 2,
-                                    ),
-                                  );
-                                }
-                                _ingestMessageSnapshotForPipeline(
-                                  msgSnap.data!,
-                                );
-                                final docs = List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(
-                                  msgSnap.data!.docs,
-                                )..sort((a, b) {
-                                    DateTime? toDate(dynamic v) {
-                                      if (v is Timestamp) {
-                                        return v.toDate();
-                                      }
-                                      return null;
+                            child:
+                                StreamBuilder<
+                                  QuerySnapshot<Map<String, dynamic>>
+                                >(
+                                  stream: _messagesStream,
+                                  builder: (context, msgSnap) {
+                                    if (msgSnap.hasError) {
+                                      return Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(24),
+                                          child: Text('${msgSnap.error}'),
+                                        ),
+                                      );
                                     }
+                                    if (!msgSnap.hasData) {
+                                      return const Center(
+                                        child: CircularProgressIndicator(
+                                          color: AppColors.gold,
+                                          strokeWidth: 2,
+                                        ),
+                                      );
+                                    }
+                                    _ingestMessageSnapshotForPipeline(
+                                      msgSnap.data!,
+                                    );
+                                    final docs =
+                                        List<
+                                            QueryDocumentSnapshot<
+                                              Map<String, dynamic>
+                                            >
+                                          >.from(msgSnap.data!.docs)
+                                          ..sort((a, b) {
+                                            DateTime? toDate(dynamic v) {
+                                              if (v is Timestamp) {
+                                                return v.toDate();
+                                              }
+                                              return null;
+                                            }
 
-                                    final aAt = toDate(a.data()['created_at']);
-                                    final bAt = toDate(b.data()['created_at']);
-                                    if (aAt != null && bAt != null) {
-                                      return aAt.compareTo(bAt);
-                                    }
-                                    if (aAt != null) {
-                                      return -1;
-                                    }
-                                    if (bAt != null) {
-                                      return 1;
-                                    }
-                                    return a.id.compareTo(b.id);
-                                  });
-                                final fsTimelineEvents = docs
-                                    .where(
-                                      (d) => _messageTypeKey(d.data()) == 'timeline_log',
-                                    )
-                                    .map((d) {
-                                      final m = d.data();
-                                      final text = _firestoreString(m['text']) ?? '';
-                                      final ts = m['created_at'];
-                                      DateTime? at;
-                                      if (ts is Timestamp) {
-                                        at = ts.toDate();
+                                            final aAt = toDate(
+                                              a.data()['created_at'],
+                                            );
+                                            final bAt = toDate(
+                                              b.data()['created_at'],
+                                            );
+                                            if (aAt != null && bAt != null) {
+                                              return aAt.compareTo(bAt);
+                                            }
+                                            if (aAt != null) {
+                                              return -1;
+                                            }
+                                            if (bAt != null) {
+                                              return 1;
+                                            }
+                                            return a.id.compareTo(b.id);
+                                          });
+                                    final fsTimelineEvents = docs
+                                        .where(
+                                          (d) =>
+                                              _messageTypeKey(d.data()) ==
+                                              'timeline_log',
+                                        )
+                                        .map((d) {
+                                          final m = d.data();
+                                          final text =
+                                              _firestoreString(m['text']) ?? '';
+                                          final ts = m['created_at'];
+                                          DateTime? at;
+                                          if (ts is Timestamp) {
+                                            at = ts.toDate();
+                                          }
+                                          return (text: text, at: at);
+                                        })
+                                        .where((e) => e.text.isNotEmpty)
+                                        .toList(growable: false);
+                                    final fallbackTimelineLogs =
+                                        _localTimelineLogs
+                                            .where((local) {
+                                              for (final remote
+                                                  in fsTimelineEvents) {
+                                                if (remote.text != local.text) {
+                                                  continue;
+                                                }
+                                                if (remote.at == null) {
+                                                  continue;
+                                                }
+                                                final diff = remote.at!
+                                                    .difference(local.at)
+                                                    .inSeconds
+                                                    .abs();
+                                                if (diff <= 12) {
+                                                  return false;
+                                                }
+                                              }
+                                              return true;
+                                            })
+                                            .toList(growable: false);
+                                    final persistedTimelineLogs =
+                                        <_LocalTimelineLog>[];
+                                    final rawPersisted =
+                                        effectivePipeline.timelineLogs ??
+                                        const [];
+                                    for (final t in rawPersisted) {
+                                      final text =
+                                          _firestoreString(
+                                            t['message'],
+                                          )?.trim() ??
+                                          '';
+                                      if (text.isEmpty) {
+                                        continue;
                                       }
-                                      return (text: text, at: at);
-                                    })
-                                    .where((e) => e.text.isNotEmpty)
-                                    .toList(growable: false);
-                                final fallbackTimelineLogs = _localTimelineLogs.where((local) {
-                                  for (final remote in fsTimelineEvents) {
-                                    if (remote.text != local.text) {
-                                      continue;
-                                    }
-                                    if (remote.at == null) {
-                                      continue;
-                                    }
-                                    final diff = remote.at!.difference(local.at).inSeconds.abs();
-                                    if (diff <= 12) {
-                                      return false;
-                                    }
-                                  }
-                                  return true;
-                                }).toList(growable: false);
-                                final persistedTimelineLogs = <_LocalTimelineLog>[];
-                                final rawPersisted = effectivePipeline.timelineLogs ?? const [];
-                                for (final t in rawPersisted) {
-                                  final text = _firestoreString(t['message'])?.trim() ?? '';
-                                  if (text.isEmpty) {
-                                    continue;
-                                  }
-                                  final rawAt = _firestoreString(t['occurred_at']);
-                                  final parsedAt = rawAt != null
-                                      ? DateTime.tryParse(rawAt)?.toLocal()
-                                      : null;
-                                  final at = parsedAt ?? DateTime.now();
-                                  var hasNearbyFs = false;
-                                  for (final remote in fsTimelineEvents) {
-                                    if (remote.text != text || remote.at == null) {
-                                      continue;
-                                    }
-                                    final diff = remote.at!
-                                        .toLocal()
-                                        .difference(at)
-                                        .inSeconds
-                                        .abs();
-                                    if (diff <= 45) {
-                                      hasNearbyFs = true;
-                                      break;
-                                    }
-                                  }
-                                  if (hasNearbyFs) {
-                                    continue;
-                                  }
-                                  persistedTimelineLogs.add(
-                                    _LocalTimelineLog(text: text, at: at),
-                                  );
-                                }
-                                final fallbackTimelineLogsFiltered =
-                                    fallbackTimelineLogs.where((local) {
-                                      for (final persisted in persistedTimelineLogs) {
-                                        if (persisted.text != local.text) {
+                                      final rawAt = _firestoreString(
+                                        t['occurred_at'],
+                                      );
+                                      final parsedAt = rawAt != null
+                                          ? DateTime.tryParse(rawAt)?.toLocal()
+                                          : null;
+                                      final at = parsedAt ?? DateTime.now();
+                                      var hasNearbyFs = false;
+                                      for (final remote in fsTimelineEvents) {
+                                        if (remote.text != text ||
+                                            remote.at == null) {
                                           continue;
                                         }
-                                        final diff = persisted.at
-                                            .difference(local.at)
+                                        final diff = remote.at!
+                                            .toLocal()
+                                            .difference(at)
                                             .inSeconds
                                             .abs();
-                                        if (diff <= 60) {
-                                          return false;
+                                        if (diff <= 45) {
+                                          hasNearbyFs = true;
+                                          break;
                                         }
                                       }
-                                      return true;
-                                    }).toList(growable: false);
-                                final activeQuoteId =
-                                    effectivePipeline.activeQuoteId;
-                                final hasFsQuoteCard = activeQuoteId != null &&
-                                    docs.any((doc) {
-                                      final d = doc.data();
-                                      return d['type'] == 'quote_card' &&
-                                          (d['quote_id'] as num?)?.toInt() ==
-                                              activeQuoteId;
-                                    });
-                                final showApiQuoteBanner = activeQuoteId !=
-                                        null &&
-                                    !hasFsQuoteCard;
-                                final showApiDepositPayment =
-                                    _showApiDepositPaymentCard(
-                                  effectivePipeline,
-                                  docs,
-                                );
-
-                                if (!_didInitialScrollToBottom &&
-                                    docs.isNotEmpty) {
-                                  _didInitialScrollToBottom = true;
-                                  WidgetsBinding.instance
-                                      .addPostFrameCallback((_) {
-                                    if (!mounted) {
-                                      return;
+                                      if (hasNearbyFs) {
+                                        continue;
+                                      }
+                                      persistedTimelineLogs.add(
+                                        _LocalTimelineLog(text: text, at: at),
+                                      );
                                     }
-                                    _scrollToBottom();
-                                  });
-                                }
+                                    final fallbackTimelineLogsFiltered =
+                                        fallbackTimelineLogs
+                                            .where((local) {
+                                              for (final persisted
+                                                  in persistedTimelineLogs) {
+                                                if (persisted.text !=
+                                                    local.text) {
+                                                  continue;
+                                                }
+                                                final diff = persisted.at
+                                                    .difference(local.at)
+                                                    .inSeconds
+                                                    .abs();
+                                                if (diff <= 60) {
+                                                  return false;
+                                                }
+                                              }
+                                              return true;
+                                            })
+                                            .toList(growable: false);
+                                    final activeQuoteId =
+                                        effectivePipeline.activeQuoteId;
+                                    final hasFsQuoteCard =
+                                        activeQuoteId != null &&
+                                        docs.any((doc) {
+                                          final d = doc.data();
+                                          return d['type'] == 'quote_card' &&
+                                              (d['quote_id'] as num?)
+                                                      ?.toInt() ==
+                                                  activeQuoteId;
+                                        });
+                                    final showApiQuoteBanner =
+                                        activeQuoteId != null &&
+                                        !hasFsQuoteCard;
+                                    final showApiDepositPayment =
+                                        _showApiDepositPaymentCard(
+                                          effectivePipeline,
+                                          docs,
+                                        );
 
-                                return CustomScrollView(
-                                  controller: _scrollController,
-                                  keyboardDismissBehavior:
-                                      ScrollViewKeyboardDismissBehavior.onDrag,
-                                  slivers: [
-                                    SliverToBoxAdapter(
-                                      child: Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          12,
-                                          0,
-                                          12,
-                                          8,
+                                    if (!_didInitialScrollToBottom &&
+                                        docs.isNotEmpty) {
+                                      _didInitialScrollToBottom = true;
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                            if (!mounted) {
+                                              return;
+                                            }
+                                            _scrollToBottom();
+                                          });
+                                    }
+
+                                    return CustomScrollView(
+                                      controller: _scrollController,
+                                      keyboardDismissBehavior:
+                                          ScrollViewKeyboardDismissBehavior
+                                              .onDrag,
+                                      slivers: [
+                                        SliverToBoxAdapter(
+                                          child: Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              12,
+                                              0,
+                                              12,
+                                              8,
+                                            ),
+                                            child: ConciergePipelineStepper(
+                                              pipeline: effectivePipeline,
+                                            ),
+                                          ),
                                         ),
-                                        child: ConciergePipelineStepper(
-                                          pipeline: effectivePipeline,
-                                        ),
-                                      ),
-                                    ),
-                                    if (showApiQuoteBanner)
-                                      SliverToBoxAdapter(
-                                        child: InquiryApiQuoteBanner(
-                                          key: ValueKey(activeQuoteId),
-                                          quoteId: activeQuoteId,
-                                          pipeline: effectivePipeline,
-                                          onAcceptQuote: _acceptQuote,
-                                          onDeclineQuote: _declineQuote,
-                                          quoteBusyId: _quoteActionBusyId,
-                                          actedQuoteIds: _actedQuoteIds,
-                                        ),
-                                      ),
-                                    if (showApiDepositPayment)
-                                      SliverToBoxAdapter(
-                                        child: Padding(
+                                        if (showApiQuoteBanner)
+                                          SliverToBoxAdapter(
+                                            child: InquiryApiQuoteBanner(
+                                              key: ValueKey(activeQuoteId),
+                                              quoteId: activeQuoteId,
+                                              pipeline: effectivePipeline,
+                                              onAcceptQuote: _acceptQuote,
+                                              onDeclineQuote: _declineQuote,
+                                              quoteBusyId: _quoteActionBusyId,
+                                              actedQuoteIds: _actedQuoteIds,
+                                            ),
+                                          ),
+                                        if (showApiDepositPayment)
+                                          SliverToBoxAdapter(
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                    12,
+                                                    0,
+                                                    12,
+                                                    8,
+                                                  ),
+                                              child:
+                                                  _apiDepositPaymentFromPipeline(
+                                                    effectivePipeline,
+                                                  ),
+                                            ),
+                                          ),
+                                        if (persistedTimelineLogs.isNotEmpty)
+                                          SliverToBoxAdapter(
+                                            child: Column(
+                                              children: persistedTimelineLogs
+                                                  .map(
+                                                    (e) => _TimelineLogLine(
+                                                      text: e.text,
+                                                      at: e.at,
+                                                      timeFmt: timeFmt,
+                                                    ),
+                                                  )
+                                                  .toList(growable: false),
+                                            ),
+                                          ),
+                                        if (fallbackTimelineLogsFiltered
+                                            .isNotEmpty)
+                                          SliverToBoxAdapter(
+                                            child: Column(
+                                              children:
+                                                  fallbackTimelineLogsFiltered
+                                                      .map(
+                                                        (e) => _TimelineLogLine(
+                                                          text: e.text,
+                                                          at: e.at,
+                                                          timeFmt: timeFmt,
+                                                        ),
+                                                      )
+                                                      .toList(growable: false),
+                                            ),
+                                          ),
+                                        SliverPadding(
                                           padding: const EdgeInsets.fromLTRB(
                                             12,
                                             0,
                                             12,
-                                            8,
+                                            12,
                                           ),
-                                          child: _apiDepositPaymentFromPipeline(
-                                            effectivePipeline,
+                                          sliver: SliverList(
+                                            delegate:
+                                                SliverChildBuilderDelegate((
+                                                  context,
+                                                  index,
+                                                ) {
+                                                  final doc = docs[index];
+                                                  final d = doc.data();
+                                                  return _MessageTile(
+                                                    data: d,
+                                                    timeFmt: timeFmt,
+                                                    onAcceptQuote: _acceptQuote,
+                                                    onDeclineQuote:
+                                                        _declineQuote,
+                                                    onViewReceipt:
+                                                        _openReceiptFromChat,
+                                                    quoteBusyId:
+                                                        _quoteActionBusyId,
+                                                    actedQuoteIds:
+                                                        _actedQuoteIds,
+                                                    pipeline: effectivePipeline,
+                                                  );
+                                                }, childCount: docs.length),
                                           ),
                                         ),
-                                      ),
-                                    if (persistedTimelineLogs.isNotEmpty)
-                                      SliverToBoxAdapter(
-                                        child: Column(
-                                          children: persistedTimelineLogs
-                                              .map(
-                                                (e) => _TimelineLogLine(
-                                                  text: e.text,
-                                                  at: e.at,
-                                                  timeFmt: timeFmt,
-                                                ),
-                                              )
-                                              .toList(growable: false),
-                                        ),
-                                      ),
-                                    if (fallbackTimelineLogsFiltered.isNotEmpty)
-                                      SliverToBoxAdapter(
-                                        child: Column(
-                                          children: fallbackTimelineLogsFiltered
-                                              .map(
-                                                (e) => _TimelineLogLine(
-                                                  text: e.text,
-                                                  at: e.at,
-                                                  timeFmt: timeFmt,
-                                                ),
-                                              )
-                                              .toList(growable: false),
-                                        ),
-                                      ),
-                                    SliverPadding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        12,
-                                        0,
-                                        12,
-                                        12,
-                                      ),
-                                      sliver: SliverList(
-                                        delegate:
-                                            SliverChildBuilderDelegate(
-                                          (context, index) {
-                                            final doc = docs[index];
-                                            final d = doc.data();
-                                            return _MessageTile(
-                                              data: d,
-                                              timeFmt: timeFmt,
-                                              onAcceptQuote: _acceptQuote,
-                                              onDeclineQuote: _declineQuote,
-                                              onViewReceipt: _openReceiptFromChat,
-                                              quoteBusyId: _quoteActionBusyId,
-                                              actedQuoteIds: _actedQuoteIds,
-                                              pipeline: effectivePipeline,
-                                            );
-                                          },
-                                          childCount: docs.length,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
+                                      ],
+                                    );
+                                  },
+                                ),
                           ),
                           if (_canUploadDeposit(effectivePipeline))
                             Padding(
@@ -994,8 +1050,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                               child: OutlinedButton.icon(
                                 onPressed: _uploadingDeposit
                                     ? null
-                                    : () =>
-                                        _pickAndUploadDeposit(effectivePipeline),
+                                    : () => _pickAndUploadDeposit(
+                                        effectivePipeline,
+                                      ),
                                 icon: _uploadingDeposit
                                     ? const SizedBox(
                                         width: 16,
@@ -1019,7 +1076,8 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                               padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                               child: OutlinedButton.icon(
                                 onPressed: () {
-                                  final receipt = effectivePipeline.latestReceipt;
+                                  final receipt =
+                                      effectivePipeline.latestReceipt;
                                   final receiptIdRaw = receipt?['id'];
                                   final receiptId = receiptIdRaw is num
                                       ? receiptIdRaw.toInt()
@@ -1035,7 +1093,8 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                   final receiptModel = PaymentReceipt(
                                     id: receiptId,
                                     receiptNumber:
-                                        (receipt?['receipt_number'] ?? 'Receipt')
+                                        (receipt?['receipt_number'] ??
+                                                'Receipt')
                                             .toString(),
                                     orderId: orderId,
                                     amountMmk: amount,
@@ -1046,8 +1105,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                   );
                                   Navigator.of(context).push<void>(
                                     MaterialPageRoute(
-                                      builder: (_) =>
-                                          ReceiptDetailScreen(receipt: receiptModel),
+                                      builder: (_) => ReceiptDetailScreen(
+                                        receipt: receiptModel,
+                                      ),
                                     ),
                                   );
                                 },
@@ -1288,13 +1348,19 @@ class _MessageTile extends StatelessWidget {
               bankName: _firestoreString(data['bank_name']) ?? '',
               bankAccountNumber:
                   _firestoreString(data['bank_account_number']) ?? '',
-              bankAccountName: _firestoreString(data['bank_account_name']) ?? '',
-              paymentMethodLabel: _firestoreString(data['payment_method_label']),
+              bankAccountName:
+                  _firestoreString(data['bank_account_name']) ?? '',
+              paymentMethodLabel: _firestoreString(
+                data['payment_method_label'],
+              ),
               qrImageUrl: _firestoreString(data['qr_image_url']),
               orderTotalMmk: _firestoreString(data['order_total_mmk']),
-              creditedDepositMmk: _firestoreString(data['credited_deposit_mmk']),
-              balanceRemainingMmk:
-                  _firestoreString(data['balance_remaining_mmk']),
+              creditedDepositMmk: _firestoreString(
+                data['credited_deposit_mmk'],
+              ),
+              balanceRemainingMmk: _firestoreString(
+                data['balance_remaining_mmk'],
+              ),
             ),
           ),
         ),
@@ -1303,6 +1369,20 @@ class _MessageTile extends StatelessWidget {
     if (type == 'image') {
       final url = data['image_url'] as String? ?? '';
       final caption = data['caption'] as String? ?? '';
+      final stageRaw = _firestoreString(data['stage'])?.trim() ?? '';
+      final noteRaw = _firestoreString(data['note'])?.trim() ?? '';
+      String stageLabel = '';
+      if (stageRaw.isNotEmpty) {
+        if (stageRaw == 'qc') {
+          stageLabel = 'QC';
+        } else {
+          stageLabel = '${stageRaw[0].toUpperCase()}${stageRaw.substring(1)}';
+        }
+      }
+      final composedCaption = [
+        if (stageLabel.isNotEmpty) 'Workshop · $stageLabel',
+        if (noteRaw.isNotEmpty) noteRaw,
+      ].join(' · ');
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Align(
@@ -1337,7 +1417,9 @@ class _MessageTile extends StatelessWidget {
                     ),
                   const SizedBox(height: 6),
                   PremiumText.caption(
-                    caption.isEmpty ? 'Workshop update' : caption,
+                    composedCaption.isNotEmpty
+                        ? composedCaption
+                        : (caption.isEmpty ? 'Workshop update' : caption),
                     color: AppColors.textSecondary,
                   ),
                 ],
@@ -1388,7 +1470,8 @@ class _MessageTile extends StatelessWidget {
       );
     }
     if (type == 'receipt_card') {
-      final receiptNumber = _firestoreString(data['receipt_number']) ?? 'Receipt';
+      final receiptNumber =
+          _firestoreString(data['receipt_number']) ?? 'Receipt';
       final amountMmk = _firestoreString(data['amount_mmk']) ?? '0';
       final ctaLabel = _firestoreString(data['cta_label']) ?? 'View Receipt';
 
@@ -1452,10 +1535,7 @@ class _MessageTile extends StatelessWidget {
 }
 
 class _LocalTimelineLog {
-  const _LocalTimelineLog({
-    required this.text,
-    required this.at,
-  });
+  const _LocalTimelineLog({required this.text, required this.at});
 
   final String text;
   final DateTime at;
@@ -1515,13 +1595,11 @@ class _TextBubble extends StatelessWidget {
         maxWidth: MediaQuery.sizeOf(context).width * 0.82,
       ),
       child: Column(
-        crossAxisAlignment:
-            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
-          Text(
-            text,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
+          Text(text, style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 6),
           PremiumText.caption(caption),
         ],
