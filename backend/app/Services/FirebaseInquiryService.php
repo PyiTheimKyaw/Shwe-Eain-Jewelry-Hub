@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Inquiry;
+use App\Models\InquiryTimelineLog;
 use App\Models\Order;
 use App\Models\OrderProgressAttachment;
 use App\Models\OrderProgressEvent;
@@ -337,6 +338,17 @@ class FirebaseInquiryService
      */
     public function publishTimelineLogMessage(Inquiry $inquiry, string $message): void
     {
+        $message = trim($message);
+        if ($message === '') {
+            return;
+        }
+
+        InquiryTimelineLog::query()->create([
+            'inquiry_id' => $inquiry->id,
+            'message' => $message,
+            'occurred_at' => now(),
+        ]);
+
         $firestore = $this->firestoreClient();
         if ($firestore === null) {
             Log::warning('firebase.timeline_log_skipped', [
@@ -347,7 +359,7 @@ class FirebaseInquiryService
             return;
         }
 
-        if ($inquiry->firebase_thread_id === null || trim($message) === '') {
+        if ($inquiry->firebase_thread_id === null) {
             return;
         }
 
@@ -355,7 +367,7 @@ class FirebaseInquiryService
             $this->addThreadMessage($firestore, (string) $inquiry->firebase_thread_id, [
                 'type' => 'timeline_log',
                 'sender_role' => 'system',
-                'text' => trim($message),
+                'text' => $message,
                 'created_at' => new Timestamp(new \DateTimeImmutable),
             ]);
         } catch (Throwable $e) {

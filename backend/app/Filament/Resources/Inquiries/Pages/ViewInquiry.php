@@ -11,6 +11,20 @@ class ViewInquiry extends ViewRecord
 {
     protected static string $resource = InquiryResource::class;
 
+    /**
+     * Re-fetch the record so status/workflow match customer actions (e.g. quote decline) without a manual refresh.
+     *
+     * @var array<string, string>
+     */
+    protected array $extraBodyAttributes = [
+        'wire:poll.2s' => 'pollInquiryView',
+    ];
+
+    public function pollInquiryView(): void
+    {
+        $this->record = $this->resolveRecord($this->record->getKey());
+    }
+
     protected function getHeaderActions(): array
     {
         return [

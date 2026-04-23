@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Inquiry;
+use App\Models\InquiryTimelineLog;
 use App\Models\Order;
 use App\Models\OrderAssignment;
 use App\Models\Payment;
@@ -99,6 +100,7 @@ class InquiryPipelinePresenter
                 'latest_receipt' => $this->latestReceiptDisplay($latestOrder),
                 'primary_assignment_id' => $latestOrder->assignments->first()?->id,
                 'primary_artisan_user_id' => $latestOrder->assignments->first()?->artisan_user_id,
+                'timeline_logs' => $this->timelineLogs($inquiry),
             ];
         }
 
@@ -122,6 +124,7 @@ class InquiryPipelinePresenter
                 'latest_receipt' => null,
                 'primary_assignment_id' => null,
                 'primary_artisan_user_id' => null,
+                'timeline_logs' => $this->timelineLogs($inquiry),
             ];
         }
 
@@ -145,6 +148,7 @@ class InquiryPipelinePresenter
                 'latest_receipt' => null,
                 'primary_assignment_id' => null,
                 'primary_artisan_user_id' => null,
+                'timeline_logs' => $this->timelineLogs($inquiry),
             ];
         }
 
@@ -163,7 +167,28 @@ class InquiryPipelinePresenter
             'latest_receipt' => null,
             'primary_assignment_id' => null,
             'primary_artisan_user_id' => null,
+            'timeline_logs' => $this->timelineLogs($inquiry),
         ];
+    }
+
+    /**
+     * @return array<int, array{id:int,message:string,occurred_at:?string}>
+     */
+    protected function timelineLogs(Inquiry $inquiry): array
+    {
+        return InquiryTimelineLog::query()
+            ->where('inquiry_id', $inquiry->id)
+            ->orderByDesc('id')
+            ->limit(120)
+            ->get(['id', 'message', 'occurred_at'])
+            ->sortBy('id')
+            ->values()
+            ->map(fn (InquiryTimelineLog $log): array => [
+                'id' => $log->id,
+                'message' => (string) $log->message,
+                'occurred_at' => $log->occurred_at?->toIso8601String(),
+            ])
+            ->all();
     }
 
     /**

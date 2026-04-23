@@ -17,6 +17,8 @@
 @endphp
 
 <x-filament-panels::page>
+    <div id="jh-chat-poll-sentinel" class="sr-only" wire:poll.visible.2s="pollChatSync" aria-hidden="true"></div>
+    <div>
     @if (! $showChat)
         <x-filament::section>
             <p class="text-sm text-gray-600 dark:text-gray-400">
@@ -153,6 +155,7 @@
                             $__jhAdminStatic = [
                                 'quote' => $adminQuoteCardPayload,
                                 'payment' => $pipeline['deposit_payment'] ?? null,
+                                'timeline_logs' => $pipeline['timeline_logs'] ?? [],
                                 'recordCaption' => __('Record (matches customer app)'),
                             ];
                         @endphp
@@ -381,6 +384,7 @@
             </div>
         </dialog>
     @endif
+    </div>
 </x-filament-panels::page>
 
 @if ($showChat)
@@ -418,6 +422,44 @@
                 const firebaseConfig = @json($__firebaseWebConfig);
                 const token = @json($firebaseToken);
                 const threadId = @json($threadId);
+                function setChatPollingEnabled(enabled) {
+                    var sentinel = document.getElementById('jh-chat-poll-sentinel');
+                    if (!sentinel) {
+                        return;
+                    }
+                    sentinel.classList.toggle('hidden', !enabled);
+                }
+
+                function syncPollingFromDialogs() {
+                    var quoteDialog = document.getElementById('jh-dialog-quote');
+                    var paymentDialog = document.getElementById('jh-dialog-payment');
+                    var hasOpenDialog = Boolean((quoteDialog && quoteDialog.open) || (paymentDialog && paymentDialog.open));
+                    setChatPollingEnabled(!hasOpenDialog);
+                }
+
+                function bindDialogPollingState(dialogId) {
+                    var dlg = document.getElementById(dialogId);
+                    if (!dlg) {
+                        return;
+                    }
+                    dlg.addEventListener('click', syncPollingFromDialogs);
+                    dlg.addEventListener('close', function () {
+                        syncPollingFromDialogs();
+                    });
+                    dlg.addEventListener('cancel', function () {
+                        syncPollingFromDialogs();
+                    });
+                    try {
+                        var observer = new MutationObserver(syncPollingFromDialogs);
+                        observer.observe(dlg, { attributes: true, attributeFilter: ['open'] });
+                    } catch (e) {
+                        // no-op
+                    }
+                }
+
+                bindDialogPollingState('jh-dialog-quote');
+                bindDialogPollingState('jh-dialog-payment');
+                syncPollingFromDialogs();
 
                 function esc(s) {
                     return String(s || '').replace(/</g, '&lt;');
@@ -752,6 +794,31 @@
                     container.appendChild(wrap);
                 }
 
+                function appendMysqlTimelineBlock(container, text, occurredAt) {
+                    var wrap = document.createElement('div');
+                    wrap.className = 'mb-3 flex w-full flex-col items-center';
+                    var textEl = document.createElement('p');
+                    textEl.className = 'text-center text-xs text-gray-500 dark:text-gray-400';
+                    textEl.textContent = String(text || '').trim();
+                    var cap = document.createElement('p');
+                    cap.className =
+                        'mt-0.5 text-center text-[11px] text-gray-500 dark:text-gray-400';
+                    var timeLabel = '';
+                    if (occurredAt) {
+                        var d = new Date(occurredAt);
+                        if (!isNaN(d.getTime())) {
+                            timeLabel = d.toLocaleTimeString(undefined, {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                            });
+                        }
+                    }
+                    cap.textContent = timeLabel ? 'Workflow update · ' + timeLabel : 'Workflow update';
+                    wrap.appendChild(textEl);
+                    wrap.appendChild(cap);
+                    container.appendChild(wrap);
+                }
+
                 function renderMysqlCards(serverCardsEl) {
                     var hq = null;
                     var hp = null;
@@ -797,6 +864,17 @@
                         if (data.payment.order_number) {
                             hp = String(data.payment.order_number);
                         }
+                    }
+                    if (Array.isArray(data.timeline_logs)) {
+                        var timelineWrap = document.createElement('div');
+                        data.timeline_logs.forEach(function (t) {
+                            var msg = t && t.message != null ? String(t.message) : '';
+                            if (!msg.trim()) {
+                                return;
+                            }
+                            appendMysqlTimelineBlock(timelineWrap, msg, t.occurred_at || null);
+                        });
+                        nextCardsHtml += timelineWrap.innerHTML;
                     }
 
                     serverCardsEl.innerHTML = nextCardsHtml;

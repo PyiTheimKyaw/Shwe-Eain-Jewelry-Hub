@@ -12,6 +12,7 @@ class InquiryPipeline {
     this.depositInstructionsSentAt,
     this.depositPayment,
     this.latestReceipt,
+    this.timelineLogs,
   });
 
   final String step;
@@ -31,6 +32,7 @@ class InquiryPipeline {
   /// Same keys as Firestore `payment_info_card` when MySQL has instructions (REST-only).
   final Map<String, dynamic>? depositPayment;
   final Map<String, dynamic>? latestReceipt;
+  final List<Map<String, dynamic>>? timelineLogs;
 
   /// Additional deposit still required on the current order (supersede / top-up), from API
   /// `deposit_payment.additional_deposit_due_mmk` or root `deposit_amount_mmk`. Null if unknown.
@@ -65,6 +67,14 @@ class InquiryPipeline {
     if (rawReceipt is Map<String, dynamic>) {
       latestReceipt = rawReceipt;
     }
+    final rawTimeline = json['timeline_logs'];
+    List<Map<String, dynamic>>? timelineLogs;
+    if (rawTimeline is List) {
+      timelineLogs = rawTimeline
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
+    }
     String? activeQuoteStatus;
     final rawAq = json['active_quote'];
     if (rawAq is Map<String, dynamic>) {
@@ -82,6 +92,7 @@ class InquiryPipeline {
       depositInstructionsSentAt: json['deposit_instructions_sent_at'] as String?,
       depositPayment: depositPayment,
       latestReceipt: latestReceipt,
+      timelineLogs: timelineLogs,
     );
   }
 
@@ -107,6 +118,7 @@ class InquiryPipeline {
       depositInstructionsSentAt: null,
       depositPayment: null,
       latestReceipt: null,
+      timelineLogs: null,
     );
   }
 }

@@ -13,6 +13,7 @@ class InquiriesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->poll('1s')
             ->columns([
                 TextColumn::make('id')
                     ->sortable(),

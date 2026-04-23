@@ -405,6 +405,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
           fromFirestore.depositInstructionsSentAt ?? rest.depositInstructionsSentAt,
       depositPayment: rest.depositPayment,
       latestReceipt: rest.latestReceipt ?? fromFirestore.latestReceipt,
+      timelineLogs: rest.timelineLogs,
     );
   }
 
@@ -802,6 +803,56 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                   }
                                   return true;
                                 }).toList(growable: false);
+                                final persistedTimelineLogs = <_LocalTimelineLog>[];
+                                final rawPersisted = effectivePipeline.timelineLogs ?? const [];
+                                for (final t in rawPersisted) {
+                                  final text = _firestoreString(t['message'])?.trim() ?? '';
+                                  if (text.isEmpty) {
+                                    continue;
+                                  }
+                                  final rawAt = _firestoreString(t['occurred_at']);
+                                  final parsedAt = rawAt != null
+                                      ? DateTime.tryParse(rawAt)?.toLocal()
+                                      : null;
+                                  final at = parsedAt ?? DateTime.now();
+                                  var hasNearbyFs = false;
+                                  for (final remote in fsTimelineEvents) {
+                                    if (remote.text != text || remote.at == null) {
+                                      continue;
+                                    }
+                                    final diff = remote.at!
+                                        .toLocal()
+                                        .difference(at)
+                                        .inSeconds
+                                        .abs();
+                                    if (diff <= 45) {
+                                      hasNearbyFs = true;
+                                      break;
+                                    }
+                                  }
+                                  if (hasNearbyFs) {
+                                    continue;
+                                  }
+                                  persistedTimelineLogs.add(
+                                    _LocalTimelineLog(text: text, at: at),
+                                  );
+                                }
+                                final fallbackTimelineLogsFiltered =
+                                    fallbackTimelineLogs.where((local) {
+                                      for (final persisted in persistedTimelineLogs) {
+                                        if (persisted.text != local.text) {
+                                          continue;
+                                        }
+                                        final diff = persisted.at
+                                            .difference(local.at)
+                                            .inSeconds
+                                            .abs();
+                                        if (diff <= 60) {
+                                          return false;
+                                        }
+                                      }
+                                      return true;
+                                    }).toList(growable: false);
                                 final activeQuoteId =
                                     effectivePipeline.activeQuoteId;
                                 final hasFsQuoteCard = activeQuoteId != null &&
@@ -876,10 +927,24 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                           ),
                                         ),
                                       ),
-                                    if (fallbackTimelineLogs.isNotEmpty)
+                                    if (persistedTimelineLogs.isNotEmpty)
                                       SliverToBoxAdapter(
                                         child: Column(
-                                          children: fallbackTimelineLogs
+                                          children: persistedTimelineLogs
+                                              .map(
+                                                (e) => _TimelineLogLine(
+                                                  text: e.text,
+                                                  at: e.at,
+                                                  timeFmt: timeFmt,
+                                                ),
+                                              )
+                                              .toList(growable: false),
+                                        ),
+                                      ),
+                                    if (fallbackTimelineLogsFiltered.isNotEmpty)
+                                      SliverToBoxAdapter(
+                                        child: Column(
+                                          children: fallbackTimelineLogsFiltered
                                               .map(
                                                 (e) => _TimelineLogLine(
                                                   text: e.text,

@@ -36,4 +36,9 @@ class Inquiry extends Model
     {
         return $this->hasMany(Quote::class);
     }
+
+    public function timelineLogs(): HasMany
+    {
+        return $this->hasMany(InquiryTimelineLog::class);
+    }
 }

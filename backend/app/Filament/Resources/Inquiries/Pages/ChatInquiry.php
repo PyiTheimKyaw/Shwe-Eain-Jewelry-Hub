@@ -109,6 +109,12 @@ class ChatInquiry extends Page
         $this->adminQuoteCardPayload = $this->buildAdminQuoteCardPayload($inquiry);
     }
 
+    public function pollChatSync(): void
+    {
+        $this->refreshPipeline();
+        $this->dispatch('jh-admin-static-refresh');
+    }
+
     /** Informational: confirmed deposit exists (publish is still allowed). */
     public function getQuotePublishWarningProperty(): ?string
     {
