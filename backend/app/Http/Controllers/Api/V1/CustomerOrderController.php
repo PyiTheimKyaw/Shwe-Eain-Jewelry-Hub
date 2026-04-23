@@ -16,7 +16,7 @@ class CustomerOrderController extends Controller
             ->with([
                 'items.product.images',
                 'receipts',
-                'quote:id,inquiry_id',
+                'quote.inquiry.attachments',
             ])
             ->orderByDesc('created_at')
             ->paginate(20);
@@ -30,7 +30,7 @@ class CustomerOrderController extends Controller
 
         $order->load([
             'items.product.images',
-            'quote:id,inquiry_id',
+            'quote.inquiry.attachments',
             'assignments.artisan',
             'progressEvents.attachments',
             'progressEvents.artisan',

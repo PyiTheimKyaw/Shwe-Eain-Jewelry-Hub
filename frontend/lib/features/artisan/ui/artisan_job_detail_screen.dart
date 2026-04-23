@@ -55,6 +55,31 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
         .toList(growable: false);
   }
 
+  List<String> _inquiryAttachmentUrls() {
+    final order = _assignment?['order'];
+    if (order is! Map) {
+      return const [];
+    }
+    final quote = order['quote'];
+    if (quote is! Map) {
+      return const [];
+    }
+    final inquiry = quote['inquiry'];
+    if (inquiry is! Map) {
+      return const [];
+    }
+    final raw = inquiry['attachments'];
+    final attachments = (raw is List ? raw : const <dynamic>[])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
+    return attachments
+        .map((a) => (a['storage_path'] ?? '').toString().trim())
+        .where((path) => path.isNotEmpty)
+        .map(publicStorageUrl)
+        .toList(growable: false);
+  }
+
   static const List<String> _progressStages = <String>[
     'casting',
     'filing',
@@ -495,6 +520,38 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                           child: PremiumText.body(
                             'No item details available for this assignment yet.',
                             color: AppColors.textSecondary,
+                          ),
+                        ),
+                      if (_inquiryAttachmentUrls().isNotEmpty)
+                        AppGlassCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              PremiumText.caption(
+                                'INITIAL INQUIRY PHOTOS',
+                                color: AppColors.goldMuted,
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _inquiryAttachmentUrls()
+                                    .map(
+                                      (url) => ClipRRect(
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadii.sm,
+                                        ),
+                                        child: CachedNetworkImage(
+                                          imageUrl: url,
+                                          width: 88,
+                                          height: 88,
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                            ],
                           ),
                         ),
                       const SizedBox(height: 12),

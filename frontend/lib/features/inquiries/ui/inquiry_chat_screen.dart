@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
+import 'package:jewelry_hub/core/storage/public_storage_url.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
@@ -40,6 +41,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
   bool _connecting = true;
   String? _error;
   bool _sending = false;
+  bool _sendingImage = false;
   bool _uploadingDeposit = false;
   InquiryPipeline? _restPipeline;
   final Set<int> _actedQuoteIds = {};
@@ -547,6 +549,60 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     }
   }
 
+  Future<void> _sendImage() async {
+    if (_sendingImage) {
+      return;
+    }
+    final threadId = widget.inquiry.firebaseThreadId;
+    if (threadId == null) {
+      return;
+    }
+    final bearer = context.read<AuthProvider>().token;
+    final uid = context.read<AuthProvider>().user?.id;
+    if (bearer == null) {
+      return;
+    }
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (picked == null) {
+      return;
+    }
+    setState(() => _sendingImage = true);
+    try {
+      final imageUrl = await InquiryApi.uploadChatImage(
+        bearerToken: bearer,
+        file: picked,
+        folder: 'inquiry-chat',
+      );
+      await FirebaseFirestore.instance
+          .collection('inquiry_threads')
+          .doc(threadId)
+          .collection('messages')
+          .add({
+            'type': 'image',
+            'image_url': imageUrl,
+            'caption': 'Customer image',
+            'sender_role': 'customer',
+            'created_at': FieldValue.serverTimestamp(),
+            'laravel_user_id': uid,
+            'text': 'Image message',
+          });
+      _scrollToBottom(animated: true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Image send failed: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sendingImage = false);
+      }
+    }
+  }
+
   Future<void> _acceptQuote(int quoteId) async {
     final bearer = context.read<AuthProvider>().token;
     if (bearer == null) {
@@ -936,6 +992,61 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                           ScrollViewKeyboardDismissBehavior
                                               .onDrag,
                                       slivers: [
+                                        if (widget
+                                            .inquiry
+                                            .attachmentStoragePaths
+                                            .isNotEmpty)
+                                          SliverToBoxAdapter(
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.fromLTRB(
+                                                    12,
+                                                    0,
+                                                    12,
+                                                    8,
+                                                  ),
+                                              child: AppGlassCard(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    PremiumText.caption(
+                                                      'INITIAL INQUIRY PHOTOS',
+                                                      color: AppColors.goldMuted,
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 8,
+                                                      children: widget
+                                                          .inquiry
+                                                          .attachmentStoragePaths
+                                                          .map(
+                                                            (path) => ClipRRect(
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    AppRadii.sm,
+                                                                  ),
+                                                              child: CachedNetworkImage(
+                                                                imageUrl:
+                                                                    publicStorageUrl(
+                                                                      path,
+                                                                    ),
+                                                                width: 88,
+                                                                height: 88,
+                                                                fit: BoxFit.cover,
+                                                              ),
+                                                            ),
+                                                          )
+                                                          .toList(
+                                                            growable: false,
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         SliverToBoxAdapter(
                                           child: Padding(
                                             padding: const EdgeInsets.fromLTRB(
@@ -1134,6 +1245,24 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
+                                IconButton(
+                                  onPressed: _sendingImage ? null : _sendImage,
+                                  icon: _sendingImage
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            color: AppColors.gold,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.photo_library_outlined,
+                                          color: AppColors.gold,
+                                        ),
+                                  tooltip: 'Send image',
+                                ),
+                                const SizedBox(width: 4),
                                 _sending
                                     ? const Padding(
                                         padding: EdgeInsets.all(12),

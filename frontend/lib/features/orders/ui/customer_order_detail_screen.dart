@@ -81,6 +81,20 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
     final latestInstructions = assignments.isEmpty
         ? ''
         : ((assignments.first['instructions'] ?? '') as String).trim();
+    final quoteRaw = _order?['quote'];
+    final quote = quoteRaw is Map
+        ? Map<String, dynamic>.from(quoteRaw)
+        : const <String, dynamic>{};
+    final inquiryRaw = quote['inquiry'];
+    final inquiry = inquiryRaw is Map
+        ? Map<String, dynamic>.from(inquiryRaw)
+        : const <String, dynamic>{};
+    final initialAttachmentUrls = ((inquiry['attachments'] as List<dynamic>?) ?? const [])
+        .whereType<Map>()
+        .map((e) => (e['storage_path'] ?? '').toString().trim())
+        .where((path) => path.isNotEmpty)
+        .map(publicStorageUrl)
+        .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -153,6 +167,40 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                         ),
                       ),
                     if (latestInstructions.isNotEmpty) const SizedBox(height: 12),
+                    if (initialAttachmentUrls.isNotEmpty)
+                      AppGlassCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            PremiumText.caption(
+                              'INITIAL INQUIRY PHOTOS',
+                              color: AppColors.goldMuted,
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: initialAttachmentUrls
+                                  .map(
+                                    (url) => ClipRRect(
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadii.sm,
+                                      ),
+                                      child: CachedNetworkImage(
+                                        imageUrl: url,
+                                        width: 88,
+                                        height: 88,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (initialAttachmentUrls.isNotEmpty)
+                      const SizedBox(height: 12),
                     ...items.map((item) {
                       final title =
                           (item['title_snapshot'] ?? 'Order item').toString();

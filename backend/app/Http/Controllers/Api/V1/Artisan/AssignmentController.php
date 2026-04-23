@@ -16,6 +16,7 @@ class AssignmentController extends Controller
             ->with([
                 'order.customer',
                 'order.items.product.images',
+                'order.quote.inquiry.attachments',
                 'orderItem.product.images',
             ])
             ->orderByDesc('created_at')
@@ -31,6 +32,7 @@ class AssignmentController extends Controller
         $assignment->load([
             'order.customer',
             'order.items.product.images',
+            'order.quote.inquiry.attachments',
             'orderItem.product.images',
         ]);
 

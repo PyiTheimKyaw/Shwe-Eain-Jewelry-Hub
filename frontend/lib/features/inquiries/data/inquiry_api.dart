@@ -205,4 +205,39 @@ class InquiryApi {
       );
     }
   }
+
+  static Future<String> uploadChatImage({
+    required String bearerToken,
+    required XFile file,
+    String folder = 'inquiry-chat',
+  }) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/uploads');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(_authHeaders(bearerToken));
+    request.fields['folder'] = folder;
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    final streamed = await request.send();
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode != 201) {
+      throw InquiryApiException(
+        'Upload image ${streamed.statusCode}: ${_errorBody(body)}',
+      );
+    }
+    final map = json.decode(body) as Map<String, dynamic>;
+    final rawUrl = (map['url'] ?? '').toString().trim();
+    final storagePath = (map['storage_path'] ?? '').toString().trim();
+    final base = ApiConfig.baseUrl.replaceAll(RegExp(r'/$'), '');
+
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl;
+    }
+    if (rawUrl.startsWith('/')) {
+      return '$base$rawUrl';
+    }
+    if (storagePath.isNotEmpty) {
+      return '$base/storage/$storagePath';
+    }
+    throw InquiryApiException('Upload image succeeded but URL is missing.');
+  }
 }

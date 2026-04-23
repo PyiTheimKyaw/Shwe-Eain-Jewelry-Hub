@@ -13,7 +13,7 @@
     };
     /** @var \App\Models\Inquiry $inquiry */
     $inquiry = $this->getRecord();
-    $inquiry->loadMissing('customer', 'product');
+    $inquiry->loadMissing('customer', 'product', 'attachments');
 @endphp
 
 <x-filament-panels::page>
@@ -145,6 +145,25 @@
                                     <span class="text-gray-500 dark:text-gray-600">{{ __('Thread') }}</span>
                                     <code class="text-[10px] text-gray-500">{{ $threadId }}</code>
                                 </p>
+                                @if ($inquiry->attachments->isNotEmpty())
+                                    <div class="mt-3">
+                                        <p class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-primary-600/80 dark:text-primary-400/80">
+                                            {{ __('Initial inquiry photos') }}
+                                        </p>
+                                        <div class="flex flex-wrap gap-2">
+                                            @foreach ($inquiry->attachments as $att)
+                                                <a href="{{ asset('storage/'.$att->storage_path) }}" target="_blank" rel="noopener noreferrer" class="block">
+                                                    <img
+                                                        src="{{ asset('storage/'.$att->storage_path) }}"
+                                                        alt="{{ __('Inquiry attachment') }}"
+                                                        class="h-16 w-16 rounded-md border border-gray-300 object-cover shadow-sm dark:border-gray-600"
+                                                        loading="lazy"
+                                                    />
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </aside>
@@ -211,6 +230,15 @@
                                     class="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-inner placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
                                     placeholder="{{ __('Message the customer…') }}"
                                 />
+                                <input id="jh-image-input" type="file" accept="image/*" class="hidden" />
+                                <button
+                                    id="jh-image-btn"
+                                    type="button"
+                                    class="inline-flex shrink-0 items-center justify-center rounded-lg border border-primary-500/40 bg-white px-3 py-2.5 text-sm font-semibold text-primary-700 shadow-sm transition hover:bg-primary-500/10 dark:border-primary-400/40 dark:bg-gray-900 dark:text-primary-300"
+                                    title="{{ __('Send image') }}"
+                                >
+                                    <svg class="h-5 w-5" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.159 2.159m-18 3.091V6.75A2.25 2.25 0 0 1 5.25 4.5h13.5A2.25 2.25 0 0 1 21 6.75v10.5A2.25 2.25 0 0 1 18.75 19.5H5.25A2.25 2.25 0 0 1 3 17.25Z" /></svg>
+                                </button>
                                 <button
                                     type="submit"
                                     class="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-500"
@@ -437,6 +465,7 @@
                 const firebaseConfig = @json($__firebaseWebConfig);
                 const token = @json($firebaseToken);
                 const threadId = @json($threadId);
+                const inquiryId = @json($inquiry->id);
                 function setChatPollingEnabled(enabled) {
                     var sentinel = document.getElementById('jh-chat-poll-sentinel');
                     if (!sentinel) {
@@ -1070,7 +1099,9 @@
                 const box = document.getElementById('jh-messages');
                 const form = document.getElementById('jh-form');
                 const input = document.getElementById('jh-input');
-                if (!box || !form || !input) {
+                const imageInput = document.getElementById('jh-image-input');
+                const imageBtn = document.getElementById('jh-image-btn');
+                if (!box || !form || !input || !imageInput || !imageBtn) {
                     return;
                 }
 
@@ -1213,6 +1244,73 @@
                         .catch(function (err) {
                             alert('Send failed: ' + err);
                         });
+                });
+
+                function setImageSending(busy) {
+                    imageBtn.disabled = busy;
+                    imageBtn.classList.toggle('opacity-60', busy);
+                    imageBtn.classList.toggle('cursor-not-allowed', busy);
+                }
+
+                async function uploadImageToPublic(file) {
+                    var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+                    var fd = new FormData();
+                    fd.append('file', file);
+                    fd.append('folder', 'inquiry-chat-' + inquiryId);
+                    var res = await fetch('/api/v1/uploads', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                        },
+                        body: fd,
+                    });
+                    var payload = await res.json();
+                    if (!res.ok) {
+                        throw new Error(payload?.message || ('Upload failed: ' + res.status));
+                    }
+                    var url = String(payload.url || '');
+                    if (!url) {
+                        throw new Error('Upload succeeded but URL is missing.');
+                    }
+                    if (url.indexOf('http://') === 0 || url.indexOf('https://') === 0) {
+                        return url;
+                    }
+                    return new URL(url, window.location.origin).toString();
+                }
+
+                imageBtn.addEventListener('click', function () {
+                    imageInput.click();
+                });
+
+                imageInput.addEventListener('change', async function () {
+                    var file = imageInput.files && imageInput.files[0];
+                    imageInput.value = '';
+                    if (!file) {
+                        return;
+                    }
+                    try {
+                        setImageSending(true);
+                        var imageUrl = await uploadImageToPublic(file);
+                        await firebase
+                            .firestore()
+                            .collection('inquiry_threads')
+                            .doc(threadId)
+                            .collection('messages')
+                            .add({
+                                type: 'image',
+                                image_url: imageUrl,
+                                caption: 'Admin image',
+                                text: 'Image message',
+                                sender_role: 'admin',
+                                created_at: firebase.firestore.FieldValue.serverTimestamp(),
+                            });
+                    } catch (err) {
+                        alert('Image send failed: ' + err);
+                    } finally {
+                        setImageSending(false);
+                    }
                 });
             })();
         </script>

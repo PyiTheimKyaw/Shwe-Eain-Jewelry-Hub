@@ -33,11 +33,12 @@ class InquiryController extends Controller
         if (! empty($data['attachments'])) {
             foreach ($request->file('attachments', []) as $file) {
                 $path = $file->store('inquiries/'.$inquiry->id, 'public');
-                InquiryAttachment::create([
+                $attachment = InquiryAttachment::create([
                     'inquiry_id' => $inquiry->id,
                     'storage_path' => $path,
                     'mime_type' => $file->getMimeType(),
                 ]);
+                $firebaseInquiry->publishInquiryAttachmentMessage($inquiry, $attachment);
             }
         }
 

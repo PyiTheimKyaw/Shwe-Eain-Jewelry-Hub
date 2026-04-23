@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Inquiry;
+use App\Models\InquiryAttachment;
 use App\Models\InquiryTimelineLog;
 use App\Models\Order;
 use App\Models\OrderProgressAttachment;
@@ -300,6 +301,43 @@ class FirebaseInquiryService
                 'message' => $e->getMessage(),
                 'inquiry_id' => $inquiry->id,
                 'event_id' => $event->id,
+            ]);
+        }
+    }
+
+    /**
+     * Server-side image message for initial inquiry reference photos.
+     */
+    public function publishInquiryAttachmentMessage(Inquiry $inquiry, InquiryAttachment $attachment): void
+    {
+        $firestore = $this->firestoreClient();
+        if ($firestore === null) {
+            return;
+        }
+
+        if ($inquiry->firebase_thread_id === null) {
+            return;
+        }
+
+        /** @var FilesystemAdapter $publicDisk */
+        $publicDisk = Storage::disk('public');
+        $url = url($publicDisk->url($attachment->storage_path));
+
+        try {
+            $this->addThreadMessage($firestore, (string) $inquiry->firebase_thread_id, [
+                'type' => 'image',
+                'sender_role' => 'customer',
+                'created_at' => new Timestamp(new \DateTimeImmutable),
+                'image_url' => $url,
+                'caption' => 'Initial inquiry reference photo',
+                'text' => 'Initial inquiry photo',
+                'inquiry_attachment_id' => $attachment->id,
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('firebase.inquiry_attachment_failed', [
+                'message' => $e->getMessage(),
+                'inquiry_id' => $inquiry->id,
+                'attachment_id' => $attachment->id,
             ]);
         }
     }

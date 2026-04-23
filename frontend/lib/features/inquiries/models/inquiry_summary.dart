@@ -6,6 +6,7 @@ class InquirySummary {
     required this.createdAt,
     required this.firebaseThreadId,
     this.productTitle,
+    this.attachmentStoragePaths = const [],
   });
 
   final int id;
@@ -14,6 +15,7 @@ class InquirySummary {
   final DateTime createdAt;
   final String? firebaseThreadId;
   final String? productTitle;
+  final List<String> attachmentStoragePaths;
 
   factory InquirySummary.fromJson(Map<String, dynamic> json) {
     final product = json['product'];
@@ -26,6 +28,10 @@ class InquirySummary {
       productTitle: product is Map<String, dynamic>
           ? product['title'] as String?
           : null,
+      attachmentStoragePaths: ((json['attachments'] as List<dynamic>?) ?? const [])
+          .map((e) => e is Map<String, dynamic> ? (e['storage_path'] ?? '').toString() : '')
+          .where((path) => path.trim().isNotEmpty)
+          .toList(growable: false),
     );
   }
 }
