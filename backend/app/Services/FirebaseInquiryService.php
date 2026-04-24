@@ -13,9 +13,7 @@ use App\Models\Quote;
 use App\Models\Receipt;
 use App\Models\User;
 use Google\Cloud\Core\Timestamp;
-use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Kreait\Firebase\Contract\Auth as FirebaseAuthContract;
 use Kreait\Firebase\Contract\Firestore as FirestoreContract;
 use Kreait\Firebase\Factory;
@@ -35,6 +33,7 @@ class FirebaseInquiryService
 
     public function __construct(
         private readonly ?Factory $firebase,
+        private readonly MediaStorageService $mediaStorage,
     ) {
         if ($this->firebase !== null) {
             $this->auth = $this->firebase->createAuth();
@@ -273,9 +272,7 @@ class FirebaseInquiryService
         }
 
         $now = new \DateTimeImmutable;
-        /** @var FilesystemAdapter $publicDisk */
-        $publicDisk = Storage::disk('public');
-        $url = url($publicDisk->url($attachment->storage_path));
+        $url = $this->mediaStorage->publicUrl($attachment->storage_path);
 
         try {
             $db = $firestore->database();
@@ -319,9 +316,7 @@ class FirebaseInquiryService
             return;
         }
 
-        /** @var FilesystemAdapter $publicDisk */
-        $publicDisk = Storage::disk('public');
-        $url = url($publicDisk->url($attachment->storage_path));
+        $url = $this->mediaStorage->publicUrl($attachment->storage_path);
 
         try {
             $this->addThreadMessage($firestore, (string) $inquiry->firebase_thread_id, [

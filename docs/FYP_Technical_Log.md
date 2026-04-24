@@ -543,3 +543,38 @@ Implemented a single source-of-truth flow for making specs so admin entry, artis
 - Flutter static checks:
   - `flutter analyze` on modified artisan/order files ✅
 
+---
+
+## 2026-04-23 — Firebase Storage media migration (new uploads)
+
+### Summary
+
+Migrated new media uploads to a configurable storage provider so chat and workflow images can be shared across devices/environments without relying on localhost public disk paths.
+
+### Backend changes
+
+- Added GCS/Firebase filesystem support (`spatie/laravel-google-cloud-storage`) and a new `firebase` disk in `config/filesystems.php`.
+- Added media provider toggle in `config/services.php`:
+  - `services.media.provider` (`local` or `firebase`)
+- Introduced `App\\Services\\MediaStorageService` as a single upload + URL-resolution abstraction.
+- Refactored upload write paths to use `MediaStorageService`:
+  - `UploadController`
+  - `InquiryController` (initial inquiry attachments)
+  - `OrderProgressController` (artisan progress photos)
+  - `CustomerOrderDepositController` (deposit proof)
+- Updated `FirebaseInquiryService` image message publishing to resolve URLs through `MediaStorageService` instead of hardcoded `Storage::disk('public')` URL logic.
+
+### Compatibility behavior
+
+- Legacy local records remain supported.
+- New Firebase-provider uploads are stored as absolute URLs in existing `storage_path` fields, so existing API/Firestore contracts remain stable.
+- `publicStorageUrl(...)` in Flutter now passes through absolute URLs and only prefixes local relative paths.
+- Filament inquiry sidebar initial-photo rendering now handles both local relative paths and absolute URLs.
+
+### Validation
+
+- `php artisan test --filter=InquiryApiTest` ✅
+- `php artisan test --filter=BespokeOrderWorkflowTest` ✅
+- `php artisan view:cache` ✅
+- `flutter analyze` on modified inquiry/order/artisan URL files ✅
+

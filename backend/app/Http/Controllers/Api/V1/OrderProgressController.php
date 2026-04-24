@@ -7,13 +7,15 @@ use App\Models\Order;
 use App\Models\OrderProgressAttachment;
 use App\Models\OrderProgressEvent;
 use App\Services\FirebaseInquiryService;
+use App\Services\MediaStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class OrderProgressController extends Controller
 {
     public function __construct(
-        protected FirebaseInquiryService $firebaseInquiry
+        protected FirebaseInquiryService $firebaseInquiry,
+        protected MediaStorageService $mediaStorage
     ) {}
 
     public function index(Request $request, Order $order): JsonResponse
@@ -58,10 +60,10 @@ class OrderProgressController extends Controller
         ]);
 
         foreach ($request->file('photos', []) as $file) {
-            $path = $file->store('orders/'.$order->id.'/progress', 'public');
+            $stored = $this->mediaStorage->storeImage($file, 'orders/'.$order->id.'/progress');
             OrderProgressAttachment::create([
                 'progress_event_id' => $event->id,
-                'storage_path' => $path,
+                'storage_path' => $stored['storage_path'],
                 'mime_type' => $file->getMimeType(),
             ]);
         }

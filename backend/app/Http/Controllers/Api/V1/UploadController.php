@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\MediaStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class UploadController extends Controller
 {
+    public function __construct(
+        protected MediaStorageService $mediaStorage
+    ) {}
+
     public function presign(Request $request): JsonResponse
     {
         return response()->json([
@@ -25,11 +29,11 @@ class UploadController extends Controller
         ]);
 
         $folder = Str::slug($request->string('folder', 'misc'));
-        $path = $request->file('file')->store('uploads/'.$folder, 'public');
+        $stored = $this->mediaStorage->storeImage($request->file('file'), 'uploads/'.$folder);
 
         return response()->json([
-            'storage_path' => $path,
-            'url' => Storage::disk('public')->url($path),
+            'storage_path' => $stored['storage_path'],
+            'url' => $stored['url'],
         ], 201);
     }
 }

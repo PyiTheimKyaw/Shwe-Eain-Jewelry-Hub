@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\FirebaseInquiryService;
+use App\Services\MediaStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CustomerOrderDepositController extends Controller
 {
+    public function __construct(
+        protected MediaStorageService $mediaStorage
+    ) {}
+
     public function store(Request $request, Order $order, FirebaseInquiryService $firebaseInquiry): JsonResponse
     {
         $this->authorize('uploadDepositProof', $order);
@@ -27,7 +32,7 @@ class CustomerOrderDepositController extends Controller
             return response()->json(['message' => 'Payment instructions have not been sent yet.'], 422);
         }
 
-        $path = $request->file('proof')->store('orders/'.$order->id.'/deposits', 'public');
+        $stored = $this->mediaStorage->storeImage($request->file('proof'), 'orders/'.$order->id.'/deposits');
 
         $payment = Payment::query()->firstOrNew([
             'order_id' => $order->id,
@@ -37,7 +42,7 @@ class CustomerOrderDepositController extends Controller
         $payment->amount_mmk = $order->deposit_amount_mmk;
         $payment->currency = 'MMK';
         $payment->status = Payment::STATUS_AWAITING_VERIFICATION;
-        $payment->proof_storage_path = $path;
+        $payment->proof_storage_path = $stored['storage_path'];
         $payment->proof_mime = $request->file('proof')->getMimeType();
         $payment->submitted_at = now();
         $payment->save();

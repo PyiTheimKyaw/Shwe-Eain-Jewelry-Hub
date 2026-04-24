@@ -177,6 +177,28 @@ php artisan optimize:clear
 
 4. In Flutter, refresh the app state (hot restart) after backend schema/API updates.
 
+### Firebase Storage for media uploads (optional, cross-device-safe)
+
+By default, uploads use local storage. To store new chat/inquiry/progress media on Firebase Storage instead:
+
+1. Set Firebase storage env values in `backend/.env`:
+
+```bash
+MEDIA_STORAGE_PROVIDER=firebase
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CREDENTIALS=/absolute/path/to/service-account.json
+FIREBASE_STORAGE_BUCKET=your-bucket-name
+FIREBASE_STORAGE_PUBLIC_URL=https://storage.googleapis.com/your-bucket-name
+```
+
+2. Clear config cache:
+
+```bash
+php artisan config:clear
+```
+
+3. New uploads will go to Firebase Storage; old local records continue to render via compatibility fallback.
+
 ---
 
 ## Quick checklist

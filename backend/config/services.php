@@ -49,4 +49,10 @@ return [
         'web_app_id' => env('FIREBASE_WEB_APP_ID', '1:885710177863:web:ef5eb17a2127003d649362'),
     ],
 
+    'media' => [
+        // local => Laravel public disk
+        // firebase => filesystems.firebase (GCS/Firebase Storage)
+        'provider' => env('MEDIA_STORAGE_PROVIDER', 'local'),
+    ],
+
 ];

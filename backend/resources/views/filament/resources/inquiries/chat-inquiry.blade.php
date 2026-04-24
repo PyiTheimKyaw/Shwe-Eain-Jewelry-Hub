@@ -152,9 +152,14 @@
                                         </p>
                                         <div class="flex flex-wrap gap-2">
                                             @foreach ($inquiry->attachments as $att)
-                                                <a href="{{ asset('storage/'.$att->storage_path) }}" target="_blank" rel="noopener noreferrer" class="block">
+                                                @php
+                                                    $attUrl = \Illuminate\Support\Str::startsWith((string) $att->storage_path, ['http://', 'https://'])
+                                                        ? (string) $att->storage_path
+                                                        : asset('storage/'.$att->storage_path);
+                                                @endphp
+                                                <a href="{{ $attUrl }}" target="_blank" rel="noopener noreferrer" class="block">
                                                     <img
-                                                        src="{{ asset('storage/'.$att->storage_path) }}"
+                                                        src="{{ $attUrl }}"
                                                         alt="{{ __('Inquiry attachment') }}"
                                                         class="h-16 w-16 rounded-md border border-gray-300 object-cover shadow-sm dark:border-gray-600"
                                                         loading="lazy"
@@ -466,6 +471,7 @@
                 const token = @json($firebaseToken);
                 const threadId = @json($threadId);
                 const inquiryId = @json($inquiry->id);
+                const adminUploadUrl = @json(route('admin.inquiries.chat-upload', ['inquiry' => $inquiry->id]));
                 function setChatPollingEnabled(enabled) {
                     var sentinel = document.getElementById('jh-chat-poll-sentinel');
                     if (!sentinel) {
@@ -1257,7 +1263,7 @@
                     var fd = new FormData();
                     fd.append('file', file);
                     fd.append('folder', 'inquiry-chat-' + inquiryId);
-                    var res = await fetch('/api/v1/uploads', {
+                    var res = await fetch(adminUploadUrl, {
                         method: 'POST',
                         credentials: 'same-origin',
                         headers: {

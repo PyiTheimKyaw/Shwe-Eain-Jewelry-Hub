@@ -7,12 +7,17 @@ use App\Models\Inquiry;
 use App\Models\InquiryAttachment;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryPipelinePresenter;
+use App\Services\MediaStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class InquiryController extends Controller
 {
+    public function __construct(
+        protected MediaStorageService $mediaStorage
+    ) {}
+
     public function store(Request $request, FirebaseInquiryService $firebaseInquiry): JsonResponse
     {
         $data = $request->validate([
@@ -32,10 +37,10 @@ class InquiryController extends Controller
 
         if (! empty($data['attachments'])) {
             foreach ($request->file('attachments', []) as $file) {
-                $path = $file->store('inquiries/'.$inquiry->id, 'public');
+                $stored = $this->mediaStorage->storeImage($file, 'inquiries/'.$inquiry->id);
                 $attachment = InquiryAttachment::create([
                     'inquiry_id' => $inquiry->id,
-                    'storage_path' => $path,
+                    'storage_path' => $stored['storage_path'],
                     'mime_type' => $file->getMimeType(),
                 ]);
                 $firebaseInquiry->publishInquiryAttachmentMessage($inquiry, $attachment);
