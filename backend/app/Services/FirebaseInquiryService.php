@@ -8,6 +8,7 @@ use App\Models\InquiryTimelineLog;
 use App\Models\Order;
 use App\Models\OrderProgressAttachment;
 use App\Models\OrderProgressEvent;
+use App\Models\Payment;
 use App\Models\PaymentProfile;
 use App\Models\Quote;
 use App\Models\Receipt;
@@ -333,6 +334,49 @@ class FirebaseInquiryService
                 'message' => $e->getMessage(),
                 'inquiry_id' => $inquiry->id,
                 'attachment_id' => $attachment->id,
+            ]);
+        }
+    }
+
+    /**
+     * Server-side image message for customer payment proof uploads.
+     */
+    public function publishPaymentProofImageMessage(Inquiry $inquiry, Payment $payment): void
+    {
+        $firestore = $this->firestoreClient();
+        if ($firestore === null) {
+            Log::warning('firebase.payment_proof_image_skipped', [
+                'reason' => 'firestore_client_unavailable',
+                'inquiry_id' => $inquiry->id,
+                'payment_id' => $payment->id,
+            ]);
+
+            return;
+        }
+
+        if ($inquiry->firebase_thread_id === null || ! $payment->proof_storage_path) {
+            return;
+        }
+
+        $url = $this->mediaStorage->publicUrl($payment->proof_storage_path);
+
+        try {
+            $this->addThreadMessage($firestore, (string) $inquiry->firebase_thread_id, [
+                'type' => 'image',
+                'sender_role' => 'customer',
+                'created_at' => new Timestamp(new \DateTimeImmutable),
+                'image_url' => $url,
+                'caption' => 'Payment proof uploaded',
+                'image_category' => 'payment_proof',
+                'payment_id' => $payment->id,
+                'order_id' => $payment->order_id,
+                'text' => 'Payment proof uploaded',
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('firebase.payment_proof_image_failed', [
+                'message' => $e->getMessage(),
+                'inquiry_id' => $inquiry->id,
+                'payment_id' => $payment->id,
             ]);
         }
     }

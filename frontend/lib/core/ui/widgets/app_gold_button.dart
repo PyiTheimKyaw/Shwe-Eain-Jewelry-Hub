@@ -29,16 +29,13 @@ class AppGoldButton extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 20),
-            const SizedBox(width: 8),
-          ],
+          if (icon != null) ...[Icon(icon, size: 20), const SizedBox(width: 8)],
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: AppColors.background,
-                  letterSpacing: 0.8,
-                ),
+              color: AppColors.background,
+              letterSpacing: 0.8,
+            ),
           ),
         ],
       ),

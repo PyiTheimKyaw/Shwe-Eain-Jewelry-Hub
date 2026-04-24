@@ -2,11 +2,14 @@
 
 namespace App\Filament\Resources\Payments\Tables;
 
+use App\Filament\Resources\Payments\PaymentResource;
 use App\Models\Payment;
+use App\Services\MediaStorageService;
 use App\Services\PaymentVerificationService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\Textarea;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -17,6 +20,13 @@ class PaymentsTable
         return $table
             ->columns([
                 TextColumn::make('id')->sortable(),
+                ImageColumn::make('proof_storage_path')
+                    ->label('Proof')
+                    ->circular()
+                    ->size(40)
+                    ->getStateUsing(
+                        fn (Payment $record): string => app(MediaStorageService::class)->publicUrl($record->proof_storage_path)
+                    ),
                 TextColumn::make('order.order_number')
                     ->label('Order')
                     ->searchable()
@@ -34,10 +44,15 @@ class PaymentsTable
                     ->dateTime()
                     ->sortable(),
             ])
+            ->recordUrl(fn (Payment $record): string => PaymentResource::getUrl('view', ['record' => $record]))
             ->defaultSort('created_at', 'desc')
             ->recordActions([
+                Action::make('review')
+                    ->label('Review')
+                    ->icon('heroicon-o-eye')
+                    ->url(fn (Payment $record): string => PaymentResource::getUrl('view', ['record' => $record])),
                 Action::make('confirm')
-                    ->label('Confirm deposit')
+                    ->label('Approve payment')
                     ->color('success')
                     ->requiresConfirmation()
                     ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)

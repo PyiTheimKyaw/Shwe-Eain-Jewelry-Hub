@@ -90,7 +90,10 @@ class _ArtisanJobsScreenState extends State<ArtisanJobsScreen> {
                     ),
                     IconButton(
                       onPressed: _load,
-                      icon: const Icon(Icons.refresh_rounded, color: AppColors.gold),
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: AppColors.gold,
+                      ),
                     ),
                   ],
                 ),
@@ -133,9 +136,8 @@ class _ArtisanJobsScreenState extends State<ArtisanJobsScreen> {
                           onTap: () async {
                             await Navigator.of(context).push<void>(
                               MaterialPageRoute(
-                                builder: (_) => ArtisanJobDetailScreen(
-                                  assignmentId: id,
-                                ),
+                                builder: (_) =>
+                                    ArtisanJobDetailScreen(assignmentId: id),
                               ),
                             );
                             await _load();

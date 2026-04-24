@@ -74,10 +74,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: SafeArea(
           child: _loading
-              ? const Center(child: CircularProgressIndicator(color: AppColors.gold))
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.gold),
+                )
               : _error != null
-                  ? Center(child: Text('$_error'))
-                  : _buildContent(context, _product!),
+              ? Center(child: Text('$_error'))
+              : _buildContent(context, _product!),
         ),
       ),
     );
@@ -156,13 +158,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                           fit: BoxFit.cover,
                                           placeholder: (context, _) =>
                                               Shimmer.fromColors(
-                                            baseColor: AppColors.surface,
-                                            highlightColor:
-                                                AppColors.surfaceElevated,
-                                            child: Container(
-                                              color: AppColors.surface,
-                                            ),
-                                          ),
+                                                baseColor: AppColors.surface,
+                                                highlightColor:
+                                                    AppColors.surfaceElevated,
+                                                child: Container(
+                                                  color: AppColors.surface,
+                                                ),
+                                              ),
                                         ),
                                       ),
                                     );
@@ -193,11 +195,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                                     BorderRadius.circular(99),
                                                 color:
                                                     index == _currentImageIndex
-                                                        ? AppColors.gold
-                                                        : AppColors.textSecondary
-                                                            .withValues(
-                                                          alpha: 0.55,
-                                                        ),
+                                                    ? AppColors.gold
+                                                    : AppColors.textSecondary
+                                                          .withValues(
+                                                            alpha: 0.55,
+                                                          ),
                                               ),
                                             ),
                                           ),
@@ -248,10 +250,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.scale_outlined,
-                        size: 18, color: AppColors.textSecondary),
+                    const Icon(
+                      Icons.scale_outlined,
+                      size: 18,
+                      color: AppColors.textSecondary,
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(child: WeightBadge(grams: p.weightGrams, compact: false)),
+                    Expanded(
+                      child: WeightBadge(grams: p.weightGrams, compact: false),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -286,8 +293,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (context) =>
-                            NewInquiryScreen(productId: p.id),
+                        builder: (context) => NewInquiryScreen(productId: p.id),
                       ),
                     );
                   },

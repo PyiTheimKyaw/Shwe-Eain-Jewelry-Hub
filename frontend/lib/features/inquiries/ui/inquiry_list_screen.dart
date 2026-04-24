@@ -76,8 +76,10 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
                     Expanded(child: PremiumText.headline('Inquiries')),
                     IconButton(
                       tooltip: 'Log out',
-                      icon: const Icon(Icons.logout_rounded,
-                          color: AppColors.textSecondary),
+                      icon: const Icon(
+                        Icons.logout_rounded,
+                        color: AppColors.textSecondary,
+                      ),
                       onPressed: () => auth.logout(),
                     ),
                   ],
@@ -130,10 +132,7 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
     }
     if (_loading) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: AppColors.gold,
-          strokeWidth: 2,
-        ),
+        child: CircularProgressIndicator(color: AppColors.gold, strokeWidth: 2),
       );
     }
     final items = _items!;

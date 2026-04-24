@@ -298,4 +298,63 @@ class InquiryQuoteFlowTest extends TestCase
         $publish2->assertCreated();
         $this->assertArrayNotHasKey('warning', $publish2->json('meta') ?? []);
     }
+
+    public function test_customer_can_accept_republished_quote_with_date_only_valid_until_today(): void
+    {
+        $this->seedPricing();
+
+        $customer = User::factory()->create(['role' => UserRole::Customer]);
+        $admin = User::factory()->admin()->create();
+        $adminToken = $admin->createToken('t')->plainTextToken;
+
+        $inquiry = Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => null,
+            'message' => 'Bracelet redesign',
+            'status' => 'open',
+            'firebase_thread_id' => 'test-thread-republish-valid-until',
+        ]);
+
+        $publish1 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            [
+                'lines' => [
+                    [
+                        'weight_grams' => 3,
+                        'labor_fee_mmk' => 12000,
+                        'gem_price_mmk' => 0,
+                    ],
+                ],
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $publish1->assertCreated();
+        $quoteId1 = (int) $publish1->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId1}/decline")->assertOk();
+
+        Sanctum::actingAs($admin);
+        $publish2 = $this->postJson(
+            "/api/v1/admin/inquiries/{$inquiry->id}/quotes/publish",
+            [
+                'valid_until' => now()->toDateString(),
+                'lines' => [
+                    [
+                        'weight_grams' => 4,
+                        'labor_fee_mmk' => 15000,
+                        'gem_price_mmk' => 1000,
+                    ],
+                ],
+            ],
+            ['Authorization' => 'Bearer '.$adminToken]
+        );
+        $publish2->assertCreated();
+        $quoteId2 = (int) $publish2->json('data.id');
+
+        Sanctum::actingAs($customer);
+        $this->postJson("/api/v1/quotes/{$quoteId2}/accept")
+            ->assertOk()
+            ->assertJsonPath('data.quote.id', $quoteId2);
+    }
 }

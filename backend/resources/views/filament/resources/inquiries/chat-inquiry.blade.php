@@ -179,6 +179,7 @@
                             $__jhAdminStatic = [
                                 'quote' => $adminQuoteCardPayload,
                                 'payment' => $pipeline['deposit_payment'] ?? null,
+                                'payment_proof_history' => $pipeline['payment_proof_history'] ?? [],
                                 'receipt' => $pipeline['latest_receipt'] ?? null,
                                 'timeline_logs' => $pipeline['timeline_logs'] ?? [],
                                 'recordCaption' => __('Record (matches customer app)'),
@@ -623,6 +624,22 @@
                     return t ? who + ' · ' + t : who;
                 }
 
+                function cleanImageCaption(rawCaption) {
+                    var caption = String(rawCaption || '').trim();
+                    if (!caption) {
+                        return '';
+                    }
+                    var normalized = caption.toLowerCase();
+                    if (
+                        normalized === 'admin image' ||
+                        normalized === 'customer image' ||
+                        normalized === 'image message'
+                    ) {
+                        return '';
+                    }
+                    return caption;
+                }
+
                 function fmtMmk(raw) {
                     var v = parseFloat(String(raw || '').replace(/,/g, ''));
                     if (isNaN(v)) {
@@ -828,23 +845,40 @@
                         return wrapR;
                     }
                     if (messageTypeKey(msg) === 'image') {
+                        var roleI = msg.sender_role || '';
+                        var isAdminImage = roleI === 'admin';
+                        var isPaymentProof = String(msg.image_category || '') === 'payment_proof';
                         var wrapI = document.createElement('div');
-                        wrapI.className = 'mb-4 flex w-full flex-col items-start';
+                        wrapI.className =
+                            'mb-4 flex w-full flex-col ' + (isAdminImage ? 'items-end' : 'items-start');
                         var innerI = document.createElement('div');
                         innerI.className =
-                            'max-w-[min(100%,24rem)] rounded-2xl border border-gray-200 bg-gray-50 p-2 shadow-sm dark:border-gray-600 dark:bg-gray-800';
+                            (isAdminImage
+                                ? 'max-w-[min(100%,24rem)] rounded-2xl border-2 border-primary-500/50 bg-white p-2 shadow-sm dark:border-primary-400/50 dark:bg-gray-800'
+                                : 'max-w-[min(100%,24rem)] rounded-2xl border border-gray-200 bg-gray-50 p-2 shadow-sm dark:border-gray-600 dark:bg-gray-800');
                         var img = document.createElement('img');
                         img.src = msg.image_url || '';
                         img.className = 'max-h-72 w-full rounded-lg object-cover';
                         img.alt = '';
+                        if (isPaymentProof) {
+                            var headerI = document.createElement('p');
+                            headerI.className =
+                                'mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300';
+                            headerI.textContent = 'Payment Proof Uploaded';
+                            innerI.appendChild(headerI);
+                        }
                         var capI = document.createElement('p');
                         capI.className = 'mt-2 px-1 text-xs text-gray-600 dark:text-gray-300';
-                        capI.textContent = msg.caption || '';
+                        capI.textContent = cleanImageCaption(msg.caption);
                         innerI.appendChild(img);
-                        innerI.appendChild(capI);
+                        if (capI.textContent) {
+                            innerI.appendChild(capI);
+                        }
                         wrapI.appendChild(innerI);
                         var capTime = document.createElement('p');
-                        capTime.className = 'mt-1.5 pl-1 text-[11px] text-gray-500 dark:text-gray-400';
+                        capTime.className =
+                            'mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 ' +
+                            (isAdminImage ? 'pr-1 text-right' : 'pl-1 text-left');
                         capTime.textContent = roleTimeCaption(msg);
                         wrapI.appendChild(capTime);
                         return wrapI;
@@ -978,16 +1012,55 @@
                             hr = Number(data.receipt.id);
                         }
                     }
+                    mysqlTimelineLogs = [];
+                    mysqlPaymentProofMessages = [];
+                    var proofHistory = [];
+                    if (Array.isArray(data.payment_proof_history)) {
+                        proofHistory = data.payment_proof_history;
+                    } else if (data.payment && Array.isArray(data.payment.payment_proof_history)) {
+                        proofHistory = data.payment.payment_proof_history;
+                    } else if (
+                        data.payment &&
+                        data.payment.payment_proof_image_url &&
+                        String(data.payment.payment_proof_image_url).trim() !== ''
+                    ) {
+                        proofHistory = [
+                            {
+                                image_url: data.payment.payment_proof_image_url,
+                                submitted_at: data.payment.payment_proof_submitted_at || null,
+                            },
+                        ];
+                    }
+                    for (var ph = 0; ph < proofHistory.length; ph++) {
+                        var proof = proofHistory[ph] || {};
+                        var proofUrl = String(proof.image_url || '').trim();
+                        if (!proofUrl) {
+                            continue;
+                        }
+                        var proofMs = Date.parse(proof.submitted_at || '');
+                        mysqlPaymentProofMessages.push({
+                            type: 'image',
+                            sender_role: 'customer',
+                            image_url: proofUrl,
+                            image_category: 'payment_proof',
+                            caption: 'Payment proof uploaded',
+                            text: 'Payment proof uploaded',
+                            created_at:
+                                !isNaN(proofMs) ? { seconds: Math.floor(proofMs / 1000) } : null,
+                        });
+                    }
                     if (Array.isArray(data.timeline_logs)) {
-                        var timelineWrap = document.createElement('div');
                         data.timeline_logs.forEach(function (t) {
                             var msg = t && t.message != null ? String(t.message) : '';
                             if (!msg.trim()) {
                                 return;
                             }
-                            appendMysqlTimelineBlock(timelineWrap, msg, t.occurred_at || null);
+                            var ms = Date.parse(t.occurred_at || '');
+                            mysqlTimelineLogs.push({
+                                text: msg.trim(),
+                                ms: isNaN(ms) ? null : ms,
+                            });
                         });
-                        nextCardsHtml += timelineWrap.innerHTML;
                     }
 
                     serverCardsEl.innerHTML = nextCardsHtml;
@@ -998,8 +1071,11 @@
                 var hideQuoteId = null;
                 var hidePaymentOrder = null;
                 var hideReceiptId = null;
+                var mysqlTimelineLogs = [];
+                var mysqlPaymentProofMessages = [];
                 var localWorkflowLogs = [];
                 var lastThreadDepositState = null;
+                var lastMessagesSnapshot = null;
 
                 function appendLocalWorkflowLog(text) {
                     var clean = String(text || '').trim();
@@ -1041,32 +1117,113 @@
                         return 0;
                     });
                     for (var i = 0; i < msgs.length; i++) {
-                        box.appendChild(row(msgs[i]));
+                        // rendered after timeline merges below
                     }
 
-                    var fsTimeline = {};
+                    var fsTimeline = [];
                     for (var j = 0; j < msgs.length; j++) {
                         if (messageTypeKey(msgs[j]) !== 'timeline_log') {
                             continue;
                         }
                         var t = String(msgs[j].text || '').trim();
                         if (t) {
-                            fsTimeline[t] = true;
+                            fsTimeline.push({
+                                text: t,
+                                ms: createdAtMs(msgs[j]),
+                            });
                         }
+                    }
+                    var merged = msgs.slice();
+                    var fsPaymentProofUrls = new Set();
+                    for (var fp = 0; fp < merged.length; fp++) {
+                        var msgFp = merged[fp];
+                        if (
+                            messageTypeKey(msgFp) === 'image' &&
+                            String(msgFp.image_category || '') === 'payment_proof'
+                        ) {
+                            var u = String(msgFp.image_url || '').trim();
+                            if (u) {
+                                fsPaymentProofUrls.add(u);
+                            }
+                        }
+                    }
+                    for (var pm = 0; pm < mysqlPaymentProofMessages.length; pm++) {
+                        var candidate = mysqlPaymentProofMessages[pm];
+                        var candidateUrl = String(candidate.image_url || '').trim();
+                        if (candidateUrl && fsPaymentProofUrls.has(candidateUrl)) {
+                            continue;
+                        }
+                        merged.push(candidate);
+                    }
+                    for (var m = 0; m < mysqlTimelineLogs.length; m++) {
+                        var remoteLog = mysqlTimelineLogs[m];
+                        var hasNearbyFs = false;
+                        for (var n = 0; n < fsTimeline.length; n++) {
+                            if (fsTimeline[n].text !== remoteLog.text) {
+                                continue;
+                            }
+                            if (fsTimeline[n].ms == null || remoteLog.ms == null) {
+                                continue;
+                            }
+                            if (Math.abs(fsTimeline[n].ms - remoteLog.ms) <= 45000) {
+                                hasNearbyFs = true;
+                                break;
+                            }
+                        }
+                        if (hasNearbyFs) {
+                            continue;
+                        }
+                        merged.push({
+                            type: 'timeline_log',
+                            sender_role: 'system',
+                            text: remoteLog.text,
+                            created_at:
+                                remoteLog.ms != null
+                                    ? { seconds: Math.floor(remoteLog.ms / 1000) }
+                                    : null,
+                        });
                     }
                     for (var k = 0; k < localWorkflowLogs.length; k++) {
                         var l = localWorkflowLogs[k];
-                        if (fsTimeline[l.text]) {
+                        var hasFs = false;
+                        for (var x = 0; x < fsTimeline.length; x++) {
+                            if (fsTimeline[x].text !== l.text) {
+                                continue;
+                            }
+                            if (fsTimeline[x].ms == null) {
+                                continue;
+                            }
+                            if (Math.abs(fsTimeline[x].ms - l.ms) <= 12000) {
+                                hasFs = true;
+                                break;
+                            }
+                        }
+                        if (hasFs) {
                             continue;
                         }
-                        box.appendChild(
-                            row({
-                                type: 'timeline_log',
-                                sender_role: 'system',
-                                text: l.text,
-                                created_at: { seconds: Math.floor(l.ms / 1000) },
-                            })
-                        );
+                        merged.push({
+                            type: 'timeline_log',
+                            sender_role: 'system',
+                            text: l.text,
+                            created_at: { seconds: Math.floor(l.ms / 1000) },
+                        });
+                    }
+                    merged.sort(function (a, b) {
+                        var am = createdAtMs(a);
+                        var bm = createdAtMs(b);
+                        if (am != null && bm != null) {
+                            return am - bm;
+                        }
+                        if (am != null) {
+                            return -1;
+                        }
+                        if (bm != null) {
+                            return 1;
+                        }
+                        return 0;
+                    });
+                    for (var y = 0; y < merged.length; y++) {
+                        box.appendChild(row(merged[y]));
                     }
 
                     var root = scrollRoot || box;
@@ -1128,6 +1285,9 @@
                         hideQuoteId = d.hideQuoteId;
                         hidePaymentOrder = d.hidePaymentOrder;
                         hideReceiptId = d.hideReceiptId;
+                    }
+                    if (lastMessagesSnapshot) {
+                        renderThreadMessages(lastMessagesSnapshot);
                     }
                 };
 
@@ -1211,18 +1371,25 @@
                         threadRef.onSnapshot(function (snap) {
                             var d = (snap && typeof snap.data === 'function') ? (snap.data() || {}) : {};
                             var ds = String(d.deposit_state || '');
+                            var didAppendLocalWorkflowLog = false;
                             if (lastThreadDepositState !== null && ds !== lastThreadDepositState) {
                                 if (ds === 'rejected') {
                                     appendLocalWorkflowLog('--- Payment Rejected ---');
+                                    didAppendLocalWorkflowLog = true;
                                 } else if (ds === 'confirmed') {
                                     appendLocalWorkflowLog('--- Deposit Confirmed ---');
+                                    didAppendLocalWorkflowLog = true;
                                 }
                             }
                             lastThreadDepositState = ds;
+                            if (didAppendLocalWorkflowLog && lastMessagesSnapshot) {
+                                renderThreadMessages(lastMessagesSnapshot);
+                            }
                         });
 
                         const ref = threadRef.collection('messages');
                         ref.onSnapshot(function (snap) {
+                            lastMessagesSnapshot = snap;
                             renderThreadMessages(snap);
                         });
                     })
@@ -1307,7 +1474,6 @@
                             .add({
                                 type: 'image',
                                 image_url: imageUrl,
-                                caption: 'Admin image',
                                 text: 'Image message',
                                 sender_role: 'admin',
                                 created_at: firebase.firestore.FieldValue.serverTimestamp(),

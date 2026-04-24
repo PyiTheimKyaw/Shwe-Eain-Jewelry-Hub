@@ -79,7 +79,12 @@ class PaymentVerificationService
 
         $inquiry = $payment->order->resolveInquiry();
         if ($inquiry !== null) {
-            $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- Payment Rejected ---');
+            $message = '--- Payment Rejected ---';
+            $cleanReason = trim((string) $reason);
+            if ($cleanReason !== '') {
+                $message .= ' | Reason: '.$cleanReason;
+            }
+            $this->firebaseInquiry->publishTimelineLogMessage($inquiry, $message);
             $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }
 

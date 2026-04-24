@@ -74,10 +74,11 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
         .map((e) => Map<String, dynamic>.from(e))
         .toList(growable: false);
     final assignmentRaw = _order?['assignments'];
-    final assignments = (assignmentRaw is List ? assignmentRaw : const <dynamic>[])
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList(growable: false);
+    final assignments =
+        (assignmentRaw is List ? assignmentRaw : const <dynamic>[])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList(growable: false);
     final latestInstructions = assignments.isEmpty
         ? ''
         : ((assignments.first['instructions'] ?? '') as String).trim();
@@ -89,12 +90,13 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
     final inquiry = inquiryRaw is Map
         ? Map<String, dynamic>.from(inquiryRaw)
         : const <String, dynamic>{};
-    final initialAttachmentUrls = ((inquiry['attachments'] as List<dynamic>?) ?? const [])
-        .whereType<Map>()
-        .map((e) => (e['storage_path'] ?? '').toString().trim())
-        .where((path) => path.isNotEmpty)
-        .map(publicStorageUrl)
-        .toList(growable: false);
+    final initialAttachmentUrls =
+        ((inquiry['attachments'] as List<dynamic>?) ?? const [])
+            .whereType<Map>()
+            .map((e) => (e['storage_path'] ?? '').toString().trim())
+            .where((path) => path.isNotEmpty)
+            .map(publicStorageUrl)
+            .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -166,7 +168,8 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                           ],
                         ),
                       ),
-                    if (latestInstructions.isNotEmpty) const SizedBox(height: 12),
+                    if (latestInstructions.isNotEmpty)
+                      const SizedBox(height: 12),
                     if (initialAttachmentUrls.isNotEmpty)
                       AppGlassCard(
                         child: Column(
@@ -202,26 +205,29 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                     if (initialAttachmentUrls.isNotEmpty)
                       const SizedBox(height: 12),
                     ...items.map((item) {
-                      final title =
-                          (item['title_snapshot'] ?? 'Order item').toString();
+                      final title = (item['title_snapshot'] ?? 'Order item')
+                          .toString();
                       final weight = (item['weight_grams'] ?? '').toString();
-                      final metal =
-                          (item['metal_type_snapshot'] ?? '').toString().trim();
-                      final stone =
-                          (item['stone_details_snapshot'] ?? '').toString().trim();
+                      final metal = (item['metal_type_snapshot'] ?? '')
+                          .toString()
+                          .trim();
+                      final stone = (item['stone_details_snapshot'] ?? '')
+                          .toString()
+                          .trim();
                       final product = item['product'];
                       final productMap = product is Map
                           ? Map<String, dynamic>.from(product)
                           : const <String, dynamic>{};
                       final imagesRaw = productMap['images'];
-                      final imageUrls = (imagesRaw is List
-                              ? imagesRaw
-                              : const <dynamic>[])
-                          .whereType<Map>()
-                          .map((img) => (img['storage_path'] ?? '').toString())
-                          .where((path) => path.trim().isNotEmpty)
-                          .map(publicStorageUrl)
-                          .toList(growable: false);
+                      final imageUrls =
+                          (imagesRaw is List ? imagesRaw : const <dynamic>[])
+                              .whereType<Map>()
+                              .map(
+                                (img) => (img['storage_path'] ?? '').toString(),
+                              )
+                              .where((path) => path.trim().isNotEmpty)
+                              .map(publicStorageUrl)
+                              .toList(growable: false);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: AppGlassCard(

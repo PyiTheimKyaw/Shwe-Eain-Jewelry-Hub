@@ -54,10 +54,7 @@ abstract final class AppTheme {
         color: AppColors.textPrimary,
         fontWeight: FontWeight.w600,
       ),
-      bodyLarge: GoogleFonts.outfit(
-        fontSize: 16,
-        color: AppColors.textPrimary,
-      ),
+      bodyLarge: GoogleFonts.outfit(fontSize: 16, color: AppColors.textPrimary),
       bodyMedium: GoogleFonts.outfit(
         fontSize: 14,
         color: AppColors.textSecondary,

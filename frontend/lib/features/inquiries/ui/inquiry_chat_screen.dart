@@ -57,6 +57,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
   int _lastIngestedMessageCount = 0;
   String? _lastSeenDepositState;
   String? _lastSeenRestDepositState;
+  int _lastRenderedEntryCount = 0;
   final List<_LocalTimelineLog> _localTimelineLogs = [];
 
   /// Firestore stream instances must be stable across [setState] rebuilds. Recreating
@@ -583,7 +584,6 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
           .add({
             'type': 'image',
             'image_url': imageUrl,
-            'caption': 'Customer image',
             'sender_role': 'customer',
             'created_at': FieldValue.serverTimestamp(),
             'laravel_user_id': uid,
@@ -973,9 +973,132 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                           effectivePipeline,
                                           docs,
                                         );
+                                    final fsPaymentProofUrls = docs
+                                        .where((doc) {
+                                          final d = doc.data();
+                                          return _messageTypeKey(d) == 'image' &&
+                                              _firestoreString(
+                                                    d['image_category'],
+                                                  ) ==
+                                                  'payment_proof';
+                                        })
+                                        .map(
+                                          (doc) =>
+                                              _firestoreString(
+                                                doc.data()['image_url'],
+                                              ) ??
+                                              '',
+                                        )
+                                        .where((url) => url.isNotEmpty)
+                                        .toSet();
+                                    final apiProofHistoryRaw =
+                                        effectivePipeline.paymentProofHistory ??
+                                        effectivePipeline
+                                            .depositPayment?['payment_proof_history'];
+                                    final apiProofHistory =
+                                        <Map<String, dynamic>>[];
+                                    if (apiProofHistoryRaw is List) {
+                                      for (final entry in apiProofHistoryRaw) {
+                                        if (entry is Map) {
+                                          apiProofHistory.add(
+                                            Map<String, dynamic>.from(entry),
+                                          );
+                                        }
+                                      }
+                                    } else {
+                                      final singleUrl =
+                                          _firestoreString(
+                                            effectivePipeline.depositPayment?['payment_proof_image_url'],
+                                          ) ??
+                                          '';
+                                      if (singleUrl.isNotEmpty) {
+                                        apiProofHistory.add({
+                                          'image_url': singleUrl,
+                                          'submitted_at': _firestoreString(
+                                            effectivePipeline.depositPayment?['payment_proof_submitted_at'],
+                                          ),
+                                        });
+                                      }
+                                    }
+
+                                    final orderedEntries =
+                                        <Map<String, dynamic>>[];
+                                    for (final doc in docs) {
+                                      orderedEntries.add(
+                                        Map<String, dynamic>.from(doc.data()),
+                                      );
+                                    }
+                                    for (final e in persistedTimelineLogs) {
+                                      orderedEntries.add({
+                                        'type': 'timeline_log',
+                                        'sender_role': 'system',
+                                        'text': e.text,
+                                        'created_at': Timestamp.fromDate(e.at),
+                                      });
+                                    }
+                                    for (final e
+                                        in fallbackTimelineLogsFiltered) {
+                                      orderedEntries.add({
+                                        'type': 'timeline_log',
+                                        'sender_role': 'system',
+                                        'text': e.text,
+                                        'created_at': Timestamp.fromDate(e.at),
+                                      });
+                                    }
+                                    for (final proof in apiProofHistory) {
+                                      final url =
+                                          _firestoreString(proof['image_url']) ??
+                                          '';
+                                      if (url.isEmpty ||
+                                          fsPaymentProofUrls.contains(url)) {
+                                        continue;
+                                      }
+                                      final submittedAtRaw = _firestoreString(
+                                        proof['submitted_at'],
+                                      );
+                                      final submittedAt = submittedAtRaw != null
+                                          ? DateTime.tryParse(
+                                              submittedAtRaw,
+                                            )?.toLocal()
+                                          : null;
+                                      orderedEntries.add({
+                                        'type': 'image',
+                                        'sender_role': 'customer',
+                                        'image_url': url,
+                                        'caption': 'Payment proof uploaded',
+                                        'image_category': 'payment_proof',
+                                        'text': 'Payment proof uploaded',
+                                        'created_at': submittedAt != null
+                                            ? Timestamp.fromDate(
+                                                submittedAt,
+                                              )
+                                            : null,
+                                      });
+                                    }
+                                    DateTime? toDate(dynamic v) {
+                                      if (v is Timestamp) {
+                                        return v.toDate();
+                                      }
+                                      return null;
+                                    }
+
+                                    orderedEntries.sort((a, b) {
+                                      final aAt = toDate(a['created_at']);
+                                      final bAt = toDate(b['created_at']);
+                                      if (aAt != null && bAt != null) {
+                                        return aAt.compareTo(bAt);
+                                      }
+                                      if (aAt != null) {
+                                        return -1;
+                                      }
+                                      if (bAt != null) {
+                                        return 1;
+                                      }
+                                      return 0;
+                                    });
 
                                     if (!_didInitialScrollToBottom &&
-                                        docs.isNotEmpty) {
+                                        orderedEntries.isNotEmpty) {
                                       _didInitialScrollToBottom = true;
                                       WidgetsBinding.instance
                                           .addPostFrameCallback((_) {
@@ -985,6 +1108,19 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                             _scrollToBottom();
                                           });
                                     }
+                                    if (_didInitialScrollToBottom &&
+                                        orderedEntries.length >
+                                            _lastRenderedEntryCount) {
+                                      WidgetsBinding.instance
+                                          .addPostFrameCallback((_) {
+                                            if (!mounted) {
+                                              return;
+                                            }
+                                            _scrollToBottom(animated: true);
+                                          });
+                                    }
+                                    _lastRenderedEntryCount =
+                                        orderedEntries.length;
 
                                     return CustomScrollView(
                                       controller: _scrollController,
@@ -1088,36 +1224,6 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                                   ),
                                             ),
                                           ),
-                                        if (persistedTimelineLogs.isNotEmpty)
-                                          SliverToBoxAdapter(
-                                            child: Column(
-                                              children: persistedTimelineLogs
-                                                  .map(
-                                                    (e) => _TimelineLogLine(
-                                                      text: e.text,
-                                                      at: e.at,
-                                                      timeFmt: timeFmt,
-                                                    ),
-                                                  )
-                                                  .toList(growable: false),
-                                            ),
-                                          ),
-                                        if (fallbackTimelineLogsFiltered
-                                            .isNotEmpty)
-                                          SliverToBoxAdapter(
-                                            child: Column(
-                                              children:
-                                                  fallbackTimelineLogsFiltered
-                                                      .map(
-                                                        (e) => _TimelineLogLine(
-                                                          text: e.text,
-                                                          at: e.at,
-                                                          timeFmt: timeFmt,
-                                                        ),
-                                                      )
-                                                      .toList(growable: false),
-                                            ),
-                                          ),
                                         SliverPadding(
                                           padding: const EdgeInsets.fromLTRB(
                                             12,
@@ -1131,8 +1237,8 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                                   context,
                                                   index,
                                                 ) {
-                                                  final doc = docs[index];
-                                                  final d = doc.data();
+                                                  final d =
+                                                      orderedEntries[index];
                                                   return _MessageTile(
                                                     data: d,
                                                     timeFmt: timeFmt,
@@ -1147,7 +1253,10 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                                         _actedQuoteIds,
                                                     pipeline: effectivePipeline,
                                                   );
-                                                }, childCount: docs.length),
+                                                },
+                                                  childCount:
+                                                      orderedEntries.length,
+                                                ),
                                           ),
                                         ),
                                       ],
@@ -1315,6 +1424,20 @@ String _messageTypeKey(Map<String, dynamic> data) {
     return raw;
   }
   return raw.toString();
+}
+
+String? _cleanImageCaption(String? rawCaption) {
+  final caption = rawCaption?.trim();
+  if (caption == null || caption.isEmpty) {
+    return null;
+  }
+  final normalized = caption.toLowerCase();
+  if (normalized == 'customer image' ||
+      normalized == 'admin image' ||
+      normalized == 'image message') {
+    return null;
+  }
+  return caption;
 }
 
 /// Card / payment messages carry display data in Firestore; canonical state is on the REST pipeline.
@@ -1497,7 +1620,11 @@ class _MessageTile extends StatelessWidget {
     }
     if (type == 'image') {
       final url = data['image_url'] as String? ?? '';
-      final caption = data['caption'] as String? ?? '';
+      final role = _firestoreString(data['sender_role']) ?? '';
+      final isMe = role == 'customer';
+      final caption = _cleanImageCaption(_firestoreString(data['caption']));
+      final isPaymentProof =
+          _firestoreString(data['image_category']) == 'payment_proof';
       final stageRaw = _firestoreString(data['stage'])?.trim() ?? '';
       final noteRaw = _firestoreString(data['note'])?.trim() ?? '';
       String stageLabel = '';
@@ -1512,46 +1639,81 @@ class _MessageTile extends StatelessWidget {
         if (stageLabel.isNotEmpty) 'Workshop · $stageLabel',
         if (noteRaw.isNotEmpty) noteRaw,
       ].join(' · ');
+      final displayCaption =
+          composedCaption.isNotEmpty ? composedCaption : caption;
       return Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Align(
-          alignment: Alignment.centerLeft,
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.sizeOf(context).width * 0.94,
+              maxWidth: MediaQuery.sizeOf(context).width * 0.82,
             ),
-            child: AppGlassCard(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (url.isNotEmpty)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadii.sm),
-                      child: CachedNetworkImage(
-                        imageUrl: url,
-                        width: 220,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => const SizedBox(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                gradient: isMe
+                    ? LinearGradient(
+                        colors: [
+                          AppColors.gold.withValues(alpha: 0.22),
+                          AppColors.gold.withValues(alpha: 0.08),
+                        ],
+                      )
+                    : null,
+                border: Border.all(color: AppColors.glassBorder),
+                color: isMe ? null : AppColors.surface.withValues(alpha: 0.6),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: isMe
+                      ? CrossAxisAlignment.end
+                      : CrossAxisAlignment.start,
+                  children: [
+                    if (isPaymentProof)
+                      PremiumText.caption(
+                        'Payment Proof Uploaded',
+                        color: isMe ? AppColors.goldMuted : AppColors.textSecondary,
+                      ),
+                    if (isPaymentProof) const SizedBox(height: 6),
+                    if (url.isNotEmpty)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
+                        child: CachedNetworkImage(
+                          imageUrl: url,
                           width: 220,
-                          height: 140,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              color: AppColors.gold,
-                              strokeWidth: 2,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => const SizedBox(
+                            width: 220,
+                            height: 140,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: AppColors.gold,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: 220,
+                            height: 140,
+                            color: AppColors.surface.withValues(alpha: 0.6),
+                            alignment: Alignment.center,
+                            child: PremiumText.caption(
+                              'Image unavailable',
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  const SizedBox(height: 6),
-                  PremiumText.caption(
-                    composedCaption.isNotEmpty
-                        ? composedCaption
-                        : (caption.isEmpty ? 'Workshop update' : caption),
-                    color: AppColors.textSecondary,
-                  ),
-                ],
+                    if (displayCaption != null) ...[
+                      const SizedBox(height: 6),
+                      PremiumText.caption(
+                        displayCaption,
+                        color: AppColors.textSecondary,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1668,42 +1830,6 @@ class _LocalTimelineLog {
 
   final String text;
   final DateTime at;
-}
-
-class _TimelineLogLine extends StatelessWidget {
-  const _TimelineLogLine({
-    required this.text,
-    required this.at,
-    required this.timeFmt,
-  });
-
-  final String text;
-  final DateTime at;
-  final DateFormat timeFmt;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            PremiumText.caption(
-              text,
-              color: AppColors.textSecondary,
-              textAlign: TextAlign.center,
-            ),
-            PremiumText.caption(
-              'Workflow update · ${timeFmt.format(at.toLocal())}',
-              color: AppColors.textSecondary.withValues(alpha: 0.8),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _TextBubble extends StatelessWidget {

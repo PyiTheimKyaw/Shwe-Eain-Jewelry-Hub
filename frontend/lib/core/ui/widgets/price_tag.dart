@@ -7,11 +7,7 @@ import 'package:provider/provider.dart';
 
 /// Shows estimated line total in MMK or USD with a short fade when toggled.
 class PriceTag extends StatelessWidget {
-  const PriceTag({
-    super.key,
-    this.pricing,
-    this.compact = true,
-  });
+  const PriceTag({super.key, this.pricing, this.compact = true});
 
   final Map<String, dynamic>? pricing;
   final bool compact;
@@ -56,13 +52,13 @@ class PriceTag extends StatelessWidget {
             key: ValueKey<String>('${prefs.currency.name}_$label'),
             style: compact
                 ? Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: AppColors.gold,
-                      fontSize: compact ? 16 : 20,
-                      fontWeight: FontWeight.w700,
-                    )
-                : Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      color: AppColors.gold,
-                    ),
+                    color: AppColors.gold,
+                    fontSize: compact ? 16 : 20,
+                    fontWeight: FontWeight.w700,
+                  )
+                : Theme.of(
+                    context,
+                  ).textTheme.headlineMedium?.copyWith(color: AppColors.gold),
           ),
         );
       },

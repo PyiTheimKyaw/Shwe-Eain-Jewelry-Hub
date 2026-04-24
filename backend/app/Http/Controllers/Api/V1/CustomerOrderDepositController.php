@@ -34,21 +34,25 @@ class CustomerOrderDepositController extends Controller
 
         $stored = $this->mediaStorage->storeImage($request->file('proof'), 'orders/'.$order->id.'/deposits');
 
+        // Keep one deposit payment row per order phase; re-uploads refresh the same row.
         $payment = Payment::query()->firstOrNew([
             'order_id' => $order->id,
             'type' => Payment::TYPE_DEPOSIT,
         ]);
-
         $payment->amount_mmk = $order->deposit_amount_mmk;
         $payment->currency = 'MMK';
         $payment->status = Payment::STATUS_AWAITING_VERIFICATION;
         $payment->proof_storage_path = $stored['storage_path'];
         $payment->proof_mime = $request->file('proof')->getMimeType();
         $payment->submitted_at = now();
+        $payment->rejection_reason = null;
+        $payment->verified_at = null;
+        $payment->verified_by_user_id = null;
         $payment->save();
 
         $inquiry = $order->resolveInquiry();
         if ($inquiry !== null) {
+            $firebaseInquiry->publishPaymentProofImageMessage($inquiry, $payment);
             $firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }
 

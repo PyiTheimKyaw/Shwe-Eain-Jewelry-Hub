@@ -11,6 +11,7 @@ class InquiryPipeline {
     this.depositAmountMmk,
     this.depositInstructionsSentAt,
     this.depositPayment,
+    this.paymentProofHistory,
     this.latestReceipt,
     this.timelineLogs,
   });
@@ -31,6 +32,7 @@ class InquiryPipeline {
 
   /// Same keys as Firestore `payment_info_card` when MySQL has instructions (REST-only).
   final Map<String, dynamic>? depositPayment;
+  final List<Map<String, dynamic>>? paymentProofHistory;
   final Map<String, dynamic>? latestReceipt;
   final List<Map<String, dynamic>>? timelineLogs;
 
@@ -62,6 +64,14 @@ class InquiryPipeline {
     if (rawDp is Map<String, dynamic>) {
       depositPayment = rawDp;
     }
+    final rawProofHistory = json['payment_proof_history'];
+    List<Map<String, dynamic>>? paymentProofHistory;
+    if (rawProofHistory is List) {
+      paymentProofHistory = rawProofHistory
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
+    }
     final rawReceipt = json['latest_receipt'];
     Map<String, dynamic>? latestReceipt;
     if (rawReceipt is Map<String, dynamic>) {
@@ -91,6 +101,7 @@ class InquiryPipeline {
       depositAmountMmk: json['deposit_amount_mmk'] as String?,
       depositInstructionsSentAt: json['deposit_instructions_sent_at'] as String?,
       depositPayment: depositPayment,
+      paymentProofHistory: paymentProofHistory,
       latestReceipt: latestReceipt,
       timelineLogs: timelineLogs,
     );
@@ -117,6 +128,7 @@ class InquiryPipeline {
       depositAmountMmk: data['deposit_amount_mmk'] as String?,
       depositInstructionsSentAt: null,
       depositPayment: null,
+      paymentProofHistory: null,
       latestReceipt: null,
       timelineLogs: null,
     );

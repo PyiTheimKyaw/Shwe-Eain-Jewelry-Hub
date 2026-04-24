@@ -10,6 +10,7 @@ use App\Services\OrderBuilderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 
 class CustomerQuoteController extends Controller
 {
@@ -42,14 +43,14 @@ class CustomerQuoteController extends Controller
     {
         $this->authorize('accept', $quote);
 
-        if ($quote->valid_until !== null && $quote->valid_until->isPast()) {
+        if ($this->isQuoteExpired($quote)) {
             return response()->json(['message' => 'This quote has expired.'], 422);
         }
 
         $order = DB::transaction(function () use ($quote) {
             $locked = Quote::query()->lockForUpdate()->findOrFail($quote->id);
 
-            if ($locked->valid_until !== null && $locked->valid_until->isPast()) {
+            if ($this->isQuoteExpired($locked)) {
                 abort(422, 'This quote has expired.');
             }
 
@@ -108,5 +109,20 @@ class CustomerQuoteController extends Controller
         }
 
         return response()->json(['data' => $quote->fresh(['lineItems'])]);
+    }
+
+    private function isQuoteExpired(Quote $quote): bool
+    {
+        if ($quote->valid_until === null) {
+            return false;
+        }
+
+        $cutoff = Carbon::instance($quote->valid_until);
+        // Admin forms often submit date-only valid-until values; treat those as end-of-day.
+        if ($cutoff->format('H:i:s') === '00:00:00') {
+            $cutoff = $cutoff->endOfDay();
+        }
+
+        return $cutoff->isPast();
     }
 }

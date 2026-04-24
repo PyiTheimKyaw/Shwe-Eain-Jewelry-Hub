@@ -106,11 +106,11 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                     sliver: SliverGrid(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.72,
-                      ),
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.72,
+                          ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) => const _ShimmerCard(),
                         childCount: 6,
@@ -130,18 +130,15 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                     sliver: SliverGrid(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.72,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final p = _items![index];
-                          return _ProductTile(product: p);
-                        },
-                        childCount: _items!.length,
-                      ),
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.72,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final p = _items![index];
+                        return _ProductTile(product: p);
+                      }, childCount: _items!.length),
                     ),
                   ),
               ],
@@ -193,13 +190,16 @@ class _ProductTile extends StatelessWidget {
         children: [
           Expanded(
             child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(AppRadii.md)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadii.md),
+              ),
               child: url == null
                   ? Container(
                       color: AppColors.surface,
-                      child: const Icon(Icons.image_not_supported_outlined,
-                          color: AppColors.textSecondary),
+                      child: const Icon(
+                        Icons.image_not_supported_outlined,
+                        color: AppColors.textSecondary,
+                      ),
                     )
                   : Hero(
                       tag: 'product-hero-${product.id}',
@@ -213,8 +213,10 @@ class _ProductTile extends StatelessWidget {
                         ),
                         errorWidget: (context, url, error) => Container(
                           color: AppColors.surface,
-                          child: const Icon(Icons.broken_image_outlined,
-                              color: AppColors.textSecondary),
+                          child: const Icon(
+                            Icons.broken_image_outlined,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                       ),
                     ),
@@ -230,9 +232,9 @@ class _ProductTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 WeightBadge(grams: product.weightGrams),

@@ -97,6 +97,7 @@ class InquiryPipelinePresenter
                     : null,
                 'deposit_instructions_sent_at' => $latestOrder->deposit_instructions_sent_at?->toIso8601String(),
                 'deposit_payment' => $this->depositPaymentDisplay($latestOrder),
+                'payment_proof_history' => $this->paymentProofHistory($latestOrder),
                 'latest_receipt' => $this->latestReceiptDisplay($latestOrder),
                 'primary_assignment_id' => $latestOrder->assignments->first()?->id,
                 'primary_artisan_user_id' => $latestOrder->assignments->first()?->artisan_user_id,
@@ -121,6 +122,7 @@ class InquiryPipelinePresenter
                 'deposit_amount_mmk' => null,
                 'deposit_instructions_sent_at' => null,
                 'deposit_payment' => null,
+                'payment_proof_history' => [],
                 'latest_receipt' => null,
                 'primary_assignment_id' => null,
                 'primary_artisan_user_id' => null,
@@ -145,6 +147,7 @@ class InquiryPipelinePresenter
                 'deposit_amount_mmk' => null,
                 'deposit_instructions_sent_at' => null,
                 'deposit_payment' => null,
+                'payment_proof_history' => [],
                 'latest_receipt' => null,
                 'primary_assignment_id' => null,
                 'primary_artisan_user_id' => null,
@@ -164,6 +167,7 @@ class InquiryPipelinePresenter
             'deposit_amount_mmk' => null,
             'deposit_instructions_sent_at' => null,
             'deposit_payment' => null,
+            'payment_proof_history' => [],
             'latest_receipt' => null,
             'primary_assignment_id' => null,
             'primary_artisan_user_id' => null,
@@ -220,12 +224,38 @@ class InquiryPipelinePresenter
         $fields = $profile->toFirestorePaymentFields();
         $fields['order_number'] = $order->order_number;
         $fields['amount_mmk'] = (string) ($order->deposit_amount_mmk ?? '0');
+        if ($deposit->proof_storage_path) {
+            $fields['payment_proof_image_url'] = app(MediaStorageService::class)->publicUrl(
+                $deposit->proof_storage_path
+            );
+            $fields['payment_proof_submitted_at'] = $deposit->submitted_at?->toIso8601String();
+        }
+        $fields['payment_proof_history'] = $this->paymentProofHistory($order);
 
         foreach ($this->paymentBalanceBreakdown($order) as $k => $v) {
             $fields[$k] = $v;
         }
 
         return $fields;
+    }
+
+    /**
+     * @return array<int, array{payment_id:int,image_url:string,submitted_at:?string,status:?string,rejection_reason:?string}>
+     */
+    protected function paymentProofHistory(Order $order): array
+    {
+        return $order->payments
+            ->filter(fn (Payment $p) => $p->type === Payment::TYPE_DEPOSIT && ! empty($p->proof_storage_path))
+            ->sortBy('id')
+            ->values()
+            ->map(fn (Payment $p): array => [
+                'payment_id' => $p->id,
+                'image_url' => app(MediaStorageService::class)->publicUrl((string) $p->proof_storage_path),
+                'submitted_at' => $p->submitted_at?->toIso8601String(),
+                'status' => $p->status,
+                'rejection_reason' => $p->rejection_reason,
+            ])
+            ->all();
     }
 
     /**
