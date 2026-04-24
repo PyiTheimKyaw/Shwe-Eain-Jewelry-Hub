@@ -27,6 +27,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   CatalogProduct? _product;
   Object? _error;
   bool _loading = true;
+  final PageController _carouselController = PageController();
+  int _currentImageIndex = 0;
 
   @override
   void initState() {
@@ -45,6 +47,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       if (mounted) {
         setState(() {
           _product = p;
+          _currentImageIndex = 0;
           _loading = false;
         });
       }
@@ -56,6 +59,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         });
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _carouselController.dispose();
+    super.dispose();
   }
 
   @override
@@ -75,7 +84,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   Widget _buildContent(BuildContext context, CatalogProduct p) {
-    final url = p.primaryImageUrl;
+    final images = [...p.images]
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    final imageUrls = images
+        .map((e) => e.url.trim())
+        .where((u) => u.isNotEmpty)
+        .toList(growable: false);
+
     return CustomScrollView(
       slivers: [
         SliverAppBar(
@@ -104,29 +119,124 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadii.md),
                     child: AspectRatio(
-                      aspectRatio: 1,
-                      child: url == null
+                      aspectRatio: 1.02,
+                      child: imageUrls.isEmpty
                           ? Container(
                               color: AppColors.surface,
                               alignment: Alignment.center,
-                              child: const Icon(Icons.image_not_supported_outlined,
-                                  size: 64, color: AppColors.textSecondary),
-                            )
-                          : Hero(
-                              tag: 'product-hero-${p.id}',
-                              child: CachedNetworkImage(
-                                imageUrl: url,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Shimmer.fromColors(
-                                  baseColor: AppColors.surface,
-                                  highlightColor: AppColors.surfaceElevated,
-                                  child: Container(color: AppColors.surface),
-                                ),
+                              child: const Icon(
+                                Icons.image_not_supported_outlined,
+                                size: 64,
+                                color: AppColors.textSecondary,
                               ),
+                            )
+                          : Stack(
+                              children: [
+                                PageView.builder(
+                                  controller: _carouselController,
+                                  itemCount: imageUrls.length,
+                                  onPageChanged: (index) {
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    setState(() => _currentImageIndex = index);
+                                  },
+                                  itemBuilder: (context, index) {
+                                    final url = imageUrls[index];
+                                    return GestureDetector(
+                                      onTap: () => _openZoomGallery(
+                                        context: context,
+                                        imageUrls: imageUrls,
+                                        initialIndex: index,
+                                      ),
+                                      child: Hero(
+                                        tag: 'product-hero-${p.id}-$index',
+                                        child: CachedNetworkImage(
+                                          imageUrl: url,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, _) =>
+                                              Shimmer.fromColors(
+                                            baseColor: AppColors.surface,
+                                            highlightColor:
+                                                AppColors.surfaceElevated,
+                                            child: Container(
+                                              color: AppColors.surface,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                Positioned(
+                                  left: 12,
+                                  right: 12,
+                                  bottom: 12,
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: List.generate(
+                                            imageUrls.length,
+                                            (index) => AnimatedContainer(
+                                              duration: const Duration(
+                                                milliseconds: 220,
+                                              ),
+                                              width: index == _currentImageIndex
+                                                  ? 18
+                                                  : 7,
+                                              height: 7,
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(99),
+                                                color:
+                                                    index == _currentImageIndex
+                                                        ? AppColors.gold
+                                                        : AppColors.textSecondary
+                                                            .withValues(
+                                                          alpha: 0.55,
+                                                        ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 5,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.background
+                                              .withValues(alpha: 0.55),
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                          border: Border.all(
+                                            color: AppColors.glassBorder,
+                                          ),
+                                        ),
+                                        child: PremiumText.caption(
+                                          '${_currentImageIndex + 1}/${imageUrls.length}',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                     ),
                   ),
                 ),
+                if (imageUrls.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  PremiumText.caption(
+                    'Swipe to view all images · Tap to zoom',
+                    color: AppColors.textSecondary,
+                  ),
+                ],
                 const SizedBox(height: 20),
                 PremiumText.caption(p.sku),
                 const SizedBox(height: 8),
@@ -194,6 +304,92 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _openZoomGallery({
+    required BuildContext context,
+    required List<String> imageUrls,
+    required int initialIndex,
+  }) async {
+    if (imageUrls.isEmpty) {
+      return;
+    }
+    final zoomController = PageController(initialPage: initialIndex);
+    var active = initialIndex;
+
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close image viewer',
+      barrierColor: Colors.black.withValues(alpha: 0.88),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Stack(
+                children: [
+                  PageView.builder(
+                    controller: zoomController,
+                    itemCount: imageUrls.length,
+                    onPageChanged: (idx) => setSheetState(() => active = idx),
+                    itemBuilder: (context, index) {
+                      return InteractiveViewer(
+                        minScale: 1,
+                        maxScale: 4,
+                        child: Center(
+                          child: Hero(
+                            tag: 'product-hero-${_product?.id ?? 'p'}-$index',
+                            child: CachedNetworkImage(
+                              imageUrl: imageUrls[index],
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    right: 8,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: Colors.white,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.45),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.18),
+                            ),
+                          ),
+                          child: Text(
+                            '${active + 1}/${imageUrls.length}',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    zoomController.dispose();
   }
 
   static Widget _row(String label, Object? value) {

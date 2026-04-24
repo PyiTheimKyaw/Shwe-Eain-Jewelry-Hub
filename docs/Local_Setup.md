@@ -197,7 +197,7 @@ FIREBASE_STORAGE_PUBLIC_URL=https://storage.googleapis.com/your-bucket-name
 php artisan config:clear
 ```
 
-3. New uploads will go to Firebase Storage; old local records continue to render via compatibility fallback.
+3. New uploads will go to Firebase Storage. Existing old local records are not part of the active workflow.
 
 ---
 

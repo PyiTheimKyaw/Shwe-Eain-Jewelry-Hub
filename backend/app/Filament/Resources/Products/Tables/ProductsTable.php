@@ -2,12 +2,14 @@
 
 namespace App\Filament\Resources\Products\Tables;
 
+use App\Services\MediaStorageService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
@@ -18,6 +20,15 @@ class ProductsTable
     {
         return $table
             ->columns([
+                ImageColumn::make('cover_image')
+                    ->label('Image')
+                    ->getStateUsing(
+                        fn ($record) => app(MediaStorageService::class)->publicUrl(
+                            $record->images()->orderBy('sort_order')->value('storage_path')
+                        )
+                    )
+                    ->circular(false)
+                    ->size(56),
                 TextColumn::make('category.name')
                     ->searchable(),
                 TextColumn::make('sku')

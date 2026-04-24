@@ -8,6 +8,11 @@ use Illuminate\Support\Facades\Storage;
 
 class MediaStorageService
 {
+    public function writeDiskName(): string
+    {
+        return $this->writeDisk();
+    }
+
     public function storeImage(UploadedFile $file, string $folder): array
     {
         $disk = $this->writeDisk();
@@ -18,9 +23,7 @@ class MediaStorageService
 
         return [
             'disk' => $disk,
-            // Keep local records as relative paths; store firebase records as absolute URL
-            // so legacy consumers can keep rendering with minimal changes.
-            'storage_path' => $disk === 'firebase' ? $url : $path,
+            'storage_path' => $path,
             'path' => $path,
             'url' => $url,
             'mime_type' => (string) $file->getMimeType(),
@@ -50,6 +53,28 @@ class MediaStorageService
         return url($url);
     }
 
+    public function deleteByStoragePath(?string $value): void
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return;
+        }
+
+        if ($this->isAbsoluteUrl($raw)) {
+            $firebasePublicBase = trim((string) config('filesystems.disks.firebase.url', ''), '/');
+            if ($firebasePublicBase !== '' && str_starts_with($raw, $firebasePublicBase.'/')) {
+                $relative = ltrim(substr($raw, strlen($firebasePublicBase)), '/');
+                Storage::disk('firebase')->delete($relative);
+
+                return;
+            }
+
+            return;
+        }
+
+        Storage::disk($this->writeDisk())->delete($raw);
+    }
+
     protected function writeDisk(): string
     {
         $provider = strtolower((string) config('services.media.provider', 'local'));
@@ -63,8 +88,7 @@ class MediaStorageService
 
     protected function readDiskForPath(string $path): string
     {
-        // Legacy rows are relative public-disk paths.
-        return 'public';
+        return $this->writeDisk();
     }
 
     protected function isAbsoluteUrl(string $value): bool

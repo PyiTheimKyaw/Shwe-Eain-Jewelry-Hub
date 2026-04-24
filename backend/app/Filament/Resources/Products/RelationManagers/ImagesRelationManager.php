@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Products\RelationManagers;
 
+use App\Services\MediaStorageService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -19,6 +20,11 @@ class ImagesRelationManager extends RelationManager
 {
     protected static string $relationship = 'images';
 
+    protected function mediaDisk(): string
+    {
+        return app(MediaStorageService::class)->writeDiskName();
+    }
+
     public function form(Schema $schema): Schema
     {
         return $schema
@@ -26,7 +32,7 @@ class ImagesRelationManager extends RelationManager
                 FileUpload::make('storage_path')
                     ->label('Image')
                     ->image()
-                    ->disk('public')
+                    ->disk($this->mediaDisk())
                     ->directory(fn (): string => 'products/'.$this->getOwnerRecord()->getKey())
                     ->visibility('public')
                     ->required()
@@ -44,7 +50,7 @@ class ImagesRelationManager extends RelationManager
             ->recordTitleAttribute('storage_path')
             ->columns([
                 ImageColumn::make('storage_path')
-                    ->disk('public')
+                    ->getStateUsing(fn ($record) => app(MediaStorageService::class)->publicUrl($record->storage_path))
                     ->label('Preview'),
                 TextColumn::make('storage_path')
                     ->searchable()
