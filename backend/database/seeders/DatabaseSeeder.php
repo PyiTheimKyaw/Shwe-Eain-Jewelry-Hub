@@ -40,5 +40,6 @@ class DatabaseSeeder extends Seeder
 
         $this->call(PricingSnapshotSeeder::class);
         $this->call(CatalogSeeder::class);
+        $this->call(CommandCenterDemoSeeder::class);
     }
 }

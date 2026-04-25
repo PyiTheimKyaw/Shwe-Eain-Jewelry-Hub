@@ -13,25 +13,26 @@ class CatalogSeeder extends Seeder
      */
     public function run(): void
     {
-        $rings = Category::updateOrCreate(
-            ['slug' => 'rings'],
-            ['name' => 'Rings', 'sort_order' => 1]
-        );
+        $upsertCategory = function (string $slug, string $name, int $sortOrder): Category {
+            $category = Category::withTrashed()->updateOrCreate(
+                ['slug' => $slug],
+                ['name' => $name, 'sort_order' => $sortOrder]
+            );
 
-        $necklaces = Category::updateOrCreate(
-            ['slug' => 'necklaces'],
-            ['name' => 'Necklaces', 'sort_order' => 2]
-        );
+            if ($category->trashed()) {
+                $category->restore();
+            }
 
-        $bracelets = Category::updateOrCreate(
-            ['slug' => 'bracelets'],
-            ['name' => 'Bracelets', 'sort_order' => 3]
-        );
+            return $category;
+        };
 
-        $custom = Category::updateOrCreate(
-            ['slug' => 'custom-commissions'],
-            ['name' => 'Custom Commissions', 'sort_order' => 10]
-        );
+        $rings = $upsertCategory('rings', 'Rings', 1);
+
+        $necklaces = $upsertCategory('necklaces', 'Necklaces', 2);
+
+        $bracelets = $upsertCategory('bracelets', 'Bracelets', 3);
+
+        $custom = $upsertCategory('custom-commissions', 'Custom Commissions', 10);
 
         $catalog = [
             [

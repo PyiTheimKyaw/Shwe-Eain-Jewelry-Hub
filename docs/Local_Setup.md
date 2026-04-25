@@ -51,6 +51,21 @@ Seeding creates:
 - **Filament admin:** `admin@jewelryhub.test` / `password` (change in production)
 - **Demo customer:** `customer@example.com` / `password`
 - Active **gold + FX** pricing snapshots and **catalog** products so `GET /api/v1/catalog/products` returns `meta.pricing_configured: true` and numeric prices in the app.
+- Command-center demo operations data (inquiries, orders, payments, assignments) for dashboard charts and pulse widgets.
+
+### Optional: refresh only Command Center demo data
+
+If you only want to repopulate dashboard analytics/pulse data without touching migrations:
+
+```bash
+php artisan db:seed --class=CommandCenterDemoSeeder
+```
+
+This is useful after clearing records used by:
+- Revenue chart (`RevenueBarChartWidget`)
+- Order stage doughnut (`OrderStageDoughnutWidget`)
+- Inquiry conversion trend (`InquiryConversionLineWidget`)
+- Operations pulse (`OperationsPulseWidget`)
 
 ### 5. Public URLs for uploaded catalog images
 
@@ -233,5 +248,7 @@ php artisan config:clear
    - Admin assigns artisan with special instructions.
    - Artisan opens job detail and sees specs + design photos + instructions.
    - Customer opens **Order Details** and confirms the same specs/photos.
+7. If Command Center charts are empty after data cleanup:
+   - run `php artisan db:seed --class=CommandCenterDemoSeeder`
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.
