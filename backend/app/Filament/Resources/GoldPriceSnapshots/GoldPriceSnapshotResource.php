@@ -26,7 +26,7 @@ class GoldPriceSnapshotResource extends Resource
 
     protected static ?string $pluralModelLabel = 'gold price snapshots';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Pricing';
+    protected static string|UnitEnum|null $navigationGroup = 'Inventory';
 
     protected static ?int $navigationSort = 1;
 

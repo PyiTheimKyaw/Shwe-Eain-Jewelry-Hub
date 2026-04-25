@@ -13,7 +13,7 @@ class InquiryChatUploadController extends Controller
 {
     public function __invoke(Request $request, Inquiry $inquiry, MediaStorageService $mediaStorage): JsonResponse
     {
-        $this->authorize('view', $inquiry);
+        $this->authorize('update', $inquiry);
 
         $data = $request->validate([
             'file' => ['required', 'file', 'max:15360', 'mimes:jpeg,jpg,png,webp,heic'],

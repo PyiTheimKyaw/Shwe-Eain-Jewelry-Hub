@@ -7,8 +7,9 @@ use App\Models\Order;
 use App\Models\OrderAssignment;
 use App\Models\Payment;
 use App\Models\Quote;
-use App\Services\OrderLifecycleService;
+use App\Services\AdminAuditLogService;
 use App\Services\OrderBuilderService;
+use App\Services\OrderLifecycleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -29,7 +30,8 @@ class OrderController extends Controller
 
     public function __construct(
         protected OrderBuilderService $orders,
-        protected OrderLifecycleService $lifecycle
+        protected OrderLifecycleService $lifecycle,
+        protected AdminAuditLogService $auditLogs
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -66,6 +68,16 @@ class OrderController extends Controller
 
         $quote = Quote::query()->findOrFail($data['quote_id']);
         $order = $this->orders->createFromQuote($quote);
+        $this->auditLogs->log(
+            action: 'admin.order.created_from_quote',
+            actor: $request->user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'quote_id' => $quote->id,
+                'quote_number' => $quote->quote_number,
+            ],
+        );
 
         return response()->json(['data' => $order], 201);
     }
@@ -88,7 +100,7 @@ class OrderController extends Controller
                     ], 422);
                 }
 
-                if ($nextStatus === 'in_production') {
+                if (in_array($nextStatus, ['deposit_confirmed', 'in_production'], true)) {
                     $depositConfirmed = Payment::query()
                         ->where('order_id', $order->id)
                         ->where('type', Payment::TYPE_DEPOSIT)
@@ -96,7 +108,7 @@ class OrderController extends Controller
                         ->exists();
                     if (! $depositConfirmed) {
                         return response()->json([
-                            'message' => 'Cannot start production without a confirmed deposit payment.',
+                            'message' => 'Cannot set this order status without a confirmed deposit payment.',
                         ], 422);
                     }
                 }
@@ -115,7 +127,19 @@ class OrderController extends Controller
             }
         }
 
+        $oldStatus = (string) $order->status;
         $order->update($data);
+        $this->auditLogs->log(
+            action: 'admin.order.updated',
+            actor: $request->user(),
+            target: $order,
+            category: 'admin',
+            context: [
+                'old_status' => $oldStatus,
+                'new_status' => $data['status'] ?? $oldStatus,
+                'shipping_notes_updated' => array_key_exists('shipping_notes', $data),
+            ],
+        );
 
         return response()->json(['data' => $order->fresh()]);
     }

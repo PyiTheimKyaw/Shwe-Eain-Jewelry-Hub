@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\PaymentProfile;
 use App\Models\Quote;
 use App\Models\User;
+use App\Services\AdminAuditLogService;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryPipelinePresenter;
 use App\Services\InquiryQuoteCommitmentGate;
@@ -18,6 +19,7 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 
@@ -89,8 +91,11 @@ class ChatInquiry extends Page
 
         if ($firebase->isConfigured() && $hasWeb && $inquiry->firebase_thread_id) {
             try {
-                $this->firebaseToken = $firebase->mintChatToken(auth()->user(), $inquiry);
-                $this->showChat = true;
+                $user = Auth::user();
+                if ($user !== null) {
+                    $this->firebaseToken = $firebase->mintChatToken($user, $inquiry);
+                    $this->showChat = true;
+                }
             } catch (\Throwable) {
                 $this->showChat = false;
             }
@@ -301,6 +306,17 @@ class ChatInquiry extends Page
             $firebase->publishQuoteCardMessage($inquiry, $quote);
             $firebase->publishTimelineLogMessage($inquiry, '--- New Quote Published ---');
             $firebase->syncInquiryThreadDocument($inquiry);
+            app(AdminAuditLogService::class)->log(
+                action: 'admin.inquiry.quote_published',
+                actor: Auth::user(),
+                target: $quote,
+                category: 'admin',
+                context: [
+                    'inquiry_id' => $inquiry->id,
+                    'quote_number' => $quote->quote_number,
+                    'line_count' => count($lines),
+                ],
+            );
         } catch (\Throwable $e) {
             report($e);
             Notification::make()
@@ -408,6 +424,22 @@ class ChatInquiry extends Page
             return;
         }
 
+        $existingPayment = Payment::query()
+            ->where('order_id', $order->id)
+            ->where('type', Payment::TYPE_DEPOSIT)
+            ->first();
+        if ($existingPayment !== null &&
+            ! in_array($existingPayment->status, [Payment::STATUS_PENDING_PROOF, Payment::STATUS_REJECTED], true)
+        ) {
+            Notification::make()
+                ->title(__('Cannot resend payment instructions'))
+                ->body(__('Deposit verification is already in progress or confirmed.'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         $order->deposit_instructions_sent_at = now();
         $order->save();
 
@@ -432,6 +464,17 @@ class ChatInquiry extends Page
         );
         $firebase->publishTimelineLogMessage($inquiry, '--- Payment Instructions Provided ---');
         $firebase->syncInquiryThreadDocument($inquiry);
+        app(AdminAuditLogService::class)->log(
+            action: 'admin.order.payment_instructions_sent',
+            actor: Auth::user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'inquiry_id' => $inquiry->id,
+                'payment_profile_id' => $profile->id,
+                'deposit_amount_mmk' => (string) $order->deposit_amount_mmk,
+            ],
+        );
 
         $this->refreshPipeline();
 

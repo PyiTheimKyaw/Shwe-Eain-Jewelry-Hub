@@ -6,10 +6,15 @@ use App\Models\Order;
 use App\Models\OrderAssignment;
 use App\Models\Payment;
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
 class OrderLifecycleService
 {
+    public function __construct(
+        protected AdminAuditLogService $auditLogs
+    ) {}
+
     /**
      * @throws ValidationException
      */
@@ -53,7 +58,7 @@ class OrderLifecycleService
             ]);
         }
 
-        return OrderAssignment::create([
+        $assignment = OrderAssignment::create([
             'order_id' => $order->id,
             'artisan_user_id' => $artisanUserId,
             'task_scope' => $taskScope,
@@ -61,6 +66,21 @@ class OrderLifecycleService
             'instructions' => $instructions,
             'status' => 'assigned',
         ]);
+
+        $this->auditLogs->log(
+            action: 'admin.order.assignment.created',
+            actor: Auth::user(),
+            target: $assignment,
+            category: 'workflow',
+            context: [
+                'order_id' => $order->id,
+                'artisan_user_id' => $artisanUserId,
+                'task_scope' => $taskScope,
+                'order_item_id' => $orderItemId,
+            ],
+        );
+
+        return $assignment;
     }
 
     /**
@@ -75,6 +95,15 @@ class OrderLifecycleService
         }
 
         $order->update(['status' => 'ready']);
+        $this->auditLogs->log(
+            action: 'admin.order.qc_approved',
+            actor: Auth::user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'order_status' => 'ready',
+            ],
+        );
 
         return $order->fresh();
     }
@@ -114,6 +143,16 @@ class OrderLifecycleService
 
         $order->update(['status' => 'in_production']);
         $assignment->update(['status' => 'in_progress']);
+        $this->auditLogs->log(
+            action: 'workflow.order.production_started',
+            actor: Auth::user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'assignment_id' => $assignment->id,
+                'artisan_user_id' => $artisanUserId,
+            ],
+        );
 
         return $assignment->fresh();
     }
@@ -142,8 +181,17 @@ class OrderLifecycleService
 
         $order->update(['status' => 'pending_qc']);
         $assignment->update(['status' => 'done']);
+        $this->auditLogs->log(
+            action: 'workflow.order.ready_for_qc',
+            actor: Auth::user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'assignment_id' => $assignment->id,
+                'artisan_user_id' => $artisanUserId,
+            ],
+        );
 
         return $assignment->fresh();
     }
 }
-

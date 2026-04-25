@@ -9,6 +9,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Support\Facades\Auth;
 
 class ViewPayment extends ViewRecord
 {
@@ -17,6 +18,11 @@ class ViewPayment extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('downloadPdfReport')
+                ->label('Download PDF report')
+                ->icon('heroicon-o-document-arrow-down')
+                ->url(fn (): string => route('admin.exports.payments.pdf', ['payment' => $this->getRecord()]))
+                ->openUrlInNewTab(),
             Action::make('approvePayment')
                 ->label('Approve Payment')
                 ->icon('heroicon-o-check-circle')
@@ -26,7 +32,11 @@ class ViewPayment extends ViewRecord
                 ->action(function (): void {
                     /** @var Payment $payment */
                     $payment = $this->getRecord();
-                    app(PaymentVerificationService::class)->confirm(auth()->user(), $payment);
+                    $user = Auth::user();
+                    if ($user === null) {
+                        return;
+                    }
+                    app(PaymentVerificationService::class)->confirm($user, $payment);
 
                     Notification::make()
                         ->title('Payment approved')

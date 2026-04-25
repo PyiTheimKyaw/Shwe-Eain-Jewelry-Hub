@@ -21,6 +21,11 @@ class ViewOrder extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('downloadPdfReport')
+                ->label('Download PDF report')
+                ->icon('heroicon-o-document-arrow-down')
+                ->url(fn (): string => route('admin.exports.orders.pdf', ['order' => $this->getRecord()]))
+                ->openUrlInNewTab(),
             Action::make('assignArtisan')
                 ->label('Assign artisan')
                 ->icon('heroicon-o-user-plus')
@@ -114,4 +119,3 @@ class ViewOrder extends ViewRecord
         ];
     }
 }
-

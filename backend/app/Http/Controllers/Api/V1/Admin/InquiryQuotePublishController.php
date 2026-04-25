@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use App\Models\User;
+use App\Services\AdminAuditLogService;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryQuoteCommitmentGate;
 use App\Services\PricingService;
@@ -17,7 +18,8 @@ class InquiryQuotePublishController extends Controller
     public function __construct(
         protected PricingService $pricing,
         protected QuoteBuilderService $quotes,
-        protected FirebaseInquiryService $firebaseInquiry
+        protected FirebaseInquiryService $firebaseInquiry,
+        protected AdminAuditLogService $auditLogs
     ) {}
 
     /**
@@ -73,6 +75,17 @@ class InquiryQuotePublishController extends Controller
         $this->firebaseInquiry->publishQuoteCardMessage($inquiry, $quote);
         $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- New Quote Published ---');
         $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
+        $this->auditLogs->log(
+            action: 'admin.inquiry.quote_published',
+            actor: $request->user(),
+            target: $quote,
+            category: 'admin',
+            context: [
+                'inquiry_id' => $inquiry->id,
+                'quote_number' => $quote->quote_number,
+                'line_count' => count($data['lines']),
+            ],
+        );
 
         $payload = ['data' => $quote];
         if ($warning !== null) {

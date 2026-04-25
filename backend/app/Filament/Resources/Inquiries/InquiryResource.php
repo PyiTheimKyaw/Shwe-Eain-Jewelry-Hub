@@ -22,7 +22,7 @@ class InquiryResource extends Resource
 {
     protected static ?string $model = Inquiry::class;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Inquiries';
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
 

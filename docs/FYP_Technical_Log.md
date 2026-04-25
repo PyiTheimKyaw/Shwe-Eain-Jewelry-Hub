@@ -578,3 +578,222 @@ Migrated new media uploads to a configurable storage provider so chat and workfl
 - `php artisan view:cache` ✅
 - `flutter analyze` on modified inquiry/order/artisan URL files ✅
 
+---
+
+## 2026-04-24 — P0 security hardening and P1 admin operations prep
+
+### P0 — API hardening implemented
+
+- Added named API rate limiters in `AppServiceProvider` and bound them in `routes/api.php`:
+  - `auth-login`, `auth-register`, `uploads`, `payment-proof-upload`, `payment-admin-actions`, `quote-customer-decision`, `quote-admin-mutations`.
+- Enforced payment transition guards:
+  - `PaymentVerificationService::confirm` now only allows `awaiting_verification` (plus idempotent `confirmed`).
+  - `PaymentVerificationService::reject` now only allows `awaiting_verification` and blocks `confirmed`.
+  - `CustomerOrderDepositController` only allows proof upload from `pending_proof` or `rejected` and blocks overwrite of confirmed records.
+  - `OrderPaymentInstructionController` and Filament `ChatInquiry` block instruction reset when deposit verification is already in progress or confirmed.
+  - `Admin\OrderController` now enforces confirmed deposit invariant for both `deposit_confirmed` and `in_production`.
+- Hardened admin-sensitive upload paths:
+  - Admin chat upload route is now `auth + role:admin`.
+  - `InquiryChatUploadController` now authorizes with admin-level inquiry `update` permission.
+  - Generic `UploadController` now enforces strict image MIME allowlist and role-based folder constraints.
+
+### P0 — regression coverage
+
+- Added `tests/Feature/SecurityHardeningTest.php` to cover:
+  - login throttling (429 behavior),
+  - admin chat upload authorization boundary,
+  - generic upload MIME validation,
+  - payment transition invariants (cannot reject confirmed / confirm pending proof),
+  - confirmed-payment proof overwrite protection.
+- Re-ran core suites:
+  - `SecurityHardeningTest` ✅
+  - `BespokeOrderWorkflowTest` ✅
+  - `InquiryQuoteFlowTest` ✅
+
+### P1 — admin operations kickoff
+
+- Payments queue triage upgrades:
+  - status tabs (`awaiting_verification`, `rejected`, `confirmed`, `all`) in Filament list.
+  - filters for status, submitted date window, order/customer lookup.
+  - default sort tuned for triage (`submitted_at` descending).
+- Unified Filament `UserResource` added with role-aware create/edit/list management for Admin, Artisan, and Customer records, including artisan profile fields.
+
+---
+
+## 2026-04-25 — Admin audit logs + operations KPI dashboard foundation
+
+### Summary
+
+Implemented the first P0/P1 admin hardening block by introducing persistent audit traceability for sensitive admin actions and adding top-level operational KPI widgets in Filament.
+
+### Backend audit log foundation
+
+- Added `audit_logs` table migration:
+  - `actor_user_id`, `category`, `action`, `target_type`, `target_id`, `context`, request metadata (`ip_address`, `user_agent`), `occurred_at`.
+- Added `App\Models\AuditLog` and centralized writer `App\Services\AdminAuditLogService`.
+- Service is non-blocking for business flow (logs warning on write failure instead of throwing).
+
+### Filament admin: audit visibility
+
+- Added read-only `AuditLogResource` under **Settings**:
+  - list + view only (no create/edit/delete pages),
+  - filters by category / actor / date window,
+  - detailed context JSON and target metadata.
+
+### Logged sensitive actions (initial coverage)
+
+- Quote publishing:
+  - Filament concierge chat publish (`ChatInquiry`)
+  - admin API inquiry quote publish (`InquiryQuotePublishController`)
+  - admin quote create/status update (`QuoteController`)
+- Payment verification:
+  - confirm/reject in `PaymentVerificationService`
+- Order workflow:
+  - payment instructions sent (Filament + API paths),
+  - artisan assignment + QC approval in `OrderLifecycleService`,
+  - admin order create-from-quote / update in `OrderController`.
+- Admin settings/actions:
+  - user create/update/delete (Filament user pages),
+  - gold and FX snapshot creation pages.
+
+### Filament operational KPI widgets
+
+- Added dashboard widgets:
+  - `RevenueStats`: revenue **today** and **this month** in MMK and derived USD (from current FX snapshot).
+  - `ActionQueuesStats`: payments awaiting verification + inquiries needing quotes.
+  - `ArtisanOverviewStats`: orders currently in production.
+
+### Validation
+
+- Backend feature suites passed after integration:
+  - `SecurityHardeningTest`
+  - `BespokeOrderWorkflowTest`
+  - `InquiryQuoteFlowTest`
+
+---
+
+## 2026-04-25 — Reporting & Export Engine (Filament)
+
+### Summary
+
+Implemented the first full reporting/export surface for Filament admin:
+- bulk selected-record exports (CSV / Excel) for orders and payments,
+- individual PDF reports for order/payment records,
+- advanced table filtering for report slicing,
+- dashboard sales-summary PDF exports,
+- dedicated report hub resource for date-ranged exports across multiple report types.
+
+### Package and foundations
+
+- Added Excel support package:
+  - `maatwebsite/excel` (Composer).
+- Added reusable export stack:
+  - `App\Exports\ArrayReportExport`
+  - `App\Services\ReportExportService`
+- Added report blade templates:
+  - `resources/views/reports/order-detail.blade.php`
+  - `resources/views/reports/payment-detail.blade.php`
+  - `resources/views/reports/sales-summary.blade.php`
+  - `resources/views/reports/dynamic-report.blade.php`
+  - shared header partial with optional logo support at `public/images/logo.png`.
+
+### Filament resource/table enhancements
+
+- `OrdersTable`:
+  - status + created-date filters,
+  - bulk **Export selected** action (CSV/XLSX).
+- `PaymentsTable`:
+  - submitted + verified date window filters,
+  - status filter retained,
+  - bulk **Export selected** action (CSV/XLSX).
+- `InquiriesTable`:
+  - added status + created-date filters for operational report slicing.
+
+### Record-level PDF actions
+
+- `ViewOrder` now includes **Download PDF report** action.
+- `ViewPayment` now includes **Download PDF report** action.
+
+### Dashboard and quick exports
+
+- Created custom Filament dashboard page (`App\Filament\Pages\Dashboard`) with header action:
+  - **Download Current Month Sales Summary (PDF)**.
+- Added `QuickExportWidget`:
+  - one-click **Today's Sales Summary** PDF,
+  - one-click **Current Month** sales PDF.
+- Added admin-protected web routes:
+  - `/admin/reports/sales-summary/today`
+  - `/admin/reports/sales-summary/current-month`
+  via `App\Http\Controllers\Admin\ReportDownloadController`.
+
+### Dedicated report resource
+
+- Added `ReportExportResource` (Reports navigation group) with `ReportExportHub` page.
+- Export dialog supports:
+  - report type: Sales, Payments, Artisan Performance, Order Lifecycle
+  - date range pickers
+  - format: PDF / XLSX / CSV.
+
+### Validation
+
+- Post-change regression pass:
+  - `SecurityHardeningTest` ✅
+- Static analysis on changed reporting/export files: no linter errors.
+
+---
+
+## 2026-04-25 — Admin Command Center polish (charts, pulse, nav ordering)
+
+### Summary
+
+Completed the admin dashboard upgrade from basic stats to a data-driven **Command Center** with live chart widgets, operational pulse signals, luxury theme alignment, grouped navigation, and quick-access pricing/audit controls.
+
+### Dashboard analytics (Filament widgets)
+
+- Added chart widgets backed by real DB data:
+  - `RevenueBarChartWidget` — monthly confirmed payment revenue for MMK + USD series.
+  - `OrderStageDoughnutWidget` — distribution for Pending / Production / QC / Ready (excluding cancelled orders).
+  - `InquiryConversionLineWidget` — 6-month inquiry-to-order trend signal.
+- Added top-row KPI widgets:
+  - `CommandCenterKpisWidget` — spot gold & FX, active inquiries, SLA-risk orders.
+  - `OperationsPulseWidget` — pending payment verifications + active artisan production assignments.
+- Added command strip widget:
+  - `CommandCenterStripWidget` + Blade view with quick links for global pricing snapshots and audit trail access.
+
+### Data and service layer
+
+- Added `App\Services\DashboardAnalyticsService` for shared dashboard aggregates:
+  - `monthlyRevenueSeries(...)`
+  - `orderStageDistribution()`
+  - `inquiryOrderConversionSeries(...)`
+  - `slaBreachCount()`
+- Query implementation is SQLite-friendly for test environment compatibility (PHP-side grouping where needed).
+
+### Dashboard page composition
+
+- `App\Filament\Pages\Dashboard` now explicitly controls widget order/layout for command-center composition:
+  - KPIs → Operations Pulse → Command Strip → Quick Export → Charts.
+- Legacy auto-discovered stats widgets are intentionally disabled from discovery to avoid duplicate/legacy dashboard blocks.
+
+### Navigation and UX structure
+
+- Navigation groups normalized to:
+  - **Inventory**
+  - **Operations**
+  - **Finance**
+  - **Reports**
+  - **System Settings**
+- Group order is explicitly enforced in `AdminPanelProvider` via `navigationGroups([...])`.
+- Theme polish includes chart section visual alignment with dark-gold styling and chart datasets matched to navy/gold/cream palette.
+
+### Reporting / audit integration touchpoints
+
+- Report exports remain under **Reports** via `ReportExportResource`.
+- Audit trail is now directly reachable from the dashboard command strip.
+- `AuditLogsTable` now includes action-focused filtering for payment confirmation/rejection and workflow actions.
+
+### Validation
+
+- `phpunit` full backend suite passed after command center integration.
+- Updated files pass syntax checks and lints.
+

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Services\MediaStorageService;
 use Illuminate\Http\JsonResponse;
@@ -23,12 +24,23 @@ class UploadController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if ($user === null || ! in_array($user->role, [UserRole::Admin, UserRole::Artisan, UserRole::Customer], true)) {
+            abort(403, 'Unauthorized upload access.');
+        }
+
         $request->validate([
-            'file' => ['required', 'file', 'max:15360'],
+            'file' => ['required', 'file', 'max:15360', 'mimes:jpeg,jpg,png,webp,heic'],
             'folder' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $folder = Str::slug($request->string('folder', 'misc'));
+        $requestedFolder = Str::slug($request->string('folder', 'misc'));
+        $allowedByRole = match ($user->role) {
+            UserRole::Admin => ['inquiry-chat', 'order-progress', 'misc'],
+            UserRole::Artisan => ['order-progress', 'misc'],
+            UserRole::Customer => ['inquiry-chat', 'deposit-proof', 'misc'],
+        };
+        $folder = in_array($requestedFolder, $allowedByRole, true) ? $requestedFolder : 'misc';
         $stored = $this->mediaStorage->storeImage($request->file('file'), 'uploads/'.$folder);
 
         return response()->json([

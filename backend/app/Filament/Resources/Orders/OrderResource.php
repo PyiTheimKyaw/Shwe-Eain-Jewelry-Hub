@@ -19,7 +19,7 @@ class OrderResource extends Resource
 {
     protected static ?string $model = Order::class;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Orders';
+    protected static string|UnitEnum|null $navigationGroup = 'Operations';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedWrenchScrewdriver;
 
@@ -62,4 +62,3 @@ class OrderResource extends Resource
         ]);
     }
 }
-

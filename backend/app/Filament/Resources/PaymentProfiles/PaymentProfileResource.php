@@ -21,7 +21,7 @@ class PaymentProfileResource extends Resource
 
     protected static ?string $navigationLabel = 'Payment profiles';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Settings';
+    protected static string|UnitEnum|null $navigationGroup = 'Finance';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCreditCard;
 

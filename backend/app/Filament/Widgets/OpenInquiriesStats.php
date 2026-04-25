@@ -8,6 +8,8 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class OpenInquiriesStats extends StatsOverviewWidget
 {
+    protected static bool $isDiscovered = false;
+
     protected function getStats(): array
     {
         $active = Inquiry::query()->whereIn('status', ['open', 'reviewing'])->count();

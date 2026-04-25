@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use App\Models\Quote;
 use App\Models\User;
+use App\Services\AdminAuditLogService;
 use App\Services\InquiryQuoteCommitmentGate;
 use App\Services\PricingService;
 use App\Services\QuoteBuilderService;
@@ -16,7 +17,8 @@ class QuoteController extends Controller
 {
     public function __construct(
         protected PricingService $pricing,
-        protected QuoteBuilderService $quotes
+        protected QuoteBuilderService $quotes,
+        protected AdminAuditLogService $auditLogs
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -87,6 +89,17 @@ class QuoteController extends Controller
         if (! empty($data['inquiry_id'])) {
             Inquiry::query()->whereKey($data['inquiry_id'])->update(['status' => 'quoted']);
         }
+        $this->auditLogs->log(
+            action: 'admin.quote.created',
+            actor: $request->user(),
+            target: $quote,
+            category: 'admin',
+            context: [
+                'inquiry_id' => $data['inquiry_id'] ?? null,
+                'status' => $quote->status,
+                'line_count' => count($data['lines']),
+            ],
+        );
 
         $payload = ['data' => $quote];
         if ($warning !== null) {
@@ -109,6 +122,16 @@ class QuoteController extends Controller
                 $warning = app(InquiryQuoteCommitmentGate::class)->warningForPublishing($inquiry);
             }
             $quote->update(['status' => $data['status']]);
+            $this->auditLogs->log(
+                action: 'admin.quote.status_updated',
+                actor: $request->user(),
+                target: $quote,
+                category: 'admin',
+                context: [
+                    'new_status' => $data['status'],
+                    'inquiry_id' => $quote->inquiry_id,
+                ],
+            );
         }
 
         $payload = ['data' => $quote->fresh()->load('lineItems')];

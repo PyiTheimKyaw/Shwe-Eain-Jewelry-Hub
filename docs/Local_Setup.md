@@ -132,6 +132,14 @@ flutter test
 
 ## Troubleshooting
 
+### API rate limits (429) on auth/upload/payment/quote actions
+
+Sensitive mutation endpoints now use per-user/per-IP throttles. In local testing, repeated rapid retries can return HTTP `429 Too Many Requests`.
+
+- Wait briefly and retry (cool-down is minute-scale for most buckets).
+- For scripted tests, use realistic pacing and avoid burst retries on login/upload endpoints.
+- If needed for debugging, inspect limiter keys in `backend/app/Providers/AppServiceProvider.php`.
+
 ### `Failed opening required '.../vendor/autoload.php'`
 
 PHP dependencies are missing. From `backend/` run:
@@ -153,6 +161,13 @@ php artisan view:cache
 
 Then hard-refresh the browser tab (`Cmd+Shift+R` on macOS).  
 This ensures updated polling/render logic is loaded.
+
+### Admin chat image upload returns 403
+
+The admin chat upload endpoint is now restricted to authenticated admin users only.
+
+- Ensure you are signed in as an admin account in Filament.
+- Route: `POST /admin/inquiries/{inquiry}/chat-upload`.
 
 ### Artisan/customer making specs or photos not appearing
 

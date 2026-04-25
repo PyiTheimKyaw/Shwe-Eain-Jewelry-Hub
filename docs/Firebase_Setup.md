@@ -112,6 +112,7 @@ Target name is **`firestore:rules`** (plural), not `firestore:rule`.
 - Do **not** commit service account JSON or production `.env` to public repos.
 - **Web API keys** are client-side by design; restrict keys in Google Cloud Console if needed.
 - **Custom token** claims (`role`, `thread_id`, `inquiry_id`) are enforced together with Firestore rules.
+- Admin web chat image upload (`/admin/inquiries/{inquiry}/chat-upload`) is now admin-only (`auth + role:admin`) and no longer accepts non-admin sessions.
 
 ---
 

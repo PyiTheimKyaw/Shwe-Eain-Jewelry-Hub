@@ -39,6 +39,15 @@ class CustomerOrderDepositController extends Controller
             'order_id' => $order->id,
             'type' => Payment::TYPE_DEPOSIT,
         ]);
+
+        if ($payment->exists &&
+            ! in_array($payment->status, [Payment::STATUS_PENDING_PROOF, Payment::STATUS_REJECTED], true)
+        ) {
+            return response()->json([
+                'message' => 'Payment proof cannot be uploaded in the current payment state.',
+            ], 422);
+        }
+
         $payment->amount_mmk = $order->deposit_amount_mmk;
         $payment->currency = 'MMK';
         $payment->status = Payment::STATUS_AWAITING_VERIFICATION;

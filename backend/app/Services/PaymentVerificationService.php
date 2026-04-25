@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Payment;
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -12,13 +13,18 @@ class PaymentVerificationService
 {
     public function __construct(
         protected FirebaseInquiryService $firebaseInquiry,
-        protected ReceiptService $receipts
+        protected ReceiptService $receipts,
+        protected AdminAuditLogService $auditLogs
     ) {}
 
     public function confirm(User $user, Payment $payment): Payment
     {
         if ($payment->type !== Payment::TYPE_DEPOSIT) {
             abort(422, 'Unsupported payment type.');
+        }
+
+        if (! in_array($payment->status, [Payment::STATUS_AWAITING_VERIFICATION, Payment::STATUS_CONFIRMED], true)) {
+            abort(422, 'Only payments awaiting verification can be confirmed.');
         }
 
         $order = $payment->order;
@@ -35,6 +41,16 @@ class PaymentVerificationService
 
                 $order->update(['status' => 'deposit_confirmed']);
             });
+            $this->auditLogs->log(
+                action: 'admin.payment.confirmed',
+                actor: $user,
+                target: $payment,
+                category: 'workflow',
+                context: [
+                    'order_id' => $payment->order_id,
+                    'amount_mmk' => (string) $payment->amount_mmk,
+                ],
+            );
         } elseif ($order->status !== 'deposit_confirmed') {
             $order->update(['status' => 'deposit_confirmed']);
         }
@@ -70,12 +86,34 @@ class PaymentVerificationService
 
     public function reject(Payment $payment, ?string $reason): Payment
     {
+        if ($payment->type !== Payment::TYPE_DEPOSIT) {
+            abort(422, 'Unsupported payment type.');
+        }
+
+        if ($payment->status === Payment::STATUS_CONFIRMED) {
+            abort(422, 'A confirmed payment cannot be rejected.');
+        }
+
+        if ($payment->status !== Payment::STATUS_AWAITING_VERIFICATION) {
+            abort(422, 'Only payments awaiting verification can be rejected.');
+        }
+
         $payment->update([
             'status' => Payment::STATUS_REJECTED,
             'rejection_reason' => $reason,
             'verified_at' => null,
             'verified_by_user_id' => null,
         ]);
+        $this->auditLogs->log(
+            action: 'admin.payment.rejected',
+            actor: Auth::user(),
+            target: $payment,
+            category: 'workflow',
+            context: [
+                'order_id' => $payment->order_id,
+                'reason' => $reason,
+            ],
+        );
 
         $inquiry = $payment->order->resolveInquiry();
         if ($inquiry !== null) {
