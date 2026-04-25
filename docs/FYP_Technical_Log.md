@@ -797,3 +797,68 @@ Completed the admin dashboard upgrade from basic stats to a data-driven **Comman
 - `phpunit` full backend suite passed after command center integration.
 - Updated files pass syntax checks and lints.
 
+---
+
+## 2026-04-25 — Business Config Console + P0/P1 Table Polish
+
+### Summary
+
+Implemented the final P0/P1 admin operations polish by introducing a DB-backed **Business Config Console** in Filament and integrating high-value UX/logic improvements across Payments, Orders, Inquiries, and Users tables.
+
+### Global Business Config Console
+
+- Added `business_configs` table + default singleton row:
+  - `default_deposit_percentage`
+  - `payment_at_risk_hours`
+  - `order_at_risk_hours`
+  - `currency_refresh_interval_minutes`
+  - `payment_accept_template`
+  - `payment_reject_template`
+- Added `BusinessConfigResource` under **System Settings** for admin-managed configuration.
+- Added `BusinessConfigService` and integrated it into core logic:
+  - `OrderBuilderService` now resolves default deposit percentage from DB config.
+  - `DashboardAnalyticsService::slaBreachCount()` now uses payment/order SLA thresholds from DB config.
+  - Command-center widget polling intervals now derive from configured currency refresh interval.
+  - `PaymentVerificationService` now uses configurable accept/reject notification templates.
+
+### Payments table polish
+
+- Added **aging badge** column with SLA-friendly color coding:
+  - green `< 1h`
+  - yellow `1–4h`
+  - red `> 4h`
+- Enhanced reject UX:
+  - common reason dropdown (`Incomplete amount`, `Blur image`, `Wrong account`)
+  - dedicated **Quick reject** action while still using existing service guards.
+
+### Orders table polish
+
+- Added custom status badge colors by workflow stage.
+- Added **Workflow age** badge column.
+- Added quick action to **Open related inquiry chat** (when quote/inquiry link exists).
+
+### Inquiries table polish
+
+- Added **Unanswered/Responded** marker badge.
+- Added current **Quote status** shortcut badge (`none`, `draft`, `sent`, `accepted`, etc.).
+
+### Users table polish + account controls
+
+- Added `users.account_status` (`active`/`suspended`) and `users.force_password_reset`.
+- Added table actions:
+  - account status toggle (`Suspend`/`Activate`)
+  - **Forced password reset** (flags account + revokes active tokens).
+- Added account status + reset state indicators to the users table.
+- Auth flow integration:
+  - login now blocks suspended accounts
+  - login now blocks accounts with forced reset pending.
+
+### Validation
+
+- New migrations applied successfully.
+- Critical backend test suites passed:
+  - `SecurityHardeningTest`
+  - `InquiryQuoteFlowTest`
+  - `BespokeOrderWorkflowTest`
+- Updated files pass syntax/lint checks.
+

@@ -51,6 +51,14 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
+        if ($user->account_status === 'suspended') {
+            return response()->json(['message' => 'Account is suspended. Please contact support.'], 423);
+        }
+
+        if ((bool) $user->force_password_reset) {
+            return response()->json(['message' => 'Password reset required. Please contact admin support.'], 423);
+        }
+
         $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
@@ -81,6 +89,8 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role->value,
+            'account_status' => $user->account_status,
+            'force_password_reset' => (bool) $user->force_password_reset,
             'customer_profile' => $user->customerProfile,
             'artisan_profile' => $user->artisanProfile,
         ];

@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\Orders\Tables;
 
+use App\Filament\Resources\Inquiries\InquiryResource;
+use App\Models\Order;
+use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\ViewAction;
@@ -28,7 +31,27 @@ class OrdersTable
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'awaiting_deposit' => 'warning',
+                        'deposit_confirmed' => 'info',
+                        'in_production' => 'primary',
+                        'pending_qc' => 'gray',
+                        'ready' => 'success',
+                        'shipped' => 'success',
+                        'completed' => 'success',
+                        'cancelled' => 'danger',
+                        default => 'gray',
+                    })
                     ->sortable(),
+                TextColumn::make('workflow_age')
+                    ->label('Workflow age')
+                    ->getStateUsing(fn (Order $record): string => $record->created_at?->diffForHumans() ?? '—')
+                    ->badge()
+                    ->color(function (Order $record): string {
+                        $hours = (int) ($record->created_at?->diffInHours(now()) ?? 0);
+
+                        return $hours < 24 ? 'success' : ($hours < 72 ? 'warning' : 'danger');
+                    }),
                 TextColumn::make('total_usd_snapshot')
                     ->label('Total (USD)')
                     ->sortable(),
@@ -84,6 +107,19 @@ class OrdersTable
             ->defaultSort('created_at', 'desc')
             ->recordActions([
                 ViewAction::make(),
+                Action::make('openInquiryChat')
+                    ->label('Open related inquiry chat')
+                    ->icon('heroicon-o-chat-bubble-left-right')
+                    ->url(function (Order $record): ?string {
+                        $inquiryId = $record->quote?->inquiry_id;
+                        if (! $inquiryId) {
+                            return null;
+                        }
+
+                        return InquiryResource::getUrl('chat', ['record' => $inquiryId]);
+                    })
+                    ->openUrlInNewTab()
+                    ->visible(fn (Order $record): bool => (bool) $record->quote?->inquiry_id),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

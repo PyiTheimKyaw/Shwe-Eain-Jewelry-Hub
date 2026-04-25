@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Inquiry;
+use App\Services\BusinessConfigService;
 use App\Services\DashboardAnalyticsService;
 use App\Services\PricingService;
 use Filament\Support\Icons\Heroicon;
@@ -23,7 +24,7 @@ class CommandCenterKpisWidget extends StatsOverviewWidget
 
     protected function getPollingInterval(): ?string
     {
-        return '60s';
+        return app(BusinessConfigService::class)->currencyRefreshIntervalSeconds().'s';
     }
 
     /**

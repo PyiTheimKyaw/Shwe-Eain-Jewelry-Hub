@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Models\OrderAssignment;
 use App\Models\Payment;
+use App\Services\BusinessConfigService;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -22,7 +23,7 @@ class OperationsPulseWidget extends StatsOverviewWidget
 
     protected function getPollingInterval(): ?string
     {
-        return '60s';
+        return app(BusinessConfigService::class)->currencyRefreshIntervalSeconds().'s';
     }
 
     /**

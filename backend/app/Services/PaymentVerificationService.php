@@ -14,7 +14,8 @@ class PaymentVerificationService
     public function __construct(
         protected FirebaseInquiryService $firebaseInquiry,
         protected ReceiptService $receipts,
-        protected AdminAuditLogService $auditLogs
+        protected AdminAuditLogService $auditLogs,
+        protected BusinessConfigService $businessConfig
     ) {}
 
     public function confirm(User $user, Payment $payment): Payment
@@ -76,7 +77,7 @@ class PaymentVerificationService
                 $this->firebaseInquiry->publishReceiptCardMessage($inquiry, $issuedReceipt);
             }
             if ($shouldBroadcastUpdate) {
-                $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- Deposit Confirmed ---');
+                $this->firebaseInquiry->publishTimelineLogMessage($inquiry, $this->businessConfig->paymentAcceptTemplate());
                 $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
             }
         }
@@ -117,11 +118,8 @@ class PaymentVerificationService
 
         $inquiry = $payment->order->resolveInquiry();
         if ($inquiry !== null) {
-            $message = '--- Payment Rejected ---';
-            $cleanReason = trim((string) $reason);
-            if ($cleanReason !== '') {
-                $message .= ' | Reason: '.$cleanReason;
-            }
+            $cleanReason = trim((string) $reason) !== '' ? trim((string) $reason) : 'No reason specified';
+            $message = str_replace('{reason}', $cleanReason, $this->businessConfig->paymentRejectTemplate());
             $this->firebaseInquiry->publishTimelineLogMessage($inquiry, $message);
             $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }

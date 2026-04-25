@@ -60,6 +60,6 @@ class InquiryResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->with(['customer', 'product']);
+        return parent::getEloquentQuery()->with(['customer', 'product', 'quotes']);
     }
 }

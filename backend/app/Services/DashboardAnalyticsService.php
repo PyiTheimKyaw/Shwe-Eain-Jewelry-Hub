@@ -128,22 +128,30 @@ class DashboardAnalyticsService
     public function slaBreachCount(): int
     {
         $now = Carbon::now();
+        $settings = app(BusinessConfigService::class);
+        $paymentRiskHours = max(1, $settings->paymentRiskHours());
+        $orderRiskHours = max(1, $settings->orderRiskHours());
+
+        $paymentStale = Payment::query()
+            ->where('status', Payment::STATUS_AWAITING_VERIFICATION)
+            ->where('submitted_at', '<', $now->copy()->subHours($paymentRiskHours))
+            ->count();
 
         $depositStale = Order::query()
             ->where('status', 'awaiting_deposit')
-            ->where('created_at', '<', $now->copy()->subDays(10))
+            ->where('created_at', '<', $now->copy()->subHours($orderRiskHours))
             ->count();
 
         $preProdStale = Order::query()
             ->where('status', 'deposit_confirmed')
-            ->where('updated_at', '<', $now->copy()->subDays(14))
+            ->where('updated_at', '<', $now->copy()->subHours($orderRiskHours))
             ->count();
 
         $productionStale = Order::query()
             ->where('status', 'in_production')
-            ->where('updated_at', '<', $now->copy()->subDays(21))
+            ->where('updated_at', '<', $now->copy()->subHours($orderRiskHours))
             ->count();
 
-        return $depositStale + $preProdStale + $productionStale;
+        return $paymentStale + $depositStale + $preProdStale + $productionStale;
     }
 }

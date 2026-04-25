@@ -13,6 +13,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -54,6 +55,25 @@ class PaymentsTable
                 TextColumn::make('submitted_at')
                     ->dateTime()
                     ->sortable(),
+                TextColumn::make('aging')
+                    ->label('Aging')
+                    ->badge()
+                    ->getStateUsing(function (Payment $record): string {
+                        if ($record->submitted_at === null) {
+                            return 'Not submitted';
+                        }
+
+                        return 'Submitted '.$record->submitted_at->diffForHumans();
+                    })
+                    ->color(function (Payment $record): string {
+                        if ($record->submitted_at === null) {
+                            return 'gray';
+                        }
+
+                        $hours = $record->submitted_at->diffInHours(now());
+
+                        return $hours < 1 ? 'success' : ($hours <= 4 ? 'warning' : 'danger');
+                    }),
             ])
             ->filters([
                 Filter::make('status')
@@ -158,15 +178,55 @@ class PaymentsTable
                     ->color('danger')
                     ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
                     ->form([
+                        Select::make('quick_reason')
+                            ->label('Quick reject reason')
+                            ->options([
+                                'Incomplete amount' => 'Incomplete amount',
+                                'Blur image' => 'Blur image',
+                                'Wrong account' => 'Wrong account',
+                            ])
+                            ->native(false),
                         Textarea::make('reason')
                             ->label('Reason (optional)')
                             ->rows(3),
                     ])
                     ->action(function (Payment $record, array $data) {
+                        $quickReason = trim((string) ($data['quick_reason'] ?? ''));
+                        $reason = trim((string) ($data['reason'] ?? ''));
+                        $finalReason = $reason !== '' ? $reason : ($quickReason !== '' ? $quickReason : null);
+
                         app(PaymentVerificationService::class)->reject(
                             $record,
-                            $data['reason'] ?? null
+                            $finalReason
                         );
+                    }),
+                Action::make('quickReject')
+                    ->label('Quick reject')
+                    ->color('danger')
+                    ->icon('heroicon-o-x-circle')
+                    ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
+                    ->form([
+                        Select::make('quick_reason')
+                            ->label('Reason')
+                            ->options([
+                                'Incomplete amount' => 'Incomplete amount',
+                                'Blur image' => 'Blur image',
+                                'Wrong account' => 'Wrong account',
+                            ])
+                            ->required()
+                            ->native(false),
+                    ])
+                    ->action(function (Payment $record, array $data) {
+                        app(PaymentVerificationService::class)->reject(
+                            $record,
+                            (string) ($data['quick_reason'] ?? '')
+                        );
+
+                        Notification::make()
+                            ->title('Payment rejected')
+                            ->body('Reason: '.(string) ($data['quick_reason'] ?? ''))
+                            ->danger()
+                            ->send();
                     }),
             ])
             ->toolbarActions([

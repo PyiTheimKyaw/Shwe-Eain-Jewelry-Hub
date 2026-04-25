@@ -9,6 +9,7 @@ use App\Models\Payment;
 use App\Models\Quote;
 use App\Models\User;
 use App\Notifications\QuoteRevisedAcceptedForArtisan;
+use App\Services\BusinessConfigService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
@@ -222,7 +223,7 @@ class OrderBuilderService
      */
     protected function insertOrderAndItemsFromQuote(Quote $quote, string $creditConfirmedMmk = '0'): Order
     {
-        $depositPct = (float) config('jewelry.default_deposit_percentage', 50);
+        $depositPct = app(BusinessConfigService::class)->depositPercentage();
         $total = (float) $quote->total_mmk;
         $credit = (float) $creditConfirmedMmk;
 

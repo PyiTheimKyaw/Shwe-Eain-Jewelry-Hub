@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Services\DashboardAnalyticsService;
+use App\Services\BusinessConfigService;
 use Filament\Widgets\ChartWidget;
 
 class RevenueBarChartWidget extends ChartWidget
@@ -28,7 +29,7 @@ class RevenueBarChartWidget extends ChartWidget
 
     protected function getPollingInterval(): ?string
     {
-        return '120s';
+        return app(BusinessConfigService::class)->currencyRefreshIntervalSeconds().'s';
     }
 
     /**

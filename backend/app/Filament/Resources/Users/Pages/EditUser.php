@@ -35,6 +35,12 @@ class EditUser extends EditRecord
     protected function afterSave(): void
     {
         $user = $this->record->fresh();
+        if (filled($this->data['password'] ?? null)) {
+            $user->update(['force_password_reset' => false]);
+            $user->tokens()->delete();
+            $user = $user->fresh();
+        }
+
         if ($user->role === UserRole::Artisan) {
             ArtisanProfile::query()->updateOrCreate(
                 ['user_id' => $user->id],

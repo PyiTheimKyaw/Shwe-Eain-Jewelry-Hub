@@ -32,6 +32,15 @@ class UserForm
                         UserRole::Customer->value => 'Customer',
                     ])
                     ->native(false),
+                Select::make('account_status')
+                    ->label('Account status')
+                    ->options([
+                        'active' => 'Active',
+                        'suspended' => 'Suspended',
+                    ])
+                    ->default('active')
+                    ->required()
+                    ->native(false),
                 TextInput::make('password')
                     ->password()
                     ->revealable()
