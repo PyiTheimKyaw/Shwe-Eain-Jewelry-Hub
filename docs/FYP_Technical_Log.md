@@ -1014,3 +1014,61 @@ Completed Flutter-side push notification wiring across customer/admin/artisan fl
 - `flutter pub get` completed successfully after dependency updates.
 - `flutter analyze` clean (`No issues found!`).
 
+---
+
+## 2026-04-25 — Final Payment & In-Store Pickup closing workflow
+
+### Summary
+
+Implemented the bespoke-journey closing stage: remaining-balance-aware final payment entry, automatic `ready -> completed` transition on final settlement confirmation, official final receipt PDF generation, admin quick actions, and customer receipt visibility improvements.
+
+### Settlement and remaining-balance logic
+
+- Added `OrderSettlementService` as a shared source for:
+  - confirmed deposit total,
+  - confirmed overall payment total,
+  - remaining balance from deposits,
+  - remaining overall balance.
+- Extended `Payment` model with `TYPE_FINAL`.
+- Rewired `InquiryPipelinePresenter::paymentBalanceBreakdown()` to use shared settlement calculations.
+
+### Lifecycle and verification
+
+- Extended `PaymentVerificationService` to support both `deposit` and `final` payment types.
+- Added completion automation:
+  - on final payment confirmation, if order is `ready` and remaining overall balance is `0`, complete order.
+- Added `OrderLifecycleService::completeAfterFinalSettlement()` as the guarded transition method.
+- Added completion push message via `PushNotificationService`:
+  - customer receives thank-you/finalized completion notification.
+
+### Admin panel UX and actions
+
+- Enabled payment record creation in `PaymentResource`:
+  - added create page and list header create action.
+- In create-payment form:
+  - when selected order status is `ready`, amount auto-defaults to remaining balance (total minus confirmed deposits),
+  - payment type auto-defaults to `final`.
+- Added `Record final payment` quick action on Order View:
+  - visible only when order is `ready`,
+  - amount prefilled with remaining-balance default,
+  - records and confirms final payment through canonical verification service.
+
+### Official final receipt PDF
+
+- Extended `ReceiptService` to support final settlement receipt rendering context:
+  - itemized lines,
+  - total price,
+  - deposit paid,
+  - final paid,
+  - fully-paid marker metadata.
+- Added dedicated template:
+  - `resources/views/receipts/final-receipt.blade.php` with `FULLY PAID` stamp.
+- Added admin download route/action for latest final receipt from Order View.
+- Extended customer receipt API payload with `payment_type` for frontend labeling.
+
+### Flutter customer receipt surface
+
+- Extended `PaymentReceipt` model with `paymentType`.
+- Updated receipt chips and details to show `Deposit` vs `Final`.
+- Added official receipts section to `CustomerOrderDetailScreen` so receipt download is available directly from order details.
+

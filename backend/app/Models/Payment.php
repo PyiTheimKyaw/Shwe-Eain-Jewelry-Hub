@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class Payment extends Model
 {
     public const TYPE_DEPOSIT = 'deposit';
+    public const TYPE_FINAL = 'final';
 
     public const STATUS_PENDING_PROOF = 'pending_proof';
 
@@ -61,5 +62,15 @@ class Payment extends Model
     public function receipt(): HasOne
     {
         return $this->hasOne(Receipt::class);
+    }
+
+    public function isDeposit(): bool
+    {
+        return $this->type === self::TYPE_DEPOSIT;
+    }
+
+    public function isFinal(): bool
+    {
+        return $this->type === self::TYPE_FINAL;
     }
 }

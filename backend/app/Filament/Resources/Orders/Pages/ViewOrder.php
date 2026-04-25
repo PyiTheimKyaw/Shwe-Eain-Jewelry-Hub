@@ -4,14 +4,21 @@ namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
 use App\Models\Order;
+use App\Models\Payment;
+use App\Models\PaymentProfile;
 use App\Models\User;
 use App\Services\FirebaseInquiryService;
+use App\Services\OrderSettlementService;
+use App\Services\PaymentVerificationService;
 use App\Services\OrderLifecycleService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
 class ViewOrder extends ViewRecord
@@ -26,6 +33,139 @@ class ViewOrder extends ViewRecord
                 ->icon('heroicon-o-document-arrow-down')
                 ->url(fn (): string => route('admin.exports.orders.pdf', ['order' => $this->getRecord()]))
                 ->openUrlInNewTab(),
+            Action::make('downloadFinalReceipt')
+                ->label('Download final receipt')
+                ->icon('heroicon-o-document-check')
+                ->visible(function (): bool {
+                    /** @var Order $order */
+                    $order = $this->getRecord();
+
+                    return $order->receipts()
+                        ->get()
+                        ->contains(fn ($r): bool => (string) ($r->meta_json['payment_type'] ?? '') === Payment::TYPE_FINAL);
+                })
+                ->url(fn (): string => route('admin.exports.orders.final-receipt', ['order' => $this->getRecord()]))
+                ->openUrlInNewTab(),
+            Action::make('recordFinalPayment')
+                ->label('Record final payment')
+                ->icon('heroicon-o-banknotes')
+                ->color('success')
+                ->visible(function (): bool {
+                    /** @var Order $order */
+                    $order = $this->getRecord();
+
+                    return $order->status === 'ready';
+                })
+                ->disabled(function (): bool {
+                    /** @var Order $order */
+                    $order = $this->getRecord();
+                    $remaining = app(OrderSettlementService::class)->remainingBalanceFromDepositsMmk($order);
+
+                    return $remaining <= 0;
+                })
+                ->form([
+                    TextInput::make('amount_mmk')
+                        ->label('Final payment amount (MMK)')
+                        ->numeric()
+                        ->default(function (): string {
+                            /** @var Order $order */
+                            $order = $this->getRecord();
+                            $remaining = app(OrderSettlementService::class)->remainingBalanceFromDepositsMmk($order);
+
+                            return number_format($remaining, 4, '.', '');
+                        })
+                        ->required(),
+                    Select::make('payment_profile_id')
+                        ->label('Payment profile')
+                        ->options(
+                            PaymentProfile::query()
+                                ->active()
+                                ->ordered()
+                                ->pluck('name', 'id')
+                                ->all()
+                        )
+                        ->searchable()
+                        ->required(fn (Get $get): bool => ($get('payment_method') ?? 'profile') !== 'cash')
+                        ->visible(fn (Get $get): bool => ($get('payment_method') ?? 'profile') !== 'cash'),
+                    Select::make('payment_method')
+                        ->label('Collection method')
+                        ->options([
+                            'profile' => 'Bank / Wallet Transfer',
+                            'cash' => 'Cash Payment',
+                        ])
+                        ->default('profile')
+                        ->required()
+                        ->native(false)
+                        ->live()
+                        ->helperText('Choose Cash Payment for in-store cash collection.'),
+                    Textarea::make('notes_internal')
+                        ->label('Internal notes')
+                        ->rows(3),
+                    TextInput::make('settlement_notice')
+                        ->label('Settlement status')
+                        ->default(function (): string {
+                            /** @var Order $order */
+                            $order = $this->getRecord();
+                            $remaining = app(OrderSettlementService::class)->remainingBalanceFromDepositsMmk($order);
+
+                            if ($remaining <= 0) {
+                                return 'This order is already fully settled.';
+                            }
+
+                            return 'Remaining settlement balance: '.number_format($remaining, 2).' MMK';
+                        })
+                        ->disabled()
+                        ->dehydrated(false),
+                ])
+                ->action(function (array $data): void {
+                    /** @var Order $order */
+                    $order = $this->getRecord();
+                    $actor = Auth::user();
+                    if ($actor === null) {
+                        return;
+                    }
+                    if ($order->status !== 'ready') {
+                        Notification::make()
+                            ->title('Order is not ready for pickup')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    $remaining = app(OrderSettlementService::class)->remainingBalanceFromDepositsMmk($order);
+                    if ($remaining <= 0) {
+                        Notification::make()
+                            ->title('Order already fully settled')
+                            ->body('No additional final payment is required for this order.')
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
+                    $payment = Payment::create([
+                        'order_id' => $order->id,
+                        'payment_profile_id' => (($data['payment_method'] ?? 'profile') === 'cash')
+                            ? null
+                            : (int) $data['payment_profile_id'],
+                        'type' => Payment::TYPE_FINAL,
+                        'amount_mmk' => (float) $data['amount_mmk'],
+                        'currency' => 'MMK',
+                        'status' => Payment::STATUS_AWAITING_VERIFICATION,
+                        'submitted_at' => now(),
+                        'notes_internal' => $data['notes_internal'] ?? null,
+                    ]);
+
+                    app(PaymentVerificationService::class)->confirm($actor, $payment);
+
+                    Notification::make()
+                        ->title('Final payment recorded and verified')
+                        ->success()
+                        ->send();
+
+                    $this->getRecord()->refresh();
+                }),
             Action::make('assignArtisan')
                 ->label('Assign artisan')
                 ->icon('heroicon-o-user-plus')

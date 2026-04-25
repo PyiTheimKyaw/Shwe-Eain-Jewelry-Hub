@@ -15,6 +15,10 @@ use App\Models\Quote;
  */
 class InquiryPipelinePresenter
 {
+    public function __construct(
+        protected OrderSettlementService $settlement
+    ) {}
+
     public const STEP_CONSULTING = 'consulting';
 
     public const STEP_QUOTED = 'quoted';
@@ -265,16 +269,9 @@ class InquiryPipelinePresenter
      */
     public function paymentBalanceBreakdown(Order $order): array
     {
-        $credited = Payment::query()
-            ->where('order_id', $order->id)
-            ->where('type', Payment::TYPE_DEPOSIT)
-            ->where('status', Payment::STATUS_CONFIRMED)
-            ->sum('amount_mmk');
-
-        $creditedStr = (string) ($credited ?? '0');
-        $total = (float) $order->total_mmk;
-        $credF = (float) $creditedStr;
-        $balanceRemaining = max(0.0, round($total - $credF, 4));
+        $credited = $this->settlement->confirmedDepositsMmk($order);
+        $creditedStr = (string) $credited;
+        $balanceRemaining = $this->settlement->remainingBalanceFromDepositsMmk($order);
 
         return [
             'order_total_mmk' => (string) $order->total_mmk,

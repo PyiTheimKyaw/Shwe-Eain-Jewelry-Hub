@@ -12,7 +12,8 @@ use Illuminate\Validation\ValidationException;
 class OrderLifecycleService
 {
     public function __construct(
-        protected AdminAuditLogService $auditLogs
+        protected AdminAuditLogService $auditLogs,
+        protected OrderSettlementService $settlement
     ) {}
 
     /**
@@ -193,5 +194,37 @@ class OrderLifecycleService
         );
 
         return $assignment->fresh();
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    public function completeAfterFinalSettlement(Order $order): Order
+    {
+        if ($order->status !== 'ready') {
+            throw ValidationException::withMessages([
+                'order' => 'Only ready-for-pickup orders can be completed after final settlement.',
+            ]);
+        }
+
+        $remaining = $this->settlement->remainingBalanceMmk($order);
+        if ($remaining > 0) {
+            throw ValidationException::withMessages([
+                'order' => 'Order still has an outstanding balance.',
+            ]);
+        }
+
+        $order->update(['status' => 'completed']);
+        $this->auditLogs->log(
+            action: 'workflow.order.completed_after_final_payment',
+            actor: Auth::user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'remaining_balance_mmk' => (string) $remaining,
+            ],
+        );
+
+        return $order->fresh();
     }
 }

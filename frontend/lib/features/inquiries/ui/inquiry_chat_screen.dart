@@ -131,6 +131,7 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       orderId: orderId,
       amountMmk: amountMmk,
       currencyCode: 'MMK',
+      paymentType: (data['payment_type'] ?? 'deposit').toString(),
       issuedAt: null,
     );
     Navigator.of(context).push<void>(
@@ -1319,6 +1320,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                     orderId: orderId,
                                     amountMmk: amount,
                                     currencyCode: 'MMK',
+                                    paymentType:
+                                        (receipt?['payment_type'] ?? 'deposit')
+                                            .toString(),
                                     issuedAt: DateTime.tryParse(
                                       (receipt?['issued_at'] ?? '').toString(),
                                     ),

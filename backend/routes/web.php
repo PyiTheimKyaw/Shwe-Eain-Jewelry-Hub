@@ -22,6 +22,8 @@ Route::middleware(['web', 'auth', 'role:admin'])->group(function () {
         ->name('admin.exports.payments.bulk');
     Route::get('/admin/exports/orders/{order}/pdf', [FilamentExportController::class, 'orderPdf'])
         ->name('admin.exports.orders.pdf');
+    Route::get('/admin/exports/orders/{order}/final-receipt', [FilamentExportController::class, 'orderFinalReceiptPdf'])
+        ->name('admin.exports.orders.final-receipt');
     Route::get('/admin/exports/payments/{payment}/pdf', [FilamentExportController::class, 'paymentPdf'])
         ->name('admin.exports.payments.pdf');
     Route::get('/admin/exports/reports/dynamic', [FilamentExportController::class, 'dynamicReport'])

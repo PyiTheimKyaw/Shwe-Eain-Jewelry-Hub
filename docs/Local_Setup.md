@@ -289,5 +289,11 @@ Quick manual smoke test:
    - Customer opens **Order Details** and confirms the same specs/photos.
 7. If Command Center charts are empty after data cleanup:
    - run `php artisan db:seed --class=CommandCenterDemoSeeder`
+8. Final payment + pickup completion smoke test:
+   - Move one order to `ready` in admin workflow.
+   - In Order View, use **Record final payment** (amount auto-fills remaining balance).
+   - Confirm order auto-transitions to `completed`.
+   - Download final receipt PDF from Order View.
+   - In mobile customer app, open Order Details and verify final receipt chip/download works.
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.

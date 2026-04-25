@@ -5,6 +5,7 @@ class PaymentReceipt {
     required this.orderId,
     required this.amountMmk,
     required this.currencyCode,
+    required this.paymentType,
     required this.issuedAt,
   });
 
@@ -13,6 +14,7 @@ class PaymentReceipt {
   final int orderId;
   final double amountMmk;
   final String currencyCode;
+  final String paymentType;
   final DateTime? issuedAt;
 
   factory PaymentReceipt.fromJson(Map<String, dynamic> json) {
@@ -33,8 +35,21 @@ class PaymentReceipt {
       orderId: parsedOrderId,
       amountMmk: amount,
       currencyCode: (json['currency_code'] ?? 'MMK').toString(),
+      paymentType: (() {
+        final topLevel = (json['payment_type'] ?? '').toString().trim();
+        if (topLevel.isNotEmpty) {
+          return topLevel;
+        }
+        final meta = json['meta_json'];
+        if (meta is Map<String, dynamic>) {
+          return (meta['payment_type'] ?? 'deposit').toString();
+        }
+        if (meta is Map) {
+          return (meta['payment_type'] ?? 'deposit').toString();
+        }
+        return 'deposit';
+      })(),
       issuedAt: DateTime.tryParse((json['issued_at'] ?? '').toString()),
     );
   }
 }
-

@@ -598,6 +598,11 @@ This is the complete function inventory for currently available admin-panel capa
 
 - **View order header actions**
   - `Download PDF report`.
+  - `Record final payment` (visible only in `ready` stage):
+    - pre-fills remaining balance (total minus confirmed deposits),
+    - creates final payment record and verifies it,
+    - auto-completes order when settlement reaches zero balance.
+  - `Download final receipt` (visible when a final receipt exists).
   - `Assign artisan`:
     - choose artisan,
     - choose scope (`full_order` or `line_item`),
@@ -631,6 +636,9 @@ This is the complete function inventory for currently available admin-panel capa
     - `Approve payment` (when awaiting verification).
     - `Reject` (free reason + optional quick reason).
     - `Quick reject` (template reasons).
+  - Create flow:
+    - `Create` action is available from Payments list,
+    - selecting a `ready` order auto-defaults amount to remaining balance and sets payment type to `final`.
   - Bulk actions:
     - `Export selected` (CSV/XLSX).
 

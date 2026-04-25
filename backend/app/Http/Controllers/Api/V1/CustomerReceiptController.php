@@ -21,7 +21,9 @@ class CustomerReceiptController extends Controller
             ->orderByDesc('issued_at')
             ->get();
 
-        return response()->json(['data' => $receipts]);
+        return response()->json([
+            'data' => $receipts->map(fn (Receipt $receipt): array => $this->serializeReceipt($receipt))->values()->all(),
+        ]);
     }
 
     public function show(Request $request, Order $order, Receipt $receipt): JsonResponse
@@ -29,7 +31,7 @@ class CustomerReceiptController extends Controller
         $this->authorize('view', $order);
         $this->assertBelongsToOrder($request, $order, $receipt);
 
-        return response()->json(['data' => $receipt]);
+        return response()->json(['data' => $this->serializeReceipt($receipt)]);
     }
 
     public function download(Request $request, Order $order, Receipt $receipt): StreamedResponse
@@ -52,6 +54,17 @@ class CustomerReceiptController extends Controller
     {
         abort_unless($receipt->order_id === $order->id, 404);
         abort_unless($receipt->customer_user_id === $request->user()->id, 404);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeReceipt(Receipt $receipt): array
+    {
+        $payload = $receipt->toArray();
+        $payload['payment_type'] = (string) ($receipt->meta_json['payment_type'] ?? 'deposit');
+
+        return $payload;
     }
 }
 

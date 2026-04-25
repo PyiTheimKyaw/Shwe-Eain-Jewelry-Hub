@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Receipt;
 use App\Services\ReportExportService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class FilamentExportController extends Controller
 {
@@ -58,6 +60,30 @@ class FilamentExportController extends Controller
     public function orderPdf(Order $order)
     {
         return $this->reports->downloadOrderPdf($order);
+    }
+
+    public function orderFinalReceiptPdf(Order $order)
+    {
+        /** @var Receipt|null $receipt */
+        $receipt = $order->receipts()
+            ->with('payment')
+            ->get()
+            ->first(function (Receipt $r): bool {
+                $type = (string) ($r->meta_json['payment_type'] ?? '');
+
+                return $type === Payment::TYPE_FINAL;
+            });
+
+        abort_if($receipt === null, 404, 'Final receipt not found for this order.');
+
+        $disk = Storage::disk('local');
+        abort_unless($disk->exists((string) $receipt->pdf_storage_path), 404, 'Final receipt file is missing.');
+
+        return response()->streamDownload(
+            fn () => print($disk->get((string) $receipt->pdf_storage_path)),
+            $receipt->receipt_number.'.pdf',
+            ['Content-Type' => 'application/pdf']
+        );
     }
 
     public function paymentPdf(Payment $payment)

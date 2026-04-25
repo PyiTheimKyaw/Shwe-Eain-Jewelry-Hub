@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class PaymentVerificationService
@@ -16,12 +17,14 @@ class PaymentVerificationService
         protected ReceiptService $receipts,
         protected AdminAuditLogService $auditLogs,
         protected BusinessConfigService $businessConfig,
-        protected PushNotificationService $push
+        protected PushNotificationService $push,
+        protected OrderLifecycleService $orderLifecycle,
+        protected OrderSettlementService $settlement
     ) {}
 
     public function confirm(User $user, Payment $payment): Payment
     {
-        if ($payment->type !== Payment::TYPE_DEPOSIT) {
+        if (! in_array($payment->type, [Payment::TYPE_DEPOSIT, Payment::TYPE_FINAL], true)) {
             abort(422, 'Unsupported payment type.');
         }
 
@@ -32,6 +35,7 @@ class PaymentVerificationService
         $order = $payment->order;
         $alreadyConfirmed = $payment->status === Payment::STATUS_CONFIRMED;
 
+        $didCompleteOrder = false;
         if (! $alreadyConfirmed) {
             DB::transaction(function () use ($payment, $user, $order) {
                 $payment->update([
@@ -41,7 +45,9 @@ class PaymentVerificationService
                     'rejection_reason' => null,
                 ]);
 
-                $order->update(['status' => 'deposit_confirmed']);
+                if ($payment->isDeposit()) {
+                    $order->update(['status' => 'deposit_confirmed']);
+                }
             });
             $this->auditLogs->log(
                 action: 'admin.payment.confirmed',
@@ -53,8 +59,25 @@ class PaymentVerificationService
                     'amount_mmk' => (string) $payment->amount_mmk,
                 ],
             );
-        } elseif ($order->status !== 'deposit_confirmed') {
+        } elseif ($payment->isDeposit() && $order->status !== 'deposit_confirmed') {
             $order->update(['status' => 'deposit_confirmed']);
+        }
+
+        $order->refresh();
+        if ($payment->isFinal()) {
+            try {
+                $remaining = $this->settlement->remainingBalanceMmk($order);
+                if ($remaining <= 0 && $order->status === 'ready') {
+                    $this->orderLifecycle->completeAfterFinalSettlement($order);
+                    $didCompleteOrder = true;
+                }
+            } catch (ValidationException $e) {
+                Log::warning('payment.final_completion_blocked', [
+                    'payment_id' => $payment->id,
+                    'order_id' => $payment->order_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
         $hadReceiptBeforeIssue = $payment->receipt()->exists();
@@ -83,23 +106,38 @@ class PaymentVerificationService
             }
         }
 
-        $this->push->notifyUsers(
-            [$order->customer],
-            'Deposit confirmed',
-            'Your payment has been verified and production can proceed.',
-            [
-                'category' => 'payment',
-                'order_id' => $order->id,
-                'payment_id' => $payment->id,
-            ]
-        );
+        if ($payment->isFinal()) {
+            $this->push->notifyUsers(
+                [$order->customer],
+                $didCompleteOrder ? 'Order completed' : 'Final payment confirmed',
+                $didCompleteOrder
+                    ? 'Thank you for your purchase. Your bespoke order is now fully paid and completed.'
+                    : 'Your final payment has been verified.',
+                [
+                    'category' => 'payment',
+                    'order_id' => $order->id,
+                    'payment_id' => $payment->id,
+                ]
+            );
+        } else {
+            $this->push->notifyUsers(
+                [$order->customer],
+                'Deposit confirmed',
+                'Your payment has been verified and production can proceed.',
+                [
+                    'category' => 'payment',
+                    'order_id' => $order->id,
+                    'payment_id' => $payment->id,
+                ]
+            );
+        }
 
         return $payment->load(['order', 'receipt']);
     }
 
     public function reject(Payment $payment, ?string $reason): Payment
     {
-        if ($payment->type !== Payment::TYPE_DEPOSIT) {
+        if (! in_array($payment->type, [Payment::TYPE_DEPOSIT, Payment::TYPE_FINAL], true)) {
             abort(422, 'Unsupported payment type.');
         }
 
@@ -139,7 +177,9 @@ class PaymentVerificationService
         $this->push->notifyUsers(
             [$payment->order->customer],
             'Payment rejected',
-            'Your deposit proof was rejected. Please review payment instructions and re-upload proof.',
+            $payment->isFinal()
+                ? 'Your final payment proof was rejected. Please contact concierge support.'
+                : 'Your deposit proof was rejected. Please review payment instructions and re-upload proof.',
             [
                 'category' => 'payment',
                 'order_id' => $payment->order_id,

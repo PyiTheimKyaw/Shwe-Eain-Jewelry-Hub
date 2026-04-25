@@ -14,10 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 class ReceiptDetailScreen extends StatefulWidget {
-  const ReceiptDetailScreen({
-    super.key,
-    required this.receipt,
-  });
+  const ReceiptDetailScreen({super.key, required this.receipt});
 
   final PaymentReceipt receipt;
 
@@ -47,19 +44,17 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
       await file.writeAsBytes(bytes, flush: true);
       await OpenFilex.open(file.path);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Receipt saved to ${file.path}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Receipt saved to ${file.path}')));
     } on OrderApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
       if (mounted) {
         setState(() => _downloading = false);
@@ -90,6 +85,13 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                     'Formal payment receipt',
                     color: AppColors.goldMuted,
                   ),
+                  const SizedBox(height: 4),
+                  PremiumText.caption(
+                    widget.receipt.paymentType == 'final'
+                        ? 'Final settlement'
+                        : 'Deposit payment',
+                    color: AppColors.textSecondary,
+                  ),
                   const SizedBox(height: 20),
                   PremiumText.body('Receipt #${widget.receipt.receiptNumber}'),
                   const SizedBox(height: 6),
@@ -99,7 +101,10 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                     'Issued: ${issued != null ? DateFormat('y-MM-dd HH:mm').format(issued.toLocal()) : '-'}',
                   ),
                   const SizedBox(height: 20),
-                  PremiumText.caption('Amount paid', color: AppColors.goldMuted),
+                  PremiumText.caption(
+                    'Amount paid',
+                    color: AppColors.goldMuted,
+                  ),
                   PremiumText.headline(
                     '${_money.format(widget.receipt.amountMmk)} ${widget.receipt.currencyCode}',
                     maxLines: 1,
@@ -119,4 +124,3 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
     );
   }
 }
-

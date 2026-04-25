@@ -6,6 +6,8 @@ import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/orders/data/order_api.dart';
+import 'package:jewelry_hub/features/orders/models/payment_receipt.dart';
+import 'package:jewelry_hub/features/orders/ui/receipt_detail_screen.dart';
 import 'package:provider/provider.dart';
 
 class CustomerOrderDetailScreen extends StatefulWidget {
@@ -97,6 +99,11 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
             .where((path) => path.isNotEmpty)
             .map(publicStorageUrl)
             .toList(growable: false);
+    final receiptsRaw = _order?['receipts'];
+    final receipts = (receiptsRaw is List ? receiptsRaw : const <dynamic>[])
+        .whereType<Map>()
+        .map((e) => PaymentReceipt.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -147,6 +154,51 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                               ' ',
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    AppGlassCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          PremiumText.caption(
+                            'OFFICIAL RECEIPTS',
+                            color: AppColors.goldMuted,
+                          ),
+                          const SizedBox(height: 8),
+                          if (receipts.isEmpty)
+                            PremiumText.body(
+                              'No receipts issued yet.',
+                              color: AppColors.textSecondary,
+                            )
+                          else
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: receipts
+                                  .map((receipt) {
+                                    final isFinal =
+                                        receipt.paymentType == 'final';
+                                    return ActionChip(
+                                      label: Text(
+                                        isFinal
+                                            ? '${receipt.receiptNumber} · Final'
+                                            : '${receipt.receiptNumber} · Deposit',
+                                      ),
+                                      onPressed: () {
+                                        Navigator.of(context).push<void>(
+                                          MaterialPageRoute(
+                                            builder: (_) => ReceiptDetailScreen(
+                                              receipt: receipt,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  })
+                                  .toList(growable: false),
+                            ),
                         ],
                       ),
                     ),

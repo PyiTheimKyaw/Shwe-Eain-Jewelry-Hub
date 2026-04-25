@@ -204,8 +204,13 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                               spacing: 8,
                               runSpacing: 8,
                               children: receipts.map((receipt) {
+                                final isFinal = receipt.paymentType == 'final';
                                 return ActionChip(
-                                  label: Text(receipt.receiptNumber),
+                                  label: Text(
+                                    isFinal
+                                        ? '${receipt.receiptNumber} · Final'
+                                        : '${receipt.receiptNumber} · Deposit',
+                                  ),
                                   onPressed: () {
                                     Navigator.of(context).push<void>(
                                       MaterialPageRoute(
