@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use App\Models\Quote;
 use App\Services\FirebaseInquiryService;
 use App\Services\OrderBuilderService;
+use App\Services\PushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +18,8 @@ class CustomerQuoteController extends Controller
 {
     public function __construct(
         protected OrderBuilderService $orders,
-        protected FirebaseInquiryService $firebaseInquiry
+        protected FirebaseInquiryService $firebaseInquiry,
+        protected PushNotificationService $push
     ) {}
 
     public function mine(Request $request): JsonResponse
@@ -71,6 +74,18 @@ class CustomerQuoteController extends Controller
             }
         }
 
+        $admins = \App\Models\User::query()->where('role', UserRole::Admin->value)->get();
+        $this->push->notifyUsers(
+            $admins,
+            'Quote accepted',
+            "Customer accepted quote {$quote->quote_number}.",
+            [
+                'category' => 'quote',
+                'quote_id' => $quote->id,
+                'order_id' => $order->id,
+            ]
+        );
+
         return response()->json([
             'data' => [
                 'quote' => $quote->fresh(['lineItems']),
@@ -107,6 +122,18 @@ class CustomerQuoteController extends Controller
                 $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
             }
         }
+
+        $admins = \App\Models\User::query()->where('role', UserRole::Admin->value)->get();
+        $this->push->notifyUsers(
+            $admins,
+            'Quote declined',
+            "Customer declined quote {$quote->quote_number}.",
+            [
+                'category' => 'quote',
+                'quote_id' => $quote->id,
+                'inquiry_id' => $quote->inquiry_id,
+            ]
+        );
 
         return response()->json(['data' => $quote->fresh(['lineItems'])]);
     }

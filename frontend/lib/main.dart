@@ -1,10 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:jewelry_hub/core/notifications/push_notification_manager.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/providers/display_preferences_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/features/auth/ui/login_screen.dart';
+import 'package:jewelry_hub/features/shell/admin_shell.dart';
 import 'package:jewelry_hub/features/shell/artisan_shell.dart';
 import 'package:jewelry_hub/features/shell/customer_shell.dart';
 import 'package:jewelry_hub/firebase_options.dart';
@@ -22,6 +24,10 @@ Future<void> main() async {
   runApp(const JewelryHubApp());
 }
 
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> appMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
 class JewelryHubApp extends StatelessWidget {
   const JewelryHubApp({super.key});
 
@@ -38,6 +44,8 @@ class JewelryHubApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkGold(),
         themeMode: ThemeMode.dark,
+        navigatorKey: appNavigatorKey,
+        scaffoldMessengerKey: appMessengerKey,
         home: const _AuthGate(),
       ),
     );
@@ -50,6 +58,10 @@ class _AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    PushNotificationManager.instance.initialize(
+      appNavigatorKey,
+      appMessengerKey,
+    );
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 240),
@@ -59,8 +71,19 @@ class _AuthGate extends StatelessWidget {
           ? const _BootstrapSplash(key: ValueKey('boot'))
           : auth.isSignedIn
           ? (auth.user?.role == 'artisan'
-                ? const ArtisanShell(key: ValueKey('artisan'))
-                : const CustomerShell(key: ValueKey('shell')))
+                ? ArtisanShell(
+                    key: const ValueKey('artisan'),
+                    navigatorKey: appNavigatorKey,
+                  )
+                : auth.user?.role == 'admin'
+                ? AdminShell(
+                    key: const ValueKey('admin'),
+                    navigatorKey: appNavigatorKey,
+                  )
+                : CustomerShell(
+                    key: const ValueKey('shell'),
+                    navigatorKey: appNavigatorKey,
+                  ))
           : const LoginScreen(key: ValueKey('login')),
     );
   }

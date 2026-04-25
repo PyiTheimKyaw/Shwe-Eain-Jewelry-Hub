@@ -229,6 +229,45 @@ php artisan config:clear
 
 3. New uploads will go to Firebase Storage. Existing old local records are not part of the active workflow.
 
+### Push notifications (Phase 3 foundation)
+
+The backend now supports push-device token registration and user notification inbox APIs.
+
+Authenticated endpoints:
+
+- `POST /api/v1/push/devices`
+- `DELETE /api/v1/push/devices`
+- `GET /api/v1/notifications`
+- `POST /api/v1/notifications/{notificationId}/read`
+
+To enable live FCM push delivery (instead of DB-only fallback), ensure Firebase admin credentials are configured (`FIREBASE_CREDENTIALS`, `FIREBASE_PROJECT_ID`) as documented in `docs/Firebase_Setup.md`.
+
+### Push notifications (Phase 3.1 Flutter wiring)
+
+Frontend now includes:
+
+- session-based push token register/unregister during login/logout,
+- per-role notification inbox (`Customer`, `Admin`, `Artisan`) with read indicators,
+- foreground push banners and background tap routing.
+
+Run and verify:
+
+```bash
+cd frontend
+flutter pub get
+flutter run
+```
+
+Quick manual smoke test:
+
+1. Sign in on mobile (token auto-registers to `/api/v1/push/devices`).
+2. Trigger a backend notification event (quote publish, payment review, etc.).
+3. Confirm:
+   - foreground: in-app banner appears,
+   - inbox: new row appears as `Unread`,
+   - tap row: marks as `Read` and navigates to related inquiry/order screen.
+4. Sign out (token unregisters with `DELETE /api/v1/push/devices`).
+
 ---
 
 ## Quick checklist

@@ -903,3 +903,114 @@ Completed a final Filament UX polish pass focused on triage speed and profession
 - Introduced toggleable defaults on lower-priority columns in triage-heavy tables.
 - Result: better scanability and usable layouts on narrower admin viewports/tablets without losing access to detail fields.
 
+---
+
+## 2026-04-25 — Phase 3 kickoff: real-time push notifications (Customer + Admin)
+
+### Summary
+
+Implemented the Phase 3 push-notification foundation with device-token registration, unified notification delivery service, role-targeted trigger points, and API inbox/read flows for authenticated users.
+
+### Backend data and API foundation
+
+- Added `push_device_tokens` table for per-user FCM token registration:
+  - token, platform, app_version, active flag, last_seen.
+- Added model: `App\Models\PushDeviceToken`.
+- Added authenticated push token APIs:
+  - `POST /api/v1/push/devices` (register/update token)
+  - `DELETE /api/v1/push/devices` (deactivate token)
+- Added authenticated notification APIs:
+  - `GET /api/v1/notifications` (recent inbox)
+  - `POST /api/v1/notifications/{notificationId}/read`
+
+### Notification service layer
+
+- Added `App\Services\PushNotificationService`:
+  - persists in-app notifications to database (`notifications` table),
+  - attempts FCM push delivery via Firebase Messaging when available,
+  - fails gracefully with logging when push provider is unavailable.
+- Added `App\Notifications\AppPushNotification` for normalized database payloads.
+- Extended Firebase service to expose messaging client:
+  - `FirebaseInquiryService::messaging()`.
+
+### Triggered push events (initial set)
+
+- **Customer → Admin**
+  - new inquiry created,
+  - deposit proof submitted,
+  - quote accepted/declined by customer.
+- **Admin → Customer**
+  - quote published,
+  - payment confirmed/rejected.
+
+### Integration notes
+
+- Existing workflow/state guards remain authoritative (`PaymentVerificationService`, quote/order guards).
+- Push dispatch is additive and non-blocking; core business state transitions do not depend on push success.
+
+### Validation
+
+- New migration applied successfully:
+  - `2026_04_25_162000_create_push_device_tokens_table`.
+- Regression checks passed:
+  - `SecurityHardeningTest`
+  - `InquiryQuoteFlowTest`
+
+---
+
+## 2026-04-25 — Phase 3.1 frontend wiring: FCM lifecycle + notification inbox + deep linking
+
+### Summary
+
+Completed Flutter-side push notification wiring across customer/admin/artisan flows: session-based FCM token registration, dedicated notification inbox UI with read indicators, foreground/background listeners, and tap deep-link routing into inquiry/order workflows.
+
+### Flutter push lifecycle integration
+
+- Added `firebase_messaging` dependency.
+- Introduced `PushNotificationManager` to centralize:
+  - FCM permission request,
+  - foreground push listener (`onMessage`),
+  - background/tapped listener (`onMessageOpenedApp`, `getInitialMessage`),
+  - token register/unregister orchestration via backend API.
+- Added app-level keys:
+  - `appNavigatorKey` for deep-link navigation,
+  - `appMessengerKey` for foreground toast/snackbar delivery.
+
+### Auth/session token management
+
+- `AuthProvider` now performs token sync during:
+  - bootstrap (`/auth/me` success),
+  - login,
+  - register,
+  - logout (unregister before session clear).
+- Push registration failures are non-blocking; authentication remains resilient.
+
+### Notification inbox UI (all roles)
+
+- Added shared `NotificationsScreen` with:
+  - API-backed list via `GET /api/v1/notifications`,
+  - tap-to-mark-read via `POST /api/v1/notifications/{id}/read`,
+  - explicit read-state presentation (`Unread` / `Read`) plus visual dot.
+- Added `AppNotificationItem` model for payload parsing (`inquiry_id`, `order_id`, `payment_id`, etc.).
+- Added `NotificationApi` for push-device + inbox endpoints.
+
+### Role shells and navigation
+
+- Customer shell now includes an **Alerts** tab.
+- Artisan shell now includes an **Alerts** tab (jobs + notifications split).
+- Admin role now routes into a dedicated mobile alerts shell using the same inbox screen.
+
+### Deep-link behavior
+
+- Push tap deep-links currently route as follows:
+  - `order_id` present → `CustomerOrderDetailScreen`,
+  - `inquiry_id` present → `InquiryListScreen`,
+  - artisan role → `ArtisanNotificationsScreen` (optionally auto-opens linked job by order id),
+  - fallback → `CustomerOrdersScreen`.
+- Foreground pushes show an in-app snackbar without forcing navigation.
+
+### Validation
+
+- `flutter pub get` completed successfully after dependency updates.
+- `flutter analyze` clean (`No issues found!`).
+

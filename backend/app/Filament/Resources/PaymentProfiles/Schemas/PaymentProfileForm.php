@@ -44,7 +44,7 @@ class PaymentProfileForm
                 FileUpload::make('qr_image_path')
                     ->label(__('QR code image'))
                     ->image()
-                    ->disk('public')
+                    ->disk(config('services.media.provider') === 'firebase' ? 'firebase' : 'public')
                     ->directory('payment-profiles')
                     ->visibility('public')
                     ->maxSize(5120)

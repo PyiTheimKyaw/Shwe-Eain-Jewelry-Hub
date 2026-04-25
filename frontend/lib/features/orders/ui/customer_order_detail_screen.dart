@@ -93,7 +93,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
     final initialAttachmentUrls =
         ((inquiry['attachments'] as List<dynamic>?) ?? const [])
             .whereType<Map>()
-            .map((e) => (e['storage_path'] ?? '').toString().trim())
+            .map((e) => (e['url'] ?? e['storage_path'] ?? '').toString().trim())
             .where((path) => path.isNotEmpty)
             .map(publicStorageUrl)
             .toList(growable: false);

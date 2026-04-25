@@ -17,6 +17,7 @@ use Google\Cloud\Core\Timestamp;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Auth as FirebaseAuthContract;
 use Kreait\Firebase\Contract\Firestore as FirestoreContract;
+use Kreait\Firebase\Contract\Messaging as MessagingContract;
 use Kreait\Firebase\Factory;
 use RuntimeException;
 use Throwable;
@@ -30,6 +31,8 @@ class FirebaseInquiryService
 
     private ?FirestoreContract $firestore = null;
 
+    private ?MessagingContract $messaging = null;
+
     private bool $firestoreResolved = false;
 
     public function __construct(
@@ -38,9 +41,15 @@ class FirebaseInquiryService
     ) {
         if ($this->firebase !== null) {
             $this->auth = $this->firebase->createAuth();
+            $this->messaging = $this->firebase->createMessaging();
             // Firestore is optional (requires google/cloud-firestore + often ext-grpc). Lazy-load so
             // custom token minting works with Auth only.
         }
+    }
+
+    public function messaging(): ?MessagingContract
+    {
+        return $this->messaging;
     }
 
     /**

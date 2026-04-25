@@ -62,6 +62,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(OrderAssignment::class, 'artisan_user_id');
     }
 
+    public function pushDeviceTokens(): HasMany
+    {
+        return $this->hasMany(PushDeviceToken::class);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === UserRole::Admin;

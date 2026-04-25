@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\PaymentProfiles\Tables;
 
 use App\Enums\PaymentChannel;
+use App\Services\MediaStorageService;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -30,8 +31,10 @@ class PaymentProfilesTable
                     ->label(__('Number'))
                     ->limit(24),
                 ImageColumn::make('qr_image_path')
-                    ->disk('public')
                     ->label(__('QR'))
+                    ->getStateUsing(
+                        fn ($record): string => app(MediaStorageService::class)->publicUrl($record->qr_image_path)
+                    )
                     ->height(40),
                 IconColumn::make('is_active')
                     ->label(__('Active'))

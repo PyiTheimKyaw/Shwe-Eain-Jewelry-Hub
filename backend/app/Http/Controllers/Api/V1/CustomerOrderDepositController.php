@@ -2,18 +2,22 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\User;
 use App\Services\FirebaseInquiryService;
 use App\Services\MediaStorageService;
+use App\Services\PushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class CustomerOrderDepositController extends Controller
 {
     public function __construct(
-        protected MediaStorageService $mediaStorage
+        protected MediaStorageService $mediaStorage,
+        protected PushNotificationService $push
     ) {}
 
     public function store(Request $request, Order $order, FirebaseInquiryService $firebaseInquiry): JsonResponse
@@ -64,6 +68,18 @@ class CustomerOrderDepositController extends Controller
             $firebaseInquiry->publishPaymentProofImageMessage($inquiry, $payment);
             $firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }
+
+        $admins = User::query()->where('role', UserRole::Admin->value)->get();
+        $this->push->notifyUsers(
+            $admins,
+            'Deposit proof submitted',
+            'A customer submitted deposit proof that requires verification.',
+            [
+                'category' => 'payment',
+                'order_id' => $order->id,
+                'payment_id' => $payment->id,
+            ]
+        );
 
         return response()->json([
             'data' => $payment->fresh(),

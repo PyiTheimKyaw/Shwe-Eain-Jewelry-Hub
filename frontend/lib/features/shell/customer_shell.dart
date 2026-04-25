@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:jewelry_hub/core/notifications/ui/notifications_screen.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/features/catalog/ui/product_catalog_screen.dart';
 import 'package:jewelry_hub/features/inquiries/ui/inquiry_list_screen.dart';
@@ -6,7 +7,9 @@ import 'package:jewelry_hub/features/orders/ui/customer_orders_screen.dart';
 
 /// Bottom navigation: catalog + inquiries (premium dark shell).
 class CustomerShell extends StatefulWidget {
-  const CustomerShell({super.key});
+  const CustomerShell({super.key, required this.navigatorKey});
+
+  final GlobalKey<NavigatorState> navigatorKey;
 
   @override
   State<CustomerShell> createState() => _CustomerShellState();
@@ -20,10 +23,11 @@ class _CustomerShellState extends State<CustomerShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: const [
-          ProductCatalogScreen(),
-          InquiryListScreen(),
-          CustomerOrdersScreen(),
+        children: [
+          const ProductCatalogScreen(),
+          const InquiryListScreen(),
+          const CustomerOrdersScreen(),
+          NotificationsScreen(navigatorKey: widget.navigatorKey),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -47,6 +51,11 @@ class _CustomerShellState extends State<CustomerShell> {
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long_rounded),
             label: 'Orders',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.notifications_none_rounded),
+            selectedIcon: Icon(Icons.notifications_rounded),
+            label: 'Alerts',
           ),
         ],
       ),

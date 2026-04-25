@@ -29,7 +29,13 @@ class InquirySummary {
           ? product['title'] as String?
           : null,
       attachmentStoragePaths: ((json['attachments'] as List<dynamic>?) ?? const [])
-          .map((e) => e is Map<String, dynamic> ? (e['storage_path'] ?? '').toString() : '')
+          .map((e) {
+            if (e is! Map<String, dynamic>) {
+              return '';
+            }
+            final resolved = (e['url'] ?? e['storage_path'] ?? '').toString();
+            return resolved;
+          })
           .where((path) => path.trim().isNotEmpty)
           .toList(growable: false),
     );

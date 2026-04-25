@@ -9,6 +9,7 @@ use App\Services\AdminAuditLogService;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryQuoteCommitmentGate;
 use App\Services\PricingService;
+use App\Services\PushNotificationService;
 use App\Services\QuoteBuilderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,8 @@ class InquiryQuotePublishController extends Controller
         protected PricingService $pricing,
         protected QuoteBuilderService $quotes,
         protected FirebaseInquiryService $firebaseInquiry,
-        protected AdminAuditLogService $auditLogs
+        protected AdminAuditLogService $auditLogs,
+        protected PushNotificationService $push
     ) {}
 
     /**
@@ -75,6 +77,16 @@ class InquiryQuotePublishController extends Controller
         $this->firebaseInquiry->publishQuoteCardMessage($inquiry, $quote);
         $this->firebaseInquiry->publishTimelineLogMessage($inquiry, '--- New Quote Published ---');
         $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
+        $this->push->notifyUsers(
+            [$customer],
+            'New quote available',
+            "Your quote {$quote->quote_number} is ready for review.",
+            [
+                'category' => 'quote',
+                'inquiry_id' => $inquiry->id,
+                'quote_id' => $quote->id,
+            ]
+        );
         $this->auditLogs->log(
             action: 'admin.inquiry.quote_published',
             actor: $request->user(),

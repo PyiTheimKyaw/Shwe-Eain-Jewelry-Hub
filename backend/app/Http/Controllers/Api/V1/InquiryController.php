@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\Inquiry;
 use App\Models\InquiryAttachment;
+use App\Models\User;
 use App\Services\FirebaseInquiryService;
 use App\Services\InquiryPipelinePresenter;
 use App\Services\MediaStorageService;
+use App\Services\PushNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -15,7 +18,8 @@ use Illuminate\Support\Str;
 class InquiryController extends Controller
 {
     public function __construct(
-        protected MediaStorageService $mediaStorage
+        protected MediaStorageService $mediaStorage,
+        protected PushNotificationService $push
     ) {}
 
     public function store(Request $request, FirebaseInquiryService $firebaseInquiry): JsonResponse
@@ -50,6 +54,17 @@ class InquiryController extends Controller
         $inquiry->load('attachments');
 
         $firebaseInquiry->syncInquiryThreadDocument($inquiry);
+
+        $admins = User::query()->where('role', UserRole::Admin->value)->get();
+        $this->push->notifyUsers(
+            $admins,
+            'New inquiry received',
+            'A customer submitted a new inquiry that needs concierge review.',
+            [
+                'category' => 'inquiry',
+                'inquiry_id' => $inquiry->id,
+            ]
+        );
 
         return response()->json(['data' => $inquiry], 201);
     }

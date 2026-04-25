@@ -10,18 +10,22 @@ import 'package:jewelry_hub/features/artisan/ui/artisan_job_detail_screen.dart';
 import 'package:provider/provider.dart';
 
 class ArtisanNotificationsScreen extends StatefulWidget {
-  const ArtisanNotificationsScreen({super.key});
+  const ArtisanNotificationsScreen({super.key, this.initialOrderId});
+
+  final int? initialOrderId;
 
   @override
   State<ArtisanNotificationsScreen> createState() =>
       _ArtisanNotificationsScreenState();
 }
 
-class _ArtisanNotificationsScreenState extends State<ArtisanNotificationsScreen> {
+class _ArtisanNotificationsScreenState
+    extends State<ArtisanNotificationsScreen> {
   final DateFormat _timeFmt = DateFormat('MMM d, h:mm a');
   List<ArtisanNotificationItem> _items = [];
   bool _loading = true;
   String? _error;
+  bool _autoOpenTried = false;
 
   @override
   void initState() {
@@ -47,6 +51,13 @@ class _ArtisanNotificationsScreenState extends State<ArtisanNotificationsScreen>
         _items = list;
         _loading = false;
       });
+      if (!_autoOpenTried && widget.initialOrderId != null) {
+        _autoOpenTried = true;
+        final target = _items.where((i) => i.orderId == widget.initialOrderId);
+        if (target.isNotEmpty) {
+          await _openLinkedJob(target.first);
+        }
+      }
     } on ArtisanApiException catch (e) {
       if (!mounted) {
         return;
@@ -73,7 +84,9 @@ class _ArtisanNotificationsScreenState extends State<ArtisanNotificationsScreen>
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No linked order found for this notification.')),
+        const SnackBar(
+          content: Text('No linked order found for this notification.'),
+        ),
       );
       return;
     }
@@ -138,16 +151,14 @@ class _ArtisanNotificationsScreenState extends State<ArtisanNotificationsScreen>
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -177,84 +188,97 @@ class _ArtisanNotificationsScreenState extends State<ArtisanNotificationsScreen>
                   ),
                 )
               : _error != null
-                  ? Padding(
-                      padding: const EdgeInsets.all(24),
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: AppGlassCard(
+                    child: PremiumText.body(
+                      _error!,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                )
+              : _items.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: AppGlassCard(
+                    child: PremiumText.body(
+                      'No notifications yet.',
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+                  itemCount: _items.length,
+                  separatorBuilder: (_, index) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final item = _items[index];
+                    final unread = item.readAt == null;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(AppRadii.md),
+                      onTap: () => _openLinkedJob(item),
                       child: AppGlassCard(
-                        child: PremiumText.body(
-                          _error!,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    )
-                  : _items.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: AppGlassCard(
-                            child: PremiumText.body(
-                              'No notifications yet.',
-                              color: AppColors.textSecondary,
+                        padding: const EdgeInsets.all(14),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.only(top: 7),
+                              decoration: BoxDecoration(
+                                color: unread
+                                    ? AppColors.gold
+                                    : AppColors.textSecondary,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                          itemCount: _items.length,
-                          separatorBuilder: (_, index) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final item = _items[index];
-                            final unread = item.readAt == null;
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(AppRadii.md),
-                              onTap: () => _openLinkedJob(item),
-                              child: AppGlassCard(
-                                padding: const EdgeInsets.all(14),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      margin: const EdgeInsets.only(top: 7),
-                                      decoration: BoxDecoration(
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: PremiumText.body(item.title),
+                                      ),
+                                      PremiumText.caption(
+                                        unread ? 'Unread' : 'Read',
                                         color: unread
                                             ? AppColors.gold
                                             : AppColors.textSecondary,
-                                        shape: BoxShape.circle,
                                       ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          PremiumText.body(item.title),
-                                          const SizedBox(height: 4),
-                                          PremiumText.caption(
-                                            item.subtitle,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                          if (item.createdAt != null) ...[
-                                            const SizedBox(height: 6),
-                                            PremiumText.caption(
-                                              _timeFmt.format(item.createdAt!.toLocal()),
-                                              color: AppColors.goldMuted,
-                                            ),
-                                          ],
-                                        ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  PremiumText.caption(
+                                    item.subtitle,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  if (item.createdAt != null) ...[
+                                    const SizedBox(height: 6),
+                                    PremiumText.caption(
+                                      _timeFmt.format(
+                                        item.createdAt!.toLocal(),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Icon(
-                                      Icons.chevron_right_rounded,
-                                      color: AppColors.textSecondary,
+                                      color: AppColors.goldMuted,
                                     ),
                                   ],
-                                ),
+                                ],
                               ),
-                            );
-                          },
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
                         ),
+                      ),
+                    );
+                  },
+                ),
         ),
       ),
     );

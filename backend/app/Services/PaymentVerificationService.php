@@ -15,7 +15,8 @@ class PaymentVerificationService
         protected FirebaseInquiryService $firebaseInquiry,
         protected ReceiptService $receipts,
         protected AdminAuditLogService $auditLogs,
-        protected BusinessConfigService $businessConfig
+        protected BusinessConfigService $businessConfig,
+        protected PushNotificationService $push
     ) {}
 
     public function confirm(User $user, Payment $payment): Payment
@@ -82,6 +83,17 @@ class PaymentVerificationService
             }
         }
 
+        $this->push->notifyUsers(
+            [$order->customer],
+            'Deposit confirmed',
+            'Your payment has been verified and production can proceed.',
+            [
+                'category' => 'payment',
+                'order_id' => $order->id,
+                'payment_id' => $payment->id,
+            ]
+        );
+
         return $payment->load(['order', 'receipt']);
     }
 
@@ -123,6 +135,17 @@ class PaymentVerificationService
             $this->firebaseInquiry->publishTimelineLogMessage($inquiry, $message);
             $this->firebaseInquiry->syncInquiryThreadDocument($inquiry);
         }
+
+        $this->push->notifyUsers(
+            [$payment->order->customer],
+            'Payment rejected',
+            'Your deposit proof was rejected. Please review payment instructions and re-upload proof.',
+            [
+                'category' => 'payment',
+                'order_id' => $payment->order_id,
+                'payment_id' => $payment->id,
+            ]
+        );
 
         return $payment->fresh();
     }

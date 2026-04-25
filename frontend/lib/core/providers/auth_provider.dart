@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:jewelry_hub/core/notifications/push_notification_manager.dart';
 import 'package:jewelry_hub/core/auth/auth_token_storage.dart';
 import 'package:jewelry_hub/features/auth/data/auth_api.dart';
 import 'package:jewelry_hub/features/auth/models/auth_user.dart';
@@ -43,6 +44,14 @@ class AuthProvider extends ChangeNotifier {
     try {
       _user = await AuthApi.me(stored);
       _token = stored;
+      try {
+        await PushNotificationManager.instance.registerForSession(
+          bearerToken: stored,
+          role: _user?.role ?? 'unknown',
+        );
+      } catch (_) {
+        // Keep auth bootstrap resilient if push setup fails.
+      }
     } on AuthApiException {
       await AuthTokenStorage.clear();
       _token = null;
@@ -57,10 +66,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> login({
-    required String email,
-    required String password,
-  }) async {
+  Future<bool> login({required String email, required String password}) async {
     _sessionBusy = true;
     _lastError = null;
     notifyListeners();
@@ -69,6 +75,14 @@ class AuthProvider extends ChangeNotifier {
       await AuthTokenStorage.write(result.token);
       _token = result.token;
       _user = result.user;
+      try {
+        await PushNotificationManager.instance.registerForSession(
+          bearerToken: result.token,
+          role: result.user.role,
+        );
+      } catch (_) {
+        // Login should still succeed without push registration.
+      }
       _sessionBusy = false;
       notifyListeners();
       return true;
@@ -106,6 +120,14 @@ class AuthProvider extends ChangeNotifier {
       await AuthTokenStorage.write(result.token);
       _token = result.token;
       _user = result.user;
+      try {
+        await PushNotificationManager.instance.registerForSession(
+          bearerToken: result.token,
+          role: result.user.role,
+        );
+      } catch (_) {
+        // Register should still succeed without push registration.
+      }
       _sessionBusy = false;
       notifyListeners();
       return true;
@@ -128,6 +150,13 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     if (t != null) {
       try {
+        try {
+          await PushNotificationManager.instance.unregisterForSession(
+            bearerToken: t,
+          );
+        } catch (_) {
+          // Continue logout even if push token cleanup fails.
+        }
         await AuthApi.logout(t);
       } catch (_) {
         /* still clear local session */

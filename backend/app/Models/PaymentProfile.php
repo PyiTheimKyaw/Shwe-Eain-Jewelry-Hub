@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 
 class PaymentProfile extends Model
 {
@@ -64,7 +63,7 @@ class PaymentProfile extends Model
 
         $qrUrl = '';
         if ($this->qr_image_path) {
-            $qrUrl = url(Storage::disk('public')->url($this->qr_image_path));
+            $qrUrl = app(\App\Services\MediaStorageService::class)->publicUrl($this->qr_image_path);
         }
 
         return [

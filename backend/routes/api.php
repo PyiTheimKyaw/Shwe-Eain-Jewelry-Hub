@@ -26,7 +26,9 @@ use App\Http\Controllers\Api\V1\CustomerReceiptController;
 use App\Http\Controllers\Api\V1\InquiryController;
 use App\Http\Controllers\Api\V1\OrderProgressController;
 use App\Http\Controllers\Api\V1\PricingController;
+use App\Http\Controllers\Api\V1\PushDeviceController;
 use App\Http\Controllers\Api\V1\UploadController;
+use App\Http\Controllers\Api\V1\UserNotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -46,6 +48,10 @@ Route::prefix('v1')->group(function () {
 
         Route::post('uploads/presign', [UploadController::class, 'presign'])->middleware('throttle:uploads');
         Route::post('uploads', [UploadController::class, 'store'])->middleware('throttle:uploads');
+        Route::post('push/devices', [PushDeviceController::class, 'store']);
+        Route::delete('push/devices', [PushDeviceController::class, 'destroy']);
+        Route::get('notifications', [UserNotificationController::class, 'index']);
+        Route::post('notifications/{notificationId}/read', [UserNotificationController::class, 'markRead']);
 
         Route::middleware('role:customer')->group(function () {
             Route::post('inquiries', [InquiryController::class, 'store']);

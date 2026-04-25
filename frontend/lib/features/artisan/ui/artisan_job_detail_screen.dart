@@ -74,7 +74,7 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
         .map((e) => Map<String, dynamic>.from(e))
         .toList(growable: false);
     return attachments
-        .map((a) => (a['storage_path'] ?? '').toString().trim())
+        .map((a) => (a['url'] ?? a['storage_path'] ?? '').toString().trim())
         .where((path) => path.isNotEmpty)
         .map(publicStorageUrl)
         .toList(growable: false);
