@@ -21,14 +21,15 @@ class OrdersTable
     {
         return $table
             ->columns([
-                TextColumn::make('order_number')
-                    ->label('Order')
-                    ->searchable()
-                    ->sortable(),
-                TextColumn::make('customer.name')
-                    ->label('Customer')
-                    ->searchable()
-                    ->sortable(),
+                TextColumn::make('workflow_age')
+                    ->label('Workflow age')
+                    ->getStateUsing(fn (Order $record): string => $record->created_at?->diffForHumans() ?? '—')
+                    ->badge()
+                    ->color(function (Order $record): string {
+                        $hours = (int) ($record->created_at?->diffInHours(now()) ?? 0);
+
+                        return $hours < 24 ? 'success' : ($hours < 72 ? 'warning' : 'danger');
+                    }),
                 TextColumn::make('status')
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -43,18 +44,18 @@ class OrdersTable
                         default => 'gray',
                     })
                     ->sortable(),
-                TextColumn::make('workflow_age')
-                    ->label('Workflow age')
-                    ->getStateUsing(fn (Order $record): string => $record->created_at?->diffForHumans() ?? '—')
-                    ->badge()
-                    ->color(function (Order $record): string {
-                        $hours = (int) ($record->created_at?->diffInHours(now()) ?? 0);
-
-                        return $hours < 24 ? 'success' : ($hours < 72 ? 'warning' : 'danger');
-                    }),
+                TextColumn::make('order_number')
+                    ->label('Order')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('customer.name')
+                    ->label('Customer')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('total_usd_snapshot')
                     ->label('Total (USD)')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('deposit_amount_mmk')
                     ->label('Deposit (MMK)')
                     ->sortable(),
@@ -63,7 +64,8 @@ class OrdersTable
                     ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Filter::make('status')

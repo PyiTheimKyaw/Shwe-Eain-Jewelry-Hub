@@ -7,6 +7,7 @@ use App\Models\Payment;
 use App\Services\MediaStorageService;
 use App\Services\PaymentVerificationService;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Forms\Components\DatePicker;
@@ -27,34 +28,6 @@ class PaymentsTable
     {
         return $table
             ->columns([
-                TextColumn::make('id')->sortable(),
-                ImageColumn::make('proof_storage_path')
-                    ->label('Proof')
-                    ->circular()
-                    ->size(40)
-                    ->getStateUsing(
-                        fn (Payment $record): string => app(MediaStorageService::class)->publicUrl($record->proof_storage_path)
-                    ),
-                TextColumn::make('order.order_number')
-                    ->label('Order')
-                    ->searchable()
-                    ->sortable(),
-                TextColumn::make('order.customer.name')
-                    ->label('Customer')
-                    ->searchable()
-                    ->placeholder('—'),
-                TextColumn::make('amount_mmk')
-                    ->label('Amount (MMK)')
-                    ->sortable(),
-                TextColumn::make('order.total_usd_snapshot')
-                    ->label('Amount (USD snapshot)')
-                    ->sortable(),
-                TextColumn::make('status')
-                    ->badge()
-                    ->sortable(),
-                TextColumn::make('submitted_at')
-                    ->dateTime()
-                    ->sortable(),
                 TextColumn::make('aging')
                     ->label('Aging')
                     ->badge()
@@ -74,6 +47,39 @@ class PaymentsTable
 
                         return $hours < 1 ? 'success' : ($hours <= 4 ? 'warning' : 'danger');
                     }),
+                TextColumn::make('status')
+                    ->badge()
+                    ->sortable(),
+                ImageColumn::make('proof_storage_path')
+                    ->label('Proof')
+                    ->circular()
+                    ->size(40)
+                    ->getStateUsing(
+                        fn (Payment $record): string => app(MediaStorageService::class)->publicUrl($record->proof_storage_path)
+                    )
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('order.order_number')
+                    ->label('Order')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('order.customer.name')
+                    ->label('Customer')
+                    ->searchable()
+                    ->placeholder('—'),
+                TextColumn::make('amount_mmk')
+                    ->label('Amount (MMK)')
+                    ->sortable(),
+                TextColumn::make('order.total_usd_snapshot')
+                    ->label('Amount (USD snapshot)')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('submitted_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('id')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Filter::make('status')
@@ -157,77 +163,79 @@ class PaymentsTable
             ->recordUrl(fn (Payment $record): string => PaymentResource::getUrl('view', ['record' => $record]))
             ->defaultSort('submitted_at', 'desc')
             ->recordActions([
-                Action::make('review')
-                    ->label('Review')
-                    ->icon('heroicon-o-eye')
-                    ->url(fn (Payment $record): string => PaymentResource::getUrl('view', ['record' => $record])),
-                Action::make('confirm')
-                    ->label('Approve payment')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
-                    ->action(function (Payment $record) {
-                        $user = Auth::user();
-                        if ($user === null) {
-                            return;
-                        }
-                        app(PaymentVerificationService::class)->confirm($user, $record);
-                    }),
-                Action::make('reject')
-                    ->label('Reject')
-                    ->color('danger')
-                    ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
-                    ->form([
-                        Select::make('quick_reason')
-                            ->label('Quick reject reason')
-                            ->options([
-                                'Incomplete amount' => 'Incomplete amount',
-                                'Blur image' => 'Blur image',
-                                'Wrong account' => 'Wrong account',
-                            ])
-                            ->native(false),
-                        Textarea::make('reason')
-                            ->label('Reason (optional)')
-                            ->rows(3),
-                    ])
-                    ->action(function (Payment $record, array $data) {
-                        $quickReason = trim((string) ($data['quick_reason'] ?? ''));
-                        $reason = trim((string) ($data['reason'] ?? ''));
-                        $finalReason = $reason !== '' ? $reason : ($quickReason !== '' ? $quickReason : null);
+                ActionGroup::make([
+                    Action::make('review')
+                        ->label('Review')
+                        ->icon('heroicon-o-eye')
+                        ->url(fn (Payment $record): string => PaymentResource::getUrl('view', ['record' => $record])),
+                    Action::make('confirm')
+                        ->label('Approve payment')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
+                        ->action(function (Payment $record) {
+                            $user = Auth::user();
+                            if ($user === null) {
+                                return;
+                            }
+                            app(PaymentVerificationService::class)->confirm($user, $record);
+                        }),
+                    Action::make('reject')
+                        ->label('Reject')
+                        ->color('danger')
+                        ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
+                        ->form([
+                            Select::make('quick_reason')
+                                ->label('Quick reject reason')
+                                ->options([
+                                    'Incomplete amount' => 'Incomplete amount',
+                                    'Blur image' => 'Blur image',
+                                    'Wrong account' => 'Wrong account',
+                                ])
+                                ->native(false),
+                            Textarea::make('reason')
+                                ->label('Reason (optional)')
+                                ->rows(3),
+                        ])
+                        ->action(function (Payment $record, array $data) {
+                            $quickReason = trim((string) ($data['quick_reason'] ?? ''));
+                            $reason = trim((string) ($data['reason'] ?? ''));
+                            $finalReason = $reason !== '' ? $reason : ($quickReason !== '' ? $quickReason : null);
 
-                        app(PaymentVerificationService::class)->reject(
-                            $record,
-                            $finalReason
-                        );
-                    }),
-                Action::make('quickReject')
-                    ->label('Quick reject')
-                    ->color('danger')
-                    ->icon('heroicon-o-x-circle')
-                    ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
-                    ->form([
-                        Select::make('quick_reason')
-                            ->label('Reason')
-                            ->options([
-                                'Incomplete amount' => 'Incomplete amount',
-                                'Blur image' => 'Blur image',
-                                'Wrong account' => 'Wrong account',
-                            ])
-                            ->required()
-                            ->native(false),
-                    ])
-                    ->action(function (Payment $record, array $data) {
-                        app(PaymentVerificationService::class)->reject(
-                            $record,
-                            (string) ($data['quick_reason'] ?? '')
-                        );
+                            app(PaymentVerificationService::class)->reject(
+                                $record,
+                                $finalReason
+                            );
+                        }),
+                    Action::make('quickReject')
+                        ->label('Quick reject')
+                        ->color('danger')
+                        ->icon('heroicon-o-x-circle')
+                        ->visible(fn (Payment $record) => $record->status === Payment::STATUS_AWAITING_VERIFICATION)
+                        ->form([
+                            Select::make('quick_reason')
+                                ->label('Reason')
+                                ->options([
+                                    'Incomplete amount' => 'Incomplete amount',
+                                    'Blur image' => 'Blur image',
+                                    'Wrong account' => 'Wrong account',
+                                ])
+                                ->required()
+                                ->native(false),
+                        ])
+                        ->action(function (Payment $record, array $data) {
+                            app(PaymentVerificationService::class)->reject(
+                                $record,
+                                (string) ($data['quick_reason'] ?? '')
+                            );
 
-                        Notification::make()
-                            ->title('Payment rejected')
-                            ->body('Reason: '.(string) ($data['quick_reason'] ?? ''))
-                            ->danger()
-                            ->send();
-                    }),
+                            Notification::make()
+                                ->title('Payment rejected')
+                                ->body('Reason: '.(string) ($data['quick_reason'] ?? ''))
+                                ->danger()
+                                ->send();
+                        }),
+                ])->label('Actions')->icon('heroicon-o-ellipsis-horizontal'),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

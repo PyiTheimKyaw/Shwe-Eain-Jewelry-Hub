@@ -8,3 +8,9 @@
 .fi-wi-chart .fi-section {
     --tw-ring-color: color-mix(in oklab, var(--color-primary-500) 35%, transparent);
 }
+
+/* Final UX pass: consistent triage badges in admin tables */
+.fi-ta .fi-badge {
+    min-width: 8.5rem;
+    justify-content: center;
+}

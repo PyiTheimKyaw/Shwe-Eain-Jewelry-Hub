@@ -86,17 +86,24 @@ The admin panel at `/admin` is active with explicit group ordering and command-c
 - **PaymentsTable**
   - aging badge (`Submitted X ago`) with green/yellow/red thresholds,
   - quick reject action with common reasons,
-  - reject flow still routed through existing `PaymentVerificationService` guards.
+  - reject flow still routed through existing `PaymentVerificationService` guards,
+  - row actions grouped into a clean **Actions** dropdown.
 - **OrdersTable**
   - workflow age badge,
   - custom stage badge colors,
-  - quick action to open related inquiry chat.
+  - quick action to open related inquiry chat,
+  - triage-first column ordering.
 - **InquiriesTable**
   - unanswered marker,
-  - current quote status badge.
+  - current quote status badge,
+  - triage-first column ordering.
 - **UsersTable**
   - account status indicators and suspend/activate action,
   - forced password reset action with token revocation.
+- **Cross-table visual consistency**
+  - normalized badge width/alignment in admin theme for professional status readability.
+- **Responsive table density**
+  - lower-priority columns set as toggleable defaults for tablet/smaller admin screens.
 
 ---
 
@@ -159,7 +166,7 @@ The admin panel at `/admin` is active with explicit group ordering and command-c
 ## 4) Remaining UX / Logic Polish Needed in Existing Resource Tables
 
 ### Payments Table (`PaymentsTable`)
-- Add **column-level sorting/filtering** by computed aging bands.
+- Add **column-level filtering** by computed aging bands.
 - Add sticky **queue tabs** for “Needs action now” and “Stale > X hours”.
 
 ### Orders Table (`OrdersTable`)

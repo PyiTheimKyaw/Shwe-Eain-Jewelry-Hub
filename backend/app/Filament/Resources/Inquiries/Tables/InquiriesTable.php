@@ -19,16 +19,6 @@ class InquiriesTable
         return $table
             ->poll('1s')
             ->columns([
-                TextColumn::make('id')
-                    ->sortable(),
-                TextColumn::make('customer.name')
-                    ->label('Customer')
-                    ->searchable()
-                    ->sortable(),
-                TextColumn::make('status')
-                    ->badge()
-                    ->searchable()
-                    ->sortable(),
                 TextColumn::make('response_state')
                     ->label('Response')
                     ->badge()
@@ -41,6 +31,10 @@ class InquiriesTable
                         return $isUnanswered ? 'Unanswered' : 'Responded';
                     })
                     ->color(fn (string $state): string => $state === 'Unanswered' ? 'danger' : 'success'),
+                TextColumn::make('status')
+                    ->badge()
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('quote_status')
                     ->label('Quote')
                     ->badge()
@@ -52,15 +46,24 @@ class InquiriesTable
                         'void', 'expired' => 'danger',
                         default => 'info',
                     }),
+                TextColumn::make('customer.name')
+                    ->label('Customer')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('message')
                     ->limit(40)
                     ->tooltip(fn ($state) => $state),
                 TextColumn::make('product.title')
                     ->label('Product')
-                    ->placeholder('—'),
+                    ->placeholder('—')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('id')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([

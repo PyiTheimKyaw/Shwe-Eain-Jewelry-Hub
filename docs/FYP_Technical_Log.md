@@ -862,3 +862,44 @@ Implemented the final P0/P1 admin operations polish by introducing a DB-backed *
   - `BespokeOrderWorkflowTest`
 - Updated files pass syntax/lint checks.
 
+---
+
+## 2026-04-25 — Final UX pass: table density, alignment, triage flow
+
+### Summary
+
+Completed a final Filament UX polish pass focused on triage speed and professional consistency across admin tables (Payments, Orders, Inquiries), with badge normalization and cleaner row actions for dense operational workflows.
+
+### Payments table
+
+- Reordered columns so triage-critical fields lead:
+  - Aging badge → Status → Order/Customer.
+- Grouped row actions into an **Actions** dropdown to avoid action-row clutter.
+- Kept quick reject and full reject flows while preserving `PaymentVerificationService` guards.
+- Marked lower-priority columns as toggleable by default for smaller/tablet screens.
+
+### Orders table
+
+- Reordered left-side triage columns:
+  - Workflow Age badge → Status badge → Order/Customer.
+- Kept quick open action for related inquiry chat.
+- Marked non-critical columns as toggleable to improve compact layouts.
+
+### Inquiries table
+
+- Reordered triage-first columns:
+  - Unanswered marker → Inquiry Status → Quote Status → Customer.
+- Kept message context visible while moving non-critical fields to toggleable columns.
+
+### Visual consistency
+
+- Added global table badge normalization in Filament theme:
+  - consistent minimum width
+  - centered badge content
+- This improves visual rhythm for status/aging badges across all admin tables.
+
+### Responsiveness notes
+
+- Introduced toggleable defaults on lower-priority columns in triage-heavy tables.
+- Result: better scanability and usable layouts on narrower admin viewports/tablets without losing access to detail fields.
+
