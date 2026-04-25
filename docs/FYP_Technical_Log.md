@@ -1052,6 +1052,10 @@ Implemented the bespoke-journey closing stage: remaining-balance-aware final pay
   - visible only when order is `ready`,
   - amount prefilled with remaining-balance default,
   - records and confirms final payment through canonical verification service.
+  - supports both `Bank / Wallet Transfer` and `Cash Payment` collection methods.
+- Added duplicate-settlement guard:
+  - final payment action/form is blocked when computed remaining balance is already zero,
+  - admin sees clear settlement guidance text (`already fully settled`).
 
 ### Official final receipt PDF
 
@@ -1063,6 +1067,8 @@ Implemented the bespoke-journey closing stage: remaining-balance-aware final pay
   - fully-paid marker metadata.
 - Added dedicated template:
   - `resources/views/receipts/final-receipt.blade.php` with `FULLY PAID` stamp.
+- Final receipt now includes payment method rendering:
+  - displays `Payment Method: Cash` when pickup settlement is recorded as cash.
 - Added admin download route/action for latest final receipt from Order View.
 - Extended customer receipt API payload with `payment_type` for frontend labeling.
 

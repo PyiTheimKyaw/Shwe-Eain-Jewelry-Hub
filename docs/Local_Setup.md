@@ -292,8 +292,12 @@ Quick manual smoke test:
 8. Final payment + pickup completion smoke test:
    - Move one order to `ready` in admin workflow.
    - In Order View, use **Record final payment** (amount auto-fills remaining balance).
+   - Validate both collection paths:
+     - `Bank / Wallet Transfer` (with payment profile),
+     - `Cash Payment` (without payment profile).
    - Confirm order auto-transitions to `completed`.
-   - Download final receipt PDF from Order View.
+   - Download final receipt PDF from Order View and verify it shows the chosen payment method (e.g. `Payment Method: Cash`).
    - In mobile customer app, open Order Details and verify final receipt chip/download works.
+   - Re-open the same order and confirm duplicate final settlement is blocked once remaining balance is zero.
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.
