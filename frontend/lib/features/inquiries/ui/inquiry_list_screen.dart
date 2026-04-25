@@ -4,6 +4,7 @@ import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
+import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/inquiries/data/inquiry_api.dart';
 import 'package:jewelry_hub/features/inquiries/models/inquiry_summary.dart';
@@ -73,6 +74,8 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
                 child: Row(
                   children: [
+                    const BrandLogo(height: 28),
+                    const SizedBox(width: 10),
                     Expanded(child: PremiumText.headline('Inquiries')),
                     IconButton(
                       tooltip: 'Log out',

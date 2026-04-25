@@ -7,7 +7,7 @@
         body { font-family: DejaVu Sans, sans-serif; color: #0f172a; margin: 24px; }
         .header { border-bottom: 2px solid #d4af37; padding-bottom: 10px; margin-bottom: 18px; }
         .brand-wrap { display: flex; align-items: center; gap: 12px; }
-        .logo { height: 34px; width: 34px; object-fit: contain; }
+        .logo { height: 52px; width: auto; max-width: 140px; object-fit: contain; }
         .brand { font-size: 22px; font-weight: 700; color: #8b6c14; }
         .sub { font-size: 12px; color: #475569; }
         .grid { width: 100%; border-collapse: collapse; margin-top: 12px; }

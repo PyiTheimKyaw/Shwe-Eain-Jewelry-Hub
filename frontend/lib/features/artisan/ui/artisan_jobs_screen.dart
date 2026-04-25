@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/artisan/data/artisan_api.dart';
 import 'package:jewelry_hub/features/artisan/ui/artisan_job_detail_screen.dart';
@@ -72,6 +73,8 @@ class _ArtisanJobsScreenState extends State<ArtisanJobsScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: Row(
                   children: [
+                    const BrandLogo(height: 28),
+                    const SizedBox(width: 10),
                     PremiumText.headline('Workshop jobs', maxLines: 1),
                     const Spacer(),
                     IconButton(

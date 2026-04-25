@@ -27,6 +27,9 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->brandLogo(asset('images/shwe-eain-logo-dark.png'))
+            ->brandLogoHeight('3.5rem')
+            ->favicon(asset('favicon.png'))
             ->colors([
                 'primary' => Color::hex('#D4AF37'),
             ])

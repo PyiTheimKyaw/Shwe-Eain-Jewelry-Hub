@@ -5,6 +5,7 @@ import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/providers/display_preferences_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
+import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
 import 'package:jewelry_hub/features/auth/ui/login_screen.dart';
 import 'package:jewelry_hub/features/shell/admin_shell.dart';
 import 'package:jewelry_hub/features/shell/artisan_shell.dart';
@@ -100,9 +101,16 @@ class _BootstrapSplash extends StatelessWidget {
         height: double.infinity,
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: const Center(
-          child: CircularProgressIndicator(
-            color: AppColors.gold,
-            strokeWidth: 2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BrandLogo(height: 164),
+              SizedBox(height: 22),
+              CircularProgressIndicator(
+                color: AppColors.gold,
+                strokeWidth: 2,
+              ),
+            ],
           ),
         ),
       ),

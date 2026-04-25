@@ -6,6 +6,7 @@ import 'package:jewelry_hub/core/notifications/push_notification_manager.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:provider/provider.dart';
 
@@ -96,6 +97,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 56,
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 12, top: 8, bottom: 8),
+          child: BrandLogo(height: 28),
+        ),
         title: PremiumText.headline('Notifications', maxLines: 1),
         backgroundColor: Colors.transparent,
         elevation: 0,

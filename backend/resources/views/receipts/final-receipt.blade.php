@@ -6,6 +6,8 @@
     <style>
         body { font-family: DejaVu Sans, sans-serif; color: #111827; font-size: 12px; }
         .header { margin-bottom: 14px; }
+        .brand-wrap { display: flex; align-items: center; gap: 12px; }
+        .logo { height: 56px; width: auto; max-width: 160px; object-fit: contain; }
         .brand { font-size: 18px; font-weight: bold; color: #8a6d1a; }
         .subtle { color: #6b7280; }
         .meta { width: 100%; border-collapse: collapse; margin-top: 8px; }
@@ -32,8 +34,7 @@
 </head>
 <body>
     <div class="header">
-        <div class="brand">{{ $branding_name }}</div>
-        <div class="subtle">Official Final Receipt</div>
+        @include('reports.partials.header', ['branding' => $branding_name, 'subtitle' => 'Official Final Receipt'])
         <table class="meta">
             <tr>
                 <td><strong>Receipt #:</strong> {{ $receipt_number }}</td>

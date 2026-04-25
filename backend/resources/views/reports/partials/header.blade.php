@@ -1,5 +1,5 @@
 @php
-    $logoPath = public_path('images/logo.png');
+    $logoPath = public_path('images/shwe-eain-logo.png');
     $logoData = null;
     if (is_file($logoPath)) {
         $logoData = 'data:image/png;base64,'.base64_encode(file_get_contents($logoPath));
@@ -8,7 +8,7 @@
 <div class="header">
     <div class="brand-wrap">
         @if ($logoData)
-            <img src="{{ $logoData }}" alt="Logo" class="logo" />
+            <img src="{{ $logoData }}" alt="Shwe Eain Jewelry Hub Logo" class="logo" />
         @endif
         <div>
             <div class="brand">{{ $branding ?? 'Shwe Eain Jewelry Hub' }}</div>

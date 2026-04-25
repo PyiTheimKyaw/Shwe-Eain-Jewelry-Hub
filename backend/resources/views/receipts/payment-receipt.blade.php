@@ -6,6 +6,8 @@
     <style>
         body { font-family: DejaVu Sans, sans-serif; color: #0f172a; margin: 24px; }
         .header { border-bottom: 2px solid #d4af37; padding-bottom: 10px; margin-bottom: 18px; }
+        .brand-wrap { display: flex; align-items: center; gap: 12px; }
+        .logo { height: 52px; width: auto; max-width: 140px; object-fit: contain; }
         .brand { font-size: 24px; font-weight: 700; color: #8b6c14; }
         .sub { font-size: 12px; color: #475569; }
         .grid { width: 100%; border-collapse: collapse; margin-top: 12px; }
@@ -19,10 +21,7 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="brand">{{ $branding_name }}</div>
-        <div class="sub">Formal Payment Receipt</div>
-    </div>
+    @include('reports.partials.header', ['branding' => $branding_name, 'subtitle' => 'Formal Payment Receipt'])
 
     <table class="grid">
         <tr><td class="key">Receipt Number</td><td class="value">{{ $receipt_number }}</td></tr>

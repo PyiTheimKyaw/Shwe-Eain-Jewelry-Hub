@@ -3,6 +3,7 @@ import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
+import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:provider/provider.dart';
 
@@ -92,6 +93,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              const Center(child: BrandLogo(height: 112)),
+                              const SizedBox(height: 14),
                               PremiumText.headline('Create account'),
                               const SizedBox(height: 8),
                               PremiumText.body(
