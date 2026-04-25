@@ -30,6 +30,17 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
   String? _error;
   Map<String, dynamic>? _order;
 
+  bool get _isCompleted =>
+      ((_order?['status'] ?? '') as String).trim().toLowerCase() == 'completed';
+
+  String get _statusLabel {
+    final raw = ((_order?['status'] ?? '-') as String).trim().toLowerCase();
+    if (raw == 'completed') {
+      return 'Order Completed';
+    }
+    return raw.replaceAll('_', ' ');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -148,12 +159,48 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                             color: AppColors.goldMuted,
                           ),
                           const SizedBox(height: 6),
-                          PremiumText.body(
-                            ((_order?['status'] ?? '-') as String).replaceAll(
-                              '_',
-                              ' ',
+                          if (_isCompleted)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(AppRadii.md),
+                                border: Border.all(
+                                  color: AppColors.gold.withValues(alpha: 0.82),
+                                ),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0x44D4AF37), Color(0x1AD4AF37)],
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.verified_rounded,
+                                    size: 22,
+                                    color: AppColors.gold,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  PremiumText.headline(
+                                    _statusLabel,
+                                    color: AppColors.gold,
+                                    maxLines: 1,
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            PremiumText.body(_statusLabel),
+                          if (_isCompleted) ...[
+                            const SizedBox(height: 10),
+                            PremiumText.body(
+                              'Thank you for trusting Shwe Eain Jewelry Hub. Your bespoke journey is now fully completed.',
+                              color: AppColors.textSecondary,
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),

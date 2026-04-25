@@ -59,14 +59,27 @@ class CatalogController extends Controller
         $fx = $this->pricing->currentFxSnapshot();
         $pricingConfigured = $gold !== null && $fx !== null;
 
-        $paginator = $query->orderBy('title')->paginate(20);
+        $paginator = $query->orderByDesc('created_at')->paginate(20);
 
         $paginator->getCollection()->transform(
             fn (Product $product) => $this->presenter->present($product, $pricingConfigured, $gold, $fx)
         );
 
+        $newArrivals = Product::query()
+            ->published()
+            ->with(['images', 'category'])
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get()
+            ->map(fn (Product $product) => $this->presenter->present($product, $pricingConfigured, $gold, $fx))
+            ->values()
+            ->all();
+
         $payload = $paginator->toArray();
-        $payload['meta'] = $this->presenter->catalogMeta($pricingConfigured);
+        $payload['meta'] = array_merge(
+            $this->presenter->catalogMeta($pricingConfigured),
+            ['new_arrivals' => $newArrivals]
+        );
 
         return response()->json($payload);
     }

@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/display_preferences_sheet.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
 import 'package:jewelry_hub/core/ui/widgets/price_tag.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
+import 'package:jewelry_hub/core/ui/widgets/shwe_eain_gold_placeholder.dart';
 import 'package:jewelry_hub/core/ui/widgets/weight_badge.dart';
 import 'package:jewelry_hub/features/catalog/data/catalog_api.dart';
 import 'package:jewelry_hub/features/catalog/models/catalog_product.dart';
-import 'package:jewelry_hub/features/catalog/ui/catalog_toggle_bar.dart';
 import 'package:jewelry_hub/features/inquiries/ui/new_inquiry_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -67,6 +68,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     super.dispose();
   }
 
+  Future<void> _openDisplayPreferencesSheet() =>
+      showDisplayPreferencesSheet(context);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -101,14 +105,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           title: PremiumText.headline(p.title, maxLines: 1),
           actions: [
             IconButton(
+              icon: const Icon(Icons.tune_rounded, color: AppColors.gold),
+              onPressed: _openDisplayPreferencesSheet,
+            ),
+            IconButton(
               icon: const Icon(Icons.refresh, color: AppColors.gold),
               onPressed: _load,
             ),
           ],
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(52),
-            child: CatalogToggleBar(),
-          ),
         ),
         SliverToBoxAdapter(
           child: Padding(
@@ -126,10 +130,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ? Container(
                               color: AppColors.surface,
                               alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.image_not_supported_outlined,
-                                size: 64,
-                                color: AppColors.textSecondary,
+                              child: const ShweEainGoldPlaceholder(
+                                iconSize: 56,
                               ),
                             )
                           : Stack(
@@ -240,34 +242,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                 ],
                 const SizedBox(height: 20),
-                PremiumText.caption(p.sku),
-                const SizedBox(height: 8),
-                PremiumText.headline(p.title),
-                if (p.categoryName != null) ...[
-                  const SizedBox(height: 4),
-                  PremiumText.body(p.categoryName!),
-                ],
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.scale_outlined,
-                      size: 18,
-                      color: AppColors.textSecondary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: WeightBadge(grams: p.weightGrams, compact: false),
-                    ),
-                  ],
+                AppGlassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      PremiumText.caption(p.sku),
+                      const SizedBox(height: 8),
+                      PremiumText.headline(p.title),
+                      if (p.categoryName != null) ...[
+                        const SizedBox(height: 4),
+                        PremiumText.body(p.categoryName!),
+                      ],
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.scale_outlined,
+                            size: 18,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: WeightBadge(
+                              grams: p.weightGrams,
+                              compact: false,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      PriceTag(pricing: p.pricing, compact: false),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
-                PriceTag(pricing: p.pricing, compact: false),
                 if (p.description != null && p.description!.isNotEmpty) ...[
                   const SizedBox(height: 20),
-                  PremiumText.caption('About'),
-                  const SizedBox(height: 6),
-                  PremiumText.body(p.description!),
+                  AppGlassCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PremiumText.caption('About'),
+                        const SizedBox(height: 6),
+                        PremiumText.body(
+                          p.description!,
+                          overflow: TextOverflow.visible,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
                 if (p.pricing != null) ...[
                   const SizedBox(height: 20),
@@ -275,13 +297,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        PremiumText.caption('Pricing breakdown (estimate)'),
+                        PremiumText.caption('Pricing Breakdown (Estimate)'),
                         const SizedBox(height: 8),
                         _row('Metal (MMK)', p.pricing!['metal_value_mmk']),
                         _row('Labor (MMK)', p.pricing!['labor_fee_mmk']),
                         _row('Gems (MMK)', p.pricing!['gem_price_mmk']),
-                        _row('Total (MMK)', p.pricing!['line_total_mmk']),
-                        _row('Total (USD est.)', p.pricing!['line_total_usd']),
+                        const Divider(color: AppColors.glassBorder, height: 18),
+                        _row(
+                          'TOTAL (MMK)',
+                          p.pricing!['line_total_mmk'],
+                          isTotal: true,
+                        ),
+                        _row(
+                          'TOTAL (USD EST.)',
+                          p.pricing!['line_total_usd'],
+                          isTotal: true,
+                        ),
                       ],
                     ),
                   ),
@@ -398,19 +429,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     zoomController.dispose();
   }
 
-  static Widget _row(String label, Object? value) {
+  static Widget _row(String label, Object? value, {bool isTotal = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary)),
-          Text(
+          PremiumText.caption(
+            label,
+            color: isTotal ? AppColors.goldMuted : AppColors.textSecondary,
+          ),
+          PremiumText.body(
             value?.toString() ?? '—',
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
+            color: isTotal ? AppColors.gold : AppColors.textPrimary,
           ),
         ],
       ),

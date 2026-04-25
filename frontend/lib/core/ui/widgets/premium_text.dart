@@ -40,13 +40,14 @@ class PremiumText {
     TextAlign? textAlign,
     Color? color,
     int? maxLines,
+    TextOverflow? overflow = TextOverflow.ellipsis,
   }) {
     return Builder(
       builder: (context) => Text(
         text,
         textAlign: textAlign,
         maxLines: maxLines,
-        overflow: TextOverflow.ellipsis,
+        overflow: overflow,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: color),
       ),
     );
