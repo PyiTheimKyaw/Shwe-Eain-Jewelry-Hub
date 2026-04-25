@@ -45,6 +45,8 @@ class ConciergePipelineStepper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = _indexForStep(pipeline.step);
+    final isCompleted =
+        pipeline.step == 'completed' || pipeline.orderStatus == 'completed';
     return AppGlassCard(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Column(
@@ -79,6 +81,36 @@ class ConciergePipelineStepper extends StatelessWidget {
             PremiumText.caption(
               'Order ${pipeline.orderNumber}',
               color: AppColors.textSecondary,
+            ),
+          ],
+          if (isCompleted) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadii.sm),
+                border: Border.all(color: AppColors.gold.withValues(alpha: 0.8)),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0x44D4AF37), Color(0x1AD4AF37)],
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.verified_rounded,
+                    size: 16,
+                    color: AppColors.gold,
+                  ),
+                  const SizedBox(width: 6),
+                  PremiumText.caption(
+                    'Order Completed',
+                    color: AppColors.gold,
+                  ),
+                ],
+              ),
             ),
           ],
         ],

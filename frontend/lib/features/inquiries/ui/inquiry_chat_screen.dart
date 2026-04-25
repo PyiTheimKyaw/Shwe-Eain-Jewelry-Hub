@@ -132,6 +132,9 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
       amountMmk: amountMmk,
       currencyCode: 'MMK',
       paymentType: (data['payment_type'] ?? 'deposit').toString(),
+      paymentMethodLabel: (data['payment_method_label'] ?? '').toString().trim().isEmpty
+          ? null
+          : data['payment_method_label'].toString(),
       issuedAt: null,
     );
     Navigator.of(context).push<void>(
@@ -1322,6 +1325,13 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
                                     currencyCode: 'MMK',
                                     paymentType:
                                         (receipt?['payment_type'] ?? 'deposit')
+                                            .toString(),
+                                    paymentMethodLabel: (receipt?['payment_method_label'] ?? '')
+                                            .toString()
+                                            .trim()
+                                            .isEmpty
+                                        ? null
+                                        : receipt?['payment_method_label']
                                             .toString(),
                                     issuedAt: DateTime.tryParse(
                                       (receipt?['issued_at'] ?? '').toString(),

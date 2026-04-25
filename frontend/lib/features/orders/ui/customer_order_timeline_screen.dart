@@ -39,6 +39,16 @@ class _CustomerOrderTimelineScreenState
   String? _error;
   List<OrderTimelineItem> _items = const [];
 
+  bool get _isCompleted => widget.orderStatus.trim().toLowerCase() == 'completed';
+
+  String get _statusLabel {
+    final normalized = widget.orderStatus.trim().toLowerCase();
+    if (normalized == 'completed') {
+      return 'Order Completed';
+    }
+    return widget.orderStatus.replaceAll('_', ' ');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -201,9 +211,41 @@ class _CustomerOrderTimelineScreenState
                             color: AppColors.goldMuted,
                           ),
                           const SizedBox(height: 6),
-                          PremiumText.body(
-                            widget.orderStatus.replaceAll('_', ' '),
-                          ),
+                          if (_isCompleted)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(AppRadii.sm),
+                                border: Border.all(
+                                  color: AppColors.gold.withValues(alpha: 0.8),
+                                ),
+                                gradient: const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [Color(0x44D4AF37), Color(0x1AD4AF37)],
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.verified_rounded,
+                                    size: 16,
+                                    color: AppColors.gold,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  PremiumText.caption(
+                                    _statusLabel,
+                                    color: AppColors.gold,
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            PremiumText.body(_statusLabel),
                           const SizedBox(height: 10),
                           ActionChip(
                             label: const Text('View order details'),

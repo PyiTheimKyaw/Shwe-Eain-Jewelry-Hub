@@ -26,6 +26,14 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
   bool _downloading = false;
   final NumberFormat _money = NumberFormat('#,##0.00');
 
+  String _resolvedPaymentMethod() {
+    final raw = widget.receipt.paymentMethodLabel?.trim();
+    if (raw != null && raw.isNotEmpty) {
+      return raw;
+    }
+    return 'Bank / Wallet Transfer';
+  }
+
   Future<void> _download() async {
     final token = context.read<AuthProvider>().token;
     if (token == null || _downloading) {
@@ -90,6 +98,11 @@ class _ReceiptDetailScreenState extends State<ReceiptDetailScreen> {
                     widget.receipt.paymentType == 'final'
                         ? 'Final settlement'
                         : 'Deposit payment',
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(height: 4),
+                  PremiumText.caption(
+                    'Payment Method: ${_resolvedPaymentMethod()}',
                     color: AppColors.textSecondary,
                   ),
                   const SizedBox(height: 20),

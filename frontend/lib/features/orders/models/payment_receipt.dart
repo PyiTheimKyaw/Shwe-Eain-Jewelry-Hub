@@ -6,6 +6,8 @@ class PaymentReceipt {
     required this.amountMmk,
     required this.currencyCode,
     required this.paymentType,
+    this.paymentMethodLabel,
+    this.isFullyPaid = false,
     required this.issuedAt,
   });
 
@@ -15,6 +17,8 @@ class PaymentReceipt {
   final double amountMmk;
   final String currencyCode;
   final String paymentType;
+  final String? paymentMethodLabel;
+  final bool isFullyPaid;
   final DateTime? issuedAt;
 
   factory PaymentReceipt.fromJson(Map<String, dynamic> json) {
@@ -28,6 +32,13 @@ class PaymentReceipt {
     final parsedOrderId = rawOrderId is num
         ? rawOrderId.toInt()
         : int.tryParse('$rawOrderId') ?? 0;
+    final meta = json['meta_json'];
+    Map<String, dynamic>? metaMap;
+    if (meta is Map<String, dynamic>) {
+      metaMap = meta;
+    } else if (meta is Map) {
+      metaMap = Map<String, dynamic>.from(meta);
+    }
 
     return PaymentReceipt(
       id: parsedId,
@@ -40,14 +51,30 @@ class PaymentReceipt {
         if (topLevel.isNotEmpty) {
           return topLevel;
         }
-        final meta = json['meta_json'];
-        if (meta is Map<String, dynamic>) {
-          return (meta['payment_type'] ?? 'deposit').toString();
-        }
-        if (meta is Map) {
-          return (meta['payment_type'] ?? 'deposit').toString();
+        if (metaMap != null) {
+          return (metaMap['payment_type'] ?? 'deposit').toString();
         }
         return 'deposit';
+      })(),
+      paymentMethodLabel: (() {
+        final topLevel = (json['payment_method_label'] ?? '').toString().trim();
+        if (topLevel.isNotEmpty) {
+          return topLevel;
+        }
+        final fromMeta =
+            (metaMap?['payment_method_label'] ?? '').toString().trim();
+        return fromMeta.isEmpty ? null : fromMeta;
+      })(),
+      isFullyPaid: (() {
+        final topLevel = json['is_fully_paid'];
+        if (topLevel is bool) {
+          return topLevel;
+        }
+        final fromMeta = metaMap?['is_fully_paid'];
+        if (fromMeta is bool) {
+          return fromMeta;
+        }
+        return false;
       })(),
       issuedAt: DateTime.tryParse((json['issued_at'] ?? '').toString()),
     );
