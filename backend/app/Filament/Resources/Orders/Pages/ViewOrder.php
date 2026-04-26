@@ -14,6 +14,7 @@ use App\Services\PaymentVerificationService;
 use App\Services\OrderLifecycleService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Utilities\Get;
@@ -269,6 +270,19 @@ class ViewOrder extends ViewRecord
                         ->label('Special instructions')
                         ->required(fn (callable $get): bool => $get('task_scope') === 'line_item')
                         ->rows(3),
+                    DateTimePicker::make('target_deadline_at')
+                        ->label('Target deadline')
+                        ->seconds(false),
+                    Select::make('priority_level')
+                        ->label('Priority')
+                        ->options([
+                            'low' => 'Low',
+                            'normal' => 'Normal',
+                            'high' => 'High',
+                            'urgent' => 'Urgent',
+                        ])
+                        ->default('normal')
+                        ->required(),
                 ])
                 ->action(function (array $data): void {
                     /** @var Order $order */
@@ -279,7 +293,9 @@ class ViewOrder extends ViewRecord
                             (int) $data['artisan_user_id'],
                             (string) $data['task_scope'],
                             isset($data['order_item_id']) ? (int) $data['order_item_id'] : null,
-                            $data['instructions'] ?? null
+                            $data['instructions'] ?? null,
+                            $data['target_deadline_at'] ?? null,
+                            $data['priority_level'] ?? 'normal'
                         );
                         Notification::make()
                             ->title('Artisan assigned')

@@ -1123,3 +1123,59 @@ Implemented the bespoke-journey closing stage: remaining-balance-aware final pay
 - Extended `tests/Feature/FinalPaymentPickupWorkflowTest.php`:
   - ready-made final payment moves to `ready` without bespoke-style completion.
 
+## 2026-04-26 — Artisan profile/stats + assignment detail enrichment
+
+### Backend API and schema upgrades
+
+- Added assignment planning metadata:
+  - `order_assignments.target_deadline_at` (nullable datetime)
+  - `order_assignments.priority_level` (`low|normal|high|urgent`, default `normal`)
+- Added order item making-spec snapshots for artisan visibility:
+  - `order_items.dimensions_snapshot`
+  - `order_items.ring_size_snapshot`
+- Updated models:
+  - `OrderAssignment` fillable + datetime cast for `target_deadline_at`
+  - `OrderItem` fillable for dimensions/ring-size snapshots
+- Added artisan stats endpoint:
+  - `GET /api/v1/artisan/stats`
+  - returns `current_active_load`, `blocked_count`, `total_completed_jobs`
+- Extended artisan assignment detail payload:
+  - `latest_admin_feedback` derived from the latest non-empty related progress/QC note.
+
+### Assignment creation flow updates (admin + lifecycle)
+
+- `OrderLifecycleService::assignArtisan(...)` now accepts:
+  - `target_deadline_at`
+  - `priority_level`
+- API and Filament assignment forms now support deadline + priority inputs:
+  - `POST /api/v1/admin/orders/{order}/assignments`
+  - Filament `ViewOrder` -> `Assign artisan` action.
+
+### Flutter artisan app updates
+
+- Added top-right settings entry on `ArtisanJobsScreen`.
+- New `ArtisanProfileStatsScreen` with:
+  - workload stats (`active`, `blocked`, `completed`),
+  - change password entry,
+  - logout action.
+- `ArtisanApi` additions:
+  - `fetchStats()`
+  - timeout-safe handling retained for artisan endpoints.
+- `ArtisanJobDetailScreen` enriched with:
+  - target deadline display,
+  - priority badge,
+  - explicit dimensions + ring size in specs,
+  - `Last Admin Feedback` section with fallback copy.
+
+### Test and verification
+
+- Added backend feature tests: `tests/Feature/ArtisanApiTest.php`
+  - verifies artisan stats aggregation
+  - verifies assignment detail includes deadline/priority/latest feedback
+- Added frontend test: `frontend/test/features/artisan/artisan_notification_badge_test.dart`
+  - validates unread-count sync and clear behavior.
+- Verification commands:
+  - `php artisan test --filter=ArtisanApiTest` (pass)
+  - `dart analyze lib/features/artisan lib/features/shell/artisan_shell.dart lib/main.dart lib/core/notifications/push_notification_manager.dart` (pass)
+  - `flutter test test/features/artisan/artisan_notification_badge_test.dart` (pass)
+

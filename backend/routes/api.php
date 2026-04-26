@@ -81,6 +81,7 @@ Route::prefix('v1')->group(function () {
 
         Route::middleware('role:artisan')->group(function () {
             Route::get('artisan/notifications', [ArtisanNotificationController::class, 'index']);
+            Route::get('artisan/stats', [AssignmentController::class, 'stats']);
             Route::get('artisan/assignments', [AssignmentController::class, 'index']);
             Route::get('artisan/assignments/{assignment}', [AssignmentController::class, 'show']);
             Route::patch('artisan/assignments/{assignment}', [AssignmentController::class, 'update']);

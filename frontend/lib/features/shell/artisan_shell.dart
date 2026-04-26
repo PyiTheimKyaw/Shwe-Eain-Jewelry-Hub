@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:jewelry_hub/core/notifications/ui/notifications_screen.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_floating_nav_bar.dart';
+import 'package:jewelry_hub/features/artisan/providers/artisan_notification_badge.dart';
 import 'package:jewelry_hub/features/artisan/ui/artisan_jobs_screen.dart';
+import 'package:jewelry_hub/features/artisan/ui/artisan_notifications_screen.dart';
+import 'package:provider/provider.dart';
 
 /// Artisan home: workshop job list (Dark Gold shell).
 class ArtisanShell extends StatefulWidget {
@@ -19,13 +21,15 @@ class _ArtisanShellState extends State<ArtisanShell> {
 
   @override
   Widget build(BuildContext context) {
+    final unreadAlerts = context.watch<ArtisanNotificationBadge>().hasUnread;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: IndexedStack(
         index: _index,
         children: [
           const ArtisanJobsScreen(),
-          NotificationsScreen(navigatorKey: widget.navigatorKey),
+          const ArtisanNotificationsScreen(),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -36,8 +40,8 @@ class _ArtisanShellState extends State<ArtisanShell> {
             selectedIndex: _index,
             onDestinationSelected: (i) => setState(() => _index = i),
             borderStyle: PremiumFloatingNavBorderStyle.none,
-            destinations: const [
-              PremiumNavDestinationData(
+            destinations: [
+              const PremiumNavDestinationData(
                 icon: Icons.construction_outlined,
                 selectedIcon: Icons.construction_rounded,
                 label: 'Jobs',
@@ -46,9 +50,40 @@ class _ArtisanShellState extends State<ArtisanShell> {
                 icon: Icons.notifications_none_rounded,
                 selectedIcon: Icons.notifications_rounded,
                 label: 'Alerts',
+                iconOverlay: unreadAlerts ? const _ArtisanNavUnreadDot() : null,
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtisanNavUnreadDot extends StatelessWidget {
+  const _ArtisanNavUnreadDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      right: 0,
+      top: -3,
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          color: AppColors.gold,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: AppColors.background,
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.gold.withValues(alpha: 0.5),
+              blurRadius: 5,
+            ),
+          ],
         ),
       ),
     );

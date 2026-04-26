@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/storage/public_storage_url.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
@@ -20,6 +21,8 @@ class ArtisanJobDetailScreen extends StatefulWidget {
 }
 
 class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
+  final DateFormat _deadlineFmt = DateFormat('MMM d, yyyy • h:mm a');
+
   List<Map<String, dynamic>> _visibleItems() {
     final order = _assignment?['order'] as Map<String, dynamic>?;
     final allItemsRaw = order?['items'];
@@ -102,6 +105,43 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
         return stage.isEmpty
             ? 'Other'
             : '${stage[0].toUpperCase()}${stage.substring(1)}';
+    }
+  }
+
+  String _formatDeadline(String? iso) {
+    if (iso == null || iso.trim().isEmpty) {
+      return '-';
+    }
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) {
+      return '-';
+    }
+    return _deadlineFmt.format(dt.toLocal());
+  }
+
+  String _priorityLabel(String value) {
+    switch (value) {
+      case 'low':
+        return 'Low';
+      case 'high':
+        return 'High';
+      case 'urgent':
+        return 'Urgent';
+      default:
+        return 'Normal';
+    }
+  }
+
+  Color _priorityColor(String value) {
+    switch (value) {
+      case 'low':
+        return Colors.lightBlueAccent;
+      case 'high':
+        return Colors.orangeAccent;
+      case 'urgent':
+        return Colors.redAccent;
+      default:
+        return AppColors.gold;
     }
   }
 
@@ -335,6 +375,12 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
     final status = _assignment?['status'] as String? ?? '';
     final orderNum = order?['order_number'] as String? ?? '';
     final orderStatus = order?['status'] as String? ?? '';
+    final targetDeadlineAt =
+        (_assignment?['target_deadline_at'] as String?)?.trim();
+    final priorityLevel =
+        ((_assignment?['priority_level'] as String?) ?? 'normal').trim();
+    final lastAdminFeedback =
+        (_assignment?['latest_admin_feedback'] as String?)?.trim();
 
     return Scaffold(
       body: Container(
@@ -404,6 +450,64 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                             ),
                             const SizedBox(height: 6),
                             PremiumText.body(orderStatus),
+                            const SizedBox(height: 12),
+                            PremiumText.caption(
+                              'TARGET DEADLINE',
+                              color: AppColors.goldMuted,
+                            ),
+                            const SizedBox(height: 6),
+                            PremiumText.body(
+                              _formatDeadline(targetDeadlineAt),
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(height: 12),
+                            PremiumText.caption(
+                              'PRIORITY',
+                              color: AppColors.goldMuted,
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _priorityColor(
+                                  priorityLevel,
+                                ).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                  color: _priorityColor(
+                                    priorityLevel,
+                                  ).withValues(alpha: 0.55),
+                                  width: 1,
+                                ),
+                              ),
+                              child: PremiumText.caption(
+                                _priorityLabel(priorityLevel),
+                                color: _priorityColor(priorityLevel),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      AppGlassCard(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            PremiumText.caption(
+                              'LAST ADMIN FEEDBACK',
+                              color: AppColors.goldMuted,
+                            ),
+                            const SizedBox(height: 6),
+                            PremiumText.body(
+                              (lastAdminFeedback ?? '').isEmpty
+                                  ? 'No QC/admin feedback has been recorded yet.'
+                                  : lastAdminFeedback!,
+                              color: AppColors.textSecondary,
+                            ),
                           ],
                         ),
                       ),
@@ -437,6 +541,10 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                         final metal = (item['metal_type_snapshot'] ?? '')
                             .toString();
                         final stone = (item['stone_details_snapshot'] ?? '')
+                            .toString();
+                        final dimensions = (item['dimensions_snapshot'] ?? '')
+                            .toString();
+                        final ringSize = (item['ring_size_snapshot'] ?? '')
                             .toString();
                         final images = _itemImageUrls(item);
                         return Padding(
@@ -477,6 +585,24 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                                 ),
                                 PremiumText.body(
                                   stone.isEmpty ? '-' : stone,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(height: 8),
+                                PremiumText.caption(
+                                  'Dimensions',
+                                  color: AppColors.textSecondary,
+                                ),
+                                PremiumText.body(
+                                  dimensions.isEmpty ? '-' : dimensions,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(height: 8),
+                                PremiumText.caption(
+                                  'Ring size',
+                                  color: AppColors.textSecondary,
+                                ),
+                                PremiumText.body(
+                                  ringSize.isEmpty ? '-' : ringSize,
                                   color: AppColors.textSecondary,
                                 ),
                                 const SizedBox(height: 10),

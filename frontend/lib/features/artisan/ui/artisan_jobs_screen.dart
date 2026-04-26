@@ -7,6 +7,7 @@ import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/artisan/data/artisan_api.dart';
 import 'package:jewelry_hub/features/artisan/ui/artisan_job_detail_screen.dart';
+import 'package:jewelry_hub/features/artisan/ui/artisan_profile_stats_screen.dart';
 import 'package:provider/provider.dart';
 
 class ArtisanJobsScreen extends StatefulWidget {
@@ -93,6 +94,20 @@ class _ArtisanJobsScreenState extends State<ArtisanJobsScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: PremiumText.headline('Workshop jobs', maxLines: 1),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.tune_rounded,
+                        color: AppColors.textPrimary,
+                      ),
+                      tooltip: 'Settings',
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const ArtisanProfileStatsScreen(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

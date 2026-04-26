@@ -26,6 +26,7 @@ class PushNotificationManager {
 
   bool _initialized = false;
   String? _lastFcmToken;
+  String _sessionRole = 'customer';
 
   Future<void> initialize(
     GlobalKey<NavigatorState> navigatorKey,
@@ -66,6 +67,7 @@ class PushNotificationManager {
     required String bearerToken,
     required String role,
   }) async {
+    _sessionRole = role;
     final token = await FirebaseMessaging.instance.getToken();
     if (token == null || token.isEmpty) return;
     _lastFcmToken = token;
@@ -78,6 +80,7 @@ class PushNotificationManager {
   }
 
   Future<void> unregisterForSession({required String bearerToken}) async {
+    _sessionRole = 'customer';
     final token = _lastFcmToken ?? await FirebaseMessaging.instance.getToken();
     if (token == null || token.isEmpty) return;
     await NotificationApi.unregisterDevice(token: bearerToken, fcmToken: token);
@@ -133,7 +136,10 @@ class PushNotificationManager {
       data: data,
     );
 
-    // Default fallback: customer-style deep links.
-    openNotification(item, navigatorKey, 'customer');
+    final role =
+        data['role']?.toString().trim().toLowerCase().isNotEmpty == true
+        ? data['role']!.toString().trim().toLowerCase()
+        : _sessionRole;
+    openNotification(item, navigatorKey, role);
   }
 }

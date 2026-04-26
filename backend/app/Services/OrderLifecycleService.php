@@ -24,7 +24,9 @@ class OrderLifecycleService
         int $artisanUserId,
         string $taskScope,
         ?int $orderItemId = null,
-        ?string $instructions = null
+        ?string $instructions = null,
+        ?string $targetDeadlineAt = null,
+        string $priorityLevel = 'normal'
     ): OrderAssignment {
         if ($order->isReadyMadeFulfillment()) {
             throw ValidationException::withMessages([
@@ -71,6 +73,8 @@ class OrderLifecycleService
             'task_scope' => $taskScope,
             'order_item_id' => $orderItemId,
             'instructions' => $instructions,
+            'target_deadline_at' => $targetDeadlineAt,
+            'priority_level' => $priorityLevel,
             'status' => 'assigned',
         ]);
 
@@ -84,6 +88,8 @@ class OrderLifecycleService
                 'artisan_user_id' => $artisanUserId,
                 'task_scope' => $taskScope,
                 'order_item_id' => $orderItemId,
+                'target_deadline_at' => $targetDeadlineAt,
+                'priority_level' => $priorityLevel,
             ],
         );
 

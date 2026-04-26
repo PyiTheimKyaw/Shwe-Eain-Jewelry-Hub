@@ -15,6 +15,8 @@ class OrderItem extends Model
         'title_snapshot',
         'metal_type_snapshot',
         'stone_details_snapshot',
+        'dimensions_snapshot',
+        'ring_size_snapshot',
         'weight_grams',
         'metal_value_mmk',
         'labor_fee_mmk',

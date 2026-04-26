@@ -1,5 +1,218 @@
 # Ultimate Admin Reference Manual (Filament Backend)
 
+## Customer-Side Application Audit Addendum (Flutter Mobile)
+
+Date: 2026-04-26  
+Scope: Current customer mobile experience audit for production readiness (catalog, inquiries, orders, notifications, account and UX quality).
+
+---
+
+### 1) Completed Features Audit (Recently Implemented Flows)
+
+#### 1.1 Authentication, Session and Role Gating
+
+- Secure token persistence and startup session restoration are implemented.
+- Login/register/logout flows are implemented and route users into role-based shells.
+- Customer account settings now include password update and account close flow integration.
+
+Primary references:
+
+- `frontend/lib/main.dart`
+- `frontend/lib/core/providers/auth_provider.dart`
+- `frontend/lib/core/auth/auth_token_storage.dart`
+- `frontend/lib/features/auth/data/auth_api.dart`
+- `frontend/lib/features/auth/ui/login_screen.dart`
+- `frontend/lib/features/auth/ui/register_screen.dart`
+- `frontend/lib/features/profile/ui/customer_profile_screen.dart`
+
+#### 1.2 Catalog and Product Discovery
+
+- Catalog list renders categories, arrivals and products with loading/empty/error handling.
+- Pull-to-refresh has been standardized and reused on customer surfaces.
+- Product detail includes image carousel/zoom, pricing/weight display and inquiry CTA.
+
+Primary references:
+
+- `frontend/lib/features/catalog/ui/product_catalog_screen.dart`
+- `frontend/lib/features/catalog/ui/product_detail_screen.dart`
+- `frontend/lib/features/catalog/data/catalog_api.dart`
+- `frontend/lib/core/ui/widgets/app_refresh.dart`
+
+#### 1.3 Favorites / Saved Products
+
+- Favorites are persisted locally (SharedPreferences) and surfaced in saved products.
+- Heart toggle behavior is integrated in both catalog and product detail flows.
+- Saved list handles stale/missing IDs gracefully.
+
+Primary references:
+
+- `frontend/lib/core/providers/saved_favorites_provider.dart`
+- `frontend/lib/features/profile/ui/saved_products_screen.dart`
+
+#### 1.4 Inquiries, Realtime Chat and Quote/Deposit Pipeline
+
+- New inquiry flow supports product-linked initiation and media attachments.
+- Firebase-backed realtime chat is integrated with Laravel bootstrap/token flow.
+- Customer quote actions (accept/decline) and deposit-proof upload are implemented.
+- Pipeline fallback behavior exists: when Firestore cards are absent, REST pipeline payloads are rendered.
+
+Primary references:
+
+- `frontend/lib/features/inquiries/ui/new_inquiry_screen.dart`
+- `frontend/lib/features/inquiries/ui/inquiry_list_screen.dart`
+- `frontend/lib/features/inquiries/ui/inquiry_chat_screen.dart`
+- `frontend/lib/features/inquiries/data/inquiry_api.dart`
+- `frontend/lib/features/inquiries/models/inquiry_pipeline.dart`
+
+#### 1.5 Orders, Timeline and Receipts
+
+- Customer orders list, detail and timeline views are implemented.
+- Timeline merges order lifecycle and artisan/progress context for customer visibility.
+- Receipt list/detail and document download/open flow are implemented.
+
+Primary references:
+
+- `frontend/lib/features/orders/ui/customer_orders_screen.dart`
+- `frontend/lib/features/orders/ui/customer_order_detail_screen.dart`
+- `frontend/lib/features/orders/ui/customer_order_timeline_screen.dart`
+- `frontend/lib/features/orders/ui/receipt_detail_screen.dart`
+- `frontend/lib/features/orders/data/order_api.dart`
+
+#### 1.6 Notifications and Unread UX
+
+- In-app notifications list is implemented with mark-read behavior.
+- Unread badge indicator is integrated into the customer bottom navigation.
+- Push token registration and lifecycle handling are wired.
+
+Primary references:
+
+- `frontend/lib/core/notifications/ui/notifications_screen.dart`
+- `frontend/lib/core/notifications/customer_notification_badge.dart`
+- `frontend/lib/core/notifications/push_notification_manager.dart`
+- `frontend/lib/core/notifications/data/notification_api.dart`
+
+#### 1.7 Profile, Preferences and Shell UX Polish
+
+- Profile screen now centralizes customer actions: saved pieces, display settings, password, account close.
+- Display preferences are persisted and used by shared display widgets.
+- Unified customer tab header and premium floating nav patterns are applied.
+- Recent UX refinement: slimmer floating dock, tighter spacing and optional border style.
+
+Primary references:
+
+- `frontend/lib/features/profile/ui/customer_profile_screen.dart`
+- `frontend/lib/features/profile/ui/display_preferences_screen.dart`
+- `frontend/lib/core/providers/display_preferences_provider.dart`
+- `frontend/lib/core/ui/widgets/customer_tab_header.dart`
+- `frontend/lib/core/ui/widgets/premium_floating_nav_bar.dart`
+- `frontend/lib/features/shell/customer_shell.dart`
+
+---
+
+### 2) Current Gaps for Production-Ready Jewelry E-commerce
+
+#### 2.1 Functional Product Gaps
+
+- No direct cart/checkout lane exists for ready-made purchases (current model is inquiry-first).
+- Catalog search/sort/filter UI is limited compared to production expectations.
+- No customer address book, profile edit (name/phone/avatar), or delivery preference workflow.
+
+#### 2.2 Reliability and Performance Gaps
+
+- Pagination/infinite scrolling is not consistently implemented for large datasets (catalog, orders, notifications).
+- Network retry/backoff is not centralized; transient failures can surface abruptly.
+- Some screens rely on per-screen fetch orchestration rather than shared data synchronization strategy.
+
+#### 2.3 UX and Accessibility Gaps
+
+- Error messaging still exposes raw exception text in some paths.
+- Offline or poor-connectivity behavior (cache + stale indicators + recovery UX) is limited.
+- Accessibility hardening is incomplete (dynamic text scaling QA, full semantics labeling audit, contrast regression checks).
+
+#### 2.4 Security and Compliance Gaps
+
+- Production hardening still needs strict HTTPS-only environment control and endpoint governance.
+- No explicit certificate pinning strategy is documented for the mobile app.
+- Privacy/legal UX coverage is incomplete (consent, retention notice for uploaded chat/inquiry media, account data export/deletion transparency).
+
+#### 2.5 Observability and Quality Gaps
+
+- Crash/error telemetry integration (e.g., Crashlytics/Sentry) is not formalized in customer app flows.
+- Product analytics instrumentation is limited (no complete conversion funnel tracking).
+- Automated test coverage remains low for critical customer journeys (integration/e2e).
+
+---
+
+### 3) New Feature Suggestions (Prioritized)
+
+Priority key:
+
+- P1: High business impact / launch critical
+- P2: High value / near-term
+- P3: Strategic enhancement
+
+1. **P1 - Global error-handling layer + retry UX**
+   - Map backend/network errors to customer-friendly copy and action buttons.
+   - Add standard retry policies and fallback surfaces.
+
+2. **P1 - Catalog search, sort and filtering**
+   - Add query search, price/weight filters, ready-made toggle, and category facets.
+   - Preserve filter state across tab switches.
+
+3. **P1 - Pagination/infinite loading for large lists**
+   - Apply to catalog, orders, inquiries and notifications.
+   - Prevent frame drops and over-fetching on low-end devices.
+
+4. **P1 - Observability baseline**
+   - Add crash reporting and structured client logs with context IDs (inquiry/order).
+   - Track top failure hotspots by screen and API endpoint.
+
+5. **P1 - Customer journey analytics**
+   - Track product view -> favorite -> inquiry -> quote accept -> deposit upload -> receipt open funnel.
+   - Use event data to optimize conversion and concierge operations.
+
+6. **P2 - Offline-first cache strategy**
+   - Cache latest catalog/orders/inquiries for read mode during network loss.
+   - Add "last synced" indicators and explicit refresh controls.
+
+7. **P2 - Customer profile expansion**
+   - Add editable profile fields, address book, and preferred contact channel.
+   - Improve post-order and delivery/pickup communications quality.
+
+8. **P2 - Advanced order tracking**
+   - Add richer timeline cards (milestone ETA, artisan note, QC evidence thumbnails when available).
+   - Improve confidence and reduce support chats.
+
+9. **P2 - Security hardening**
+   - Introduce stricter environment config validation and optional TLS pinning.
+   - Add secure logging policy to avoid sensitive payload exposure.
+
+10. **P3 - Loyalty and retention features**
+    - Saved searches, restock alerts, and personalized recommendations.
+    - Tiered membership/perk cues aligned with premium brand positioning.
+
+---
+
+### 4) Recommended Next Step (Execution Plan Snapshot)
+
+For a production-readiness sprint, prioritize:
+
+1. P1 foundation: error handling, pagination, observability, analytics.
+2. Conversion uplift: catalog search/filter + optimized product discovery.
+3. Trust and compliance: security hardening and privacy UX completion.
+
+This sequence gives the best balance of launch risk reduction, conversion gains, and maintainability.
+
+---
+
+## Artisan App Documentation
+
+The artisan mobile audit is now maintained separately in:
+
+- `docs/ARTISAN_APP_AUDIT.md`
+
+---
+
 Date: 2026-04-25  
 Scope: Complete enterprise-grade reference for the admin panel at `/admin`, including Command Center, inventory, bespoke production flow, settlement, reporting, governance, and system controls.
 

@@ -151,6 +151,8 @@ class OrderController extends Controller
             'task_scope' => ['required', 'in:full_order,line_item'],
             'order_item_id' => ['nullable', 'required_if:task_scope,line_item', 'exists:order_items,id'],
             'instructions' => ['nullable', 'required_if:task_scope,line_item', 'string', 'max:5000'],
+            'target_deadline_at' => ['nullable', 'date'],
+            'priority_level' => ['nullable', 'in:low,normal,high,urgent'],
         ]);
 
         try {
@@ -159,7 +161,9 @@ class OrderController extends Controller
                 (int) $data['artisan_user_id'],
                 (string) $data['task_scope'],
                 isset($data['order_item_id']) ? (int) $data['order_item_id'] : null,
-                $data['instructions'] ?? null
+                $data['instructions'] ?? null,
+                $data['target_deadline_at'] ?? null,
+                $data['priority_level'] ?? 'normal'
             );
         } catch (ValidationException $e) {
             return response()->json([

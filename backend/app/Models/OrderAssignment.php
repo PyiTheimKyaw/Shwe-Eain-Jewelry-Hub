@@ -14,7 +14,16 @@ class OrderAssignment extends Model
         'order_item_id',
         'status',
         'instructions',
+        'target_deadline_at',
+        'priority_level',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'target_deadline_at' => 'datetime',
+        ];
+    }
 
     public function order(): BelongsTo
     {

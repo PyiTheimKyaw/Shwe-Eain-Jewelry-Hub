@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -15,6 +16,7 @@ class ArtisanApiException implements Exception {
 
 class ArtisanApi {
   ArtisanApi._();
+  static const Duration _requestTimeout = Duration(seconds: 20);
 
   static Map<String, String> _authHeaders(String token) => {
     'Authorization': 'Bearer $token',
@@ -36,11 +38,25 @@ class ArtisanApi {
     return body;
   }
 
+  static String _friendlyError(Object e) {
+    if (e is TimeoutException) {
+      return 'Request timed out. Please try again.';
+    }
+    return 'Network request failed. Please try again.';
+  }
+
   static Future<List<Map<String, dynamic>>> fetchAssignments(
     String token,
   ) async {
     final uri = Uri.parse('${ApiConfig.apiV1}/artisan/assignments');
-    final res = await http.get(uri, headers: _authHeaders(token));
+    http.Response res;
+    try {
+      res = await http
+          .get(uri, headers: _authHeaders(token))
+          .timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
     if (res.statusCode != 200) {
       throw ArtisanApiException(
         'Assignments ${res.statusCode}: ${_errorBody(res.body)}',
@@ -55,7 +71,14 @@ class ArtisanApi {
     String token,
   ) async {
     final uri = Uri.parse('${ApiConfig.apiV1}/artisan/notifications');
-    final res = await http.get(uri, headers: _authHeaders(token));
+    http.Response res;
+    try {
+      res = await http
+          .get(uri, headers: _authHeaders(token))
+          .timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
     if (res.statusCode != 200) {
       throw ArtisanApiException(
         'Notifications ${res.statusCode}: ${_errorBody(res.body)}',
@@ -70,12 +93,49 @@ class ArtisanApi {
         .toList();
   }
 
+  static Future<Map<String, int>> fetchStats(String token) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/artisan/stats');
+    http.Response res;
+    try {
+      res = await http
+          .get(uri, headers: _authHeaders(token))
+          .timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
+    if (res.statusCode != 200) {
+      throw ArtisanApiException(
+        'Stats ${res.statusCode}: ${_errorBody(res.body)}',
+      );
+    }
+    final map = json.decode(res.body) as Map<String, dynamic>;
+    final data = map['data'] as Map<String, dynamic>? ?? const {};
+    int parseInt(dynamic v) {
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse('$v') ?? 0;
+    }
+
+    return {
+      'current_active_load': parseInt(data['current_active_load']),
+      'blocked_count': parseInt(data['blocked_count']),
+      'total_completed_jobs': parseInt(data['total_completed_jobs']),
+    };
+  }
+
   static Future<Map<String, dynamic>> fetchAssignment(
     String token,
     int assignmentId,
   ) async {
     final uri = Uri.parse('${ApiConfig.apiV1}/artisan/assignments/$assignmentId');
-    final res = await http.get(uri, headers: _authHeaders(token));
+    http.Response res;
+    try {
+      res = await http
+          .get(uri, headers: _authHeaders(token))
+          .timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
     if (res.statusCode != 200) {
       throw ArtisanApiException(
         'Assignment ${res.statusCode}: ${_errorBody(res.body)}',
@@ -94,7 +154,14 @@ class ArtisanApi {
     required int orderId,
   }) async {
     final uri = Uri.parse('${ApiConfig.apiV1}/artisan/orders/$orderId/start');
-    final res = await http.post(uri, headers: _jsonHeaders(bearerToken));
+    http.Response res;
+    try {
+      res = await http
+          .post(uri, headers: _jsonHeaders(bearerToken))
+          .timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
     if (res.statusCode != 200) {
       throw ArtisanApiException(
         'Start job ${res.statusCode}: ${_errorBody(res.body)}',
@@ -108,7 +175,14 @@ class ArtisanApi {
   }) async {
     final uri =
         Uri.parse('${ApiConfig.apiV1}/artisan/orders/$orderId/ready-for-review');
-    final res = await http.post(uri, headers: _jsonHeaders(bearerToken));
+    http.Response res;
+    try {
+      res = await http
+          .post(uri, headers: _jsonHeaders(bearerToken))
+          .timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
     if (res.statusCode != 200) {
       throw ArtisanApiException(
         'Ready for review ${res.statusCode}: ${_errorBody(res.body)}',
@@ -136,11 +210,38 @@ class ArtisanApi {
         await http.MultipartFile.fromPath('photos[$i]', photos[i].path),
       );
     }
-    final streamed = await request.send();
+    http.StreamedResponse streamed;
+    try {
+      streamed = await request.send().timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
     final body = await streamed.stream.bytesToString();
     if (streamed.statusCode != 201) {
       throw ArtisanApiException(
         'Progress ${streamed.statusCode}: ${_errorBody(body)}',
+      );
+    }
+  }
+
+  static Future<void> markNotificationRead({
+    required String bearerToken,
+    required String notificationId,
+  }) async {
+    final uri = Uri.parse(
+      '${ApiConfig.apiV1}/notifications/$notificationId/read',
+    );
+    http.Response res;
+    try {
+      res = await http
+          .post(uri, headers: _jsonHeaders(bearerToken))
+          .timeout(_requestTimeout);
+    } catch (e) {
+      throw ArtisanApiException(_friendlyError(e));
+    }
+    if (res.statusCode != 200) {
+      throw ArtisanApiException(
+        'Mark read ${res.statusCode}: ${_errorBody(res.body)}',
       );
     }
   }

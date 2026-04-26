@@ -7,6 +7,7 @@ import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/artisan/data/artisan_api.dart';
 import 'package:jewelry_hub/features/artisan/models/artisan_notification.dart';
+import 'package:jewelry_hub/features/artisan/providers/artisan_notification_badge.dart';
 import 'package:jewelry_hub/features/artisan/ui/artisan_job_detail_screen.dart';
 import 'package:provider/provider.dart';
 
@@ -55,6 +56,7 @@ class _ArtisanNotificationsScreenState
         _loading = false;
         _error = null;
       });
+      context.read<ArtisanNotificationBadge>().syncFromNotifications(list);
       if (!_autoOpenTried && widget.initialOrderId != null) {
         _autoOpenTried = true;
         final target = _items.where((i) => i.orderId == widget.initialOrderId);
@@ -110,6 +112,35 @@ class _ArtisanNotificationsScreenState
     final token = context.read<AuthProvider>().token;
     if (token == null) {
       return;
+    }
+
+    if (item.readAt == null) {
+      try {
+        await ArtisanApi.markNotificationRead(
+          bearerToken: token,
+          notificationId: item.id,
+        );
+      } catch (_) {
+        // Keep navigation resilient even if read-state update fails.
+      }
+      if (mounted) {
+        setState(() {
+          _items = _items
+              .map(
+                (n) => n.id == item.id
+                    ? ArtisanNotificationItem(
+                        id: n.id,
+                        type: n.type,
+                        data: n.data,
+                        readAt: DateTime.now(),
+                        createdAt: n.createdAt,
+                      )
+                    : n,
+              )
+              .toList();
+        });
+        context.read<ArtisanNotificationBadge>().syncFromNotifications(_items);
+      }
     }
 
     try {

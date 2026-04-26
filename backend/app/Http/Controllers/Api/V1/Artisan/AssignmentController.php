@@ -25,6 +25,34 @@ class AssignmentController extends Controller
         return response()->json($items);
     }
 
+    public function stats(Request $request): JsonResponse
+    {
+        $artisanId = $request->user()->id;
+
+        $activeLoad = OrderAssignment::query()
+            ->where('artisan_user_id', $artisanId)
+            ->whereIn('status', ['assigned', 'in_progress'])
+            ->count();
+
+        $blockedCount = OrderAssignment::query()
+            ->where('artisan_user_id', $artisanId)
+            ->where('status', 'blocked')
+            ->count();
+
+        $completed = OrderAssignment::query()
+            ->where('artisan_user_id', $artisanId)
+            ->where('status', 'done')
+            ->count();
+
+        return response()->json([
+            'data' => [
+                'current_active_load' => $activeLoad,
+                'blocked_count' => $blockedCount,
+                'total_completed_jobs' => $completed,
+            ],
+        ]);
+    }
+
     public function show(Request $request, OrderAssignment $assignment): JsonResponse
     {
         $this->authorize('view', $assignment);
@@ -36,7 +64,19 @@ class AssignmentController extends Controller
             'orderItem.product.images',
         ]);
 
-        return response()->json(['data' => $assignment]);
+        $latestAdminFeedback = $assignment->order
+            ?->progressEvents()
+            ->whereNotNull('note')
+            ->where('note', '!=', '')
+            ->latest('id')
+            ->value('note');
+
+        return response()->json([
+            'data' => [
+                ...$assignment->toArray(),
+                'latest_admin_feedback' => $latestAdminFeedback,
+            ],
+        ]);
     }
 
     public function update(Request $request, OrderAssignment $assignment): JsonResponse

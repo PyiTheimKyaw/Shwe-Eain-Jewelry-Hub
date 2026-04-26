@@ -9,6 +9,7 @@ import 'package:jewelry_hub/core/providers/saved_favorites_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
 import 'package:jewelry_hub/features/auth/ui/login_screen.dart';
+import 'package:jewelry_hub/features/artisan/providers/artisan_notification_badge.dart';
 import 'package:jewelry_hub/features/shell/admin_shell.dart';
 import 'package:jewelry_hub/features/shell/artisan_shell.dart';
 import 'package:jewelry_hub/features/shell/customer_shell.dart';
@@ -43,6 +44,7 @@ class JewelryHubApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SavedFavorites()),
         ChangeNotifierProvider(create: (_) => CatalogPricing()),
         ChangeNotifierProvider(create: (_) => CustomerNotificationBadge()),
+        ChangeNotifierProvider(create: (_) => ArtisanNotificationBadge()),
       ],
       child: MaterialApp(
         title: 'Jewelry Hub',
