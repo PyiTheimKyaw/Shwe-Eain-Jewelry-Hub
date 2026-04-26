@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Inquiries\Tables;
 
 use App\Models\Inquiry;
+use App\Services\InquiryPipelinePresenter;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
@@ -32,9 +33,32 @@ class InquiriesTable
                     })
                     ->color(fn (string $state): string => $state === 'Unanswered' ? 'danger' : 'success'),
                 TextColumn::make('status')
+                    ->label('Status')
                     ->badge()
-                    ->searchable()
-                    ->sortable(),
+                    ->getStateUsing(function (Inquiry $record): string {
+                        $pipeline = app(InquiryPipelinePresenter::class)->present($record);
+                        $step = (string) ($pipeline['step'] ?? 'consulting');
+
+                        return match ($step) {
+                            InquiryPipelinePresenter::STEP_QUOTED => 'quoted',
+                            InquiryPipelinePresenter::STEP_AWAITING_DEPOSIT => 'awaiting_deposit',
+                            InquiryPipelinePresenter::STEP_PRE_PRODUCTION => 'deposit_confirmed',
+                            InquiryPipelinePresenter::STEP_IN_PRODUCTION => 'in_production',
+                            InquiryPipelinePresenter::STEP_PENDING_QC => 'pending_qc',
+                            InquiryPipelinePresenter::STEP_READY => 'ready',
+                            default => 'consulting',
+                        };
+                    })
+                    ->formatStateUsing(fn (string $state): string => str($state)->replace('_', ' ')->title())
+                    ->color(fn (string $state): string => match ($state) {
+                        'quoted' => 'warning',
+                        'awaiting_deposit' => 'warning',
+                        'deposit_confirmed' => 'info',
+                        'in_production' => 'primary',
+                        'pending_qc' => 'gray',
+                        'ready' => 'success',
+                        default => 'gray',
+                    }),
                 TextColumn::make('quote_status')
                     ->label('Quote')
                     ->badge()

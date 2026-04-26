@@ -127,6 +127,8 @@ Capabilities:
 - Inline quote builder with multi-line support (weight, labor, gems, product linkage, metal/stone details).
 - Quote publish action sends customer-facing update and timeline records.
 - Existing commitment checks/warnings are applied during quote publish.
+- Inquiry-linked product prefill now auto-populates first quote line defaults (product, title, weight, labor, gems) while preserving explicit concierge edits.
+- Concierge quote modal now includes a linked-product starter action and product selector (`SKU - Title`) so staff can start from catalog data instead of blank-slate entry.
 
 ### 3.2 Production Stage (Assignment + QC)
 
@@ -182,6 +184,15 @@ On successful final settlement:
 - Official final receipt is generated.
 
 This is the canonical close-out behavior for the bespoke journey.
+
+### 3.5 Ready-made Branch Policy (Operational)
+
+When an order is inferred as ready-made (all quote lines linked to ready-made catalog products):
+
+- Full settlement path transitions directly to `ready` for pickup.
+- Artisan assignment, in-production, and QC stages are skipped by backend lifecycle guards.
+- Deposit-first remains supported (if needed by policy), but flow still bypasses production and moves to `ready` once settlement condition is met.
+- Final-payment confirmation for ready-made does **not** auto-mark `completed`; it prioritizes pickup readiness (`ready`) to match store handover flow.
 
 ---
 

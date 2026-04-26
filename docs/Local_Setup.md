@@ -299,5 +299,14 @@ Quick manual smoke test:
    - Download final receipt PDF from Order View and verify it shows the chosen payment method (e.g. `Payment Method: Cash`).
    - In mobile customer app, open Order Details and verify final receipt chip/download works.
    - Re-open the same order and confirm duplicate final settlement is blocked once remaining balance is zero.
+9. Inquiry-to-quote linked product prefill smoke test:
+   - Create an inquiry linked to a catalog product (`product_id` set).
+   - In Filament concierge chat, open **Generate quote** and verify first line is prefilled (product/title/weight/labor/gems).
+   - Click **Use linked product as starting line** and confirm defaults rehydrate without overriding manual edits already typed in other fields.
+   - Publish with blank line payload via API (`POST /api/v1/admin/inquiries/{id}/quotes/publish`) and verify quote line stores linked product defaults.
+10. Ready-made lifecycle branch smoke test:
+   - Use a quote with only `is_ready_made = true` products.
+   - Accept quote and confirm order follows payment settlement path without artisan assignment/production/QC.
+   - Confirm final payment and verify order transitions to `ready` directly for pickup handover.
 
 For architecture and feature history, see `docs/FYP_Technical_Log.md` and `.cursorrules`.

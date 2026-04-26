@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ExchangeRateSnapshot;
 use App\Models\GoldPriceSnapshot;
+use App\Models\Inquiry;
 use App\Models\Product;
 use App\Models\Quote;
 use App\Models\QuoteLineItem;
@@ -29,9 +30,22 @@ class QuoteBuilderService
         ?int $inquiryId = null,
         ?string $notesInternal = null,
         ?\DateTimeInterface $validUntil = null,
-        string $initialStatus = 'draft'
+        string $initialStatus = 'draft',
+        ?float $depositPercentageOverride = null,
+        ?float $depositAmountOverrideMmk = null
     ): Quote {
-        return DB::transaction(function () use ($customer, $gold, $fx, $lines, $inquiryId, $notesInternal, $validUntil, $initialStatus) {
+        return DB::transaction(function () use (
+            $customer,
+            $gold,
+            $fx,
+            $lines,
+            $inquiryId,
+            $notesInternal,
+            $validUntil,
+            $initialStatus,
+            $depositPercentageOverride,
+            $depositAmountOverrideMmk
+        ) {
             $quote = Quote::create([
                 'inquiry_id' => $inquiryId,
                 'customer_user_id' => $customer->id,
@@ -43,6 +57,8 @@ class QuoteBuilderService
                 'total_usd_snapshot' => 0,
                 'valid_until' => $validUntil,
                 'notes_internal' => $notesInternal,
+                'deposit_percentage_override' => $depositPercentageOverride,
+                'deposit_amount_override_mmk' => $depositAmountOverrideMmk,
             ]);
 
             $totalMmk = '0';
@@ -90,6 +106,117 @@ class QuoteBuilderService
 
             return $quote->fresh(['lineItems']);
         });
+    }
+
+    /**
+     * Apply deterministic product/inquiry prefill without overriding explicit admin input.
+     *
+     * @param  array<int, array<string, mixed>>  $lines
+     * @return array<int, array<string, mixed>>
+     */
+    public function normalizeQuoteLines(array $lines, ?Inquiry $inquiry = null): array
+    {
+        $inquiryProductId = $inquiry?->product_id !== null ? (int) $inquiry->product_id : null;
+        $productIds = [];
+        if ($inquiryProductId !== null) {
+            $productIds[] = $inquiryProductId;
+        }
+
+        foreach ($lines as $line) {
+            $rawId = $line['product_id'] ?? null;
+            if ($rawId === null || $rawId === '') {
+                continue;
+            }
+            $parsed = is_numeric($rawId) ? (int) $rawId : null;
+            if ($parsed !== null) {
+                $productIds[] = $parsed;
+            }
+        }
+
+        /** @var array<int, Product> $products */
+        $products = Product::query()
+            ->withTrashed()
+            ->whereIn('id', array_values(array_unique($productIds)))
+            ->get()
+            ->keyBy('id')
+            ->all();
+
+        $normalized = [];
+        foreach ($lines as $line) {
+            $lineProductId = null;
+            $rawId = $line['product_id'] ?? null;
+            if ($rawId !== null && $rawId !== '') {
+                $lineProductId = is_numeric($rawId) ? (int) $rawId : null;
+            }
+
+            $effectiveProductId = $lineProductId ?? $inquiryProductId;
+            $effectiveProduct = $effectiveProductId !== null ? ($products[$effectiveProductId] ?? null) : null;
+            $merged = $line;
+
+            if ($lineProductId === null && $effectiveProductId !== null) {
+                $merged['product_id'] = $effectiveProductId;
+            } elseif ($lineProductId === null) {
+                $merged['product_id'] = null;
+            } else {
+                $merged['product_id'] = $lineProductId;
+            }
+
+            if ($effectiveProduct !== null) {
+                if ($this->isBlank($merged['custom_title'] ?? null)) {
+                    $merged['custom_title'] = $effectiveProduct->title;
+                }
+                if ($this->isBlank($merged['weight_grams'] ?? null) && $effectiveProduct->weight_grams !== null) {
+                    $merged['weight_grams'] = (string) $effectiveProduct->weight_grams;
+                }
+                if ($this->isBlank($merged['labor_fee_mmk'] ?? null)) {
+                    $merged['labor_fee_mmk'] = (string) $effectiveProduct->labor_fee_mmk;
+                }
+                if ($this->isBlank($merged['gem_price_mmk'] ?? null)) {
+                    $merged['gem_price_mmk'] = (string) ($effectiveProduct->gem_price_mmk ?? 0);
+                }
+            }
+
+            $normalized[] = $merged;
+        }
+
+        return $normalized;
+    }
+
+    protected function isBlank(mixed $value): bool
+    {
+        if ($value === null) {
+            return true;
+        }
+
+        return is_string($value) && trim($value) === '';
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lines
+     */
+    public function readyMadeDefaultDepositPercentage(array $lines): float
+    {
+        $allReadyMade = false;
+        foreach ($lines as $line) {
+            $id = $line['product_id'] ?? null;
+            if (! is_numeric($id)) {
+                continue;
+            }
+            $product = Product::query()->withTrashed()->find((int) $id);
+            if ($product === null) {
+                continue;
+            }
+            $allReadyMade = true;
+            if (! $product->is_ready_made) {
+                return app(BusinessConfigService::class)->depositPercentage();
+            }
+        }
+
+        if ($allReadyMade) {
+            return 100.0;
+        }
+
+        return app(BusinessConfigService::class)->depositPercentage();
     }
 
     protected function uniqueQuoteNumber(): string

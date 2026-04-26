@@ -187,6 +187,7 @@ class OrderBuilderService
             ->whereIn('status', ['assigned', 'in_progress'])
             ->get();
 
+        /** @var OrderAssignment $assignment */
         foreach ($assignments as $assignment) {
             $current = trim((string) $assignment->instructions);
             $instructions = str_contains($current, 'Quote revised — review design changes')
@@ -226,15 +227,28 @@ class OrderBuilderService
         $depositPct = app(BusinessConfigService::class)->depositPercentage();
         $total = (float) $quote->total_mmk;
         $credit = (float) $creditConfirmedMmk;
+        $isReadyMade = $this->inferReadyMadeFulfillment($quote);
+        $overridePct = $quote->deposit_percentage_override !== null ? (float) $quote->deposit_percentage_override : null;
+        $overrideAmount = $quote->deposit_amount_override_mmk !== null ? (float) $quote->deposit_amount_override_mmk : null;
 
-        // Customer paid at least the full order total already — treat deposit milestone as satisfied.
-        if ($credit >= $total) {
-            $depositAmount = 0.0;
-            $status = 'deposit_confirmed';
+        if ($overrideAmount !== null) {
+            $requiredDeposit = max(0.0, min($overrideAmount, $total));
         } else {
-            $requiredDeposit = round($total * ($depositPct / 100), 4);
+            $effectivePct = $overridePct ?? ($isReadyMade ? 100.0 : $depositPct);
+            $requiredDeposit = round($total * ($effectivePct / 100), 4);
+        }
+
+        // Customer paid at least required upfront amount already.
+        if ($credit >= $requiredDeposit) {
             $depositAmount = max(0.0, round($requiredDeposit - $credit, 4));
-            $status = $depositAmount > 0 ? 'awaiting_deposit' : 'deposit_confirmed';
+            if ($isReadyMade) {
+                $status = 'awaiting_final_settlement';
+            } else {
+                $status = 'deposit_confirmed';
+            }
+        } else {
+            $depositAmount = max(0.0, round($requiredDeposit - $credit, 4));
+            $status = 'awaiting_deposit';
         }
 
         $order = Order::create([
@@ -265,6 +279,17 @@ class OrderBuilderService
         }
 
         return $order->load('items');
+    }
+
+    protected function inferReadyMadeFulfillment(Quote $quote): bool
+    {
+        $quote->loadMissing('lineItems.product');
+        if ($quote->lineItems->isEmpty()) {
+            return false;
+        }
+
+        return $quote->lineItems
+            ->every(fn ($line) => $line->product_id !== null && $line->product?->is_ready_made === true);
     }
 
     protected function uniqueOrderNumber(): string

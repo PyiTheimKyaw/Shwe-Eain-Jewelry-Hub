@@ -7,6 +7,7 @@ use App\Models\Inquiry;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentProfile;
+use App\Models\Product;
 use App\Models\Quote;
 use App\Models\User;
 use App\Services\AdminAuditLogService;
@@ -45,9 +46,16 @@ class ChatInquiry extends Page
     /** @var array<int, array{weight_grams: string, labor_fee_mmk: string, gem_price_mmk: string, product_id: string, custom_title: string, metal_type: string, stone_details: string}> */
     public array $quoteFormLines = [];
 
+    /** @var array<int, array{id:int,label:string}> */
+    public array $quoteProductOptions = [];
+
     public ?string $quoteValidUntil = null;
 
     public ?string $quoteNotes = null;
+
+    public ?string $quoteDepositPercentage = null;
+
+    public ?string $quoteDepositAmountMmk = null;
 
     public ?int $selectedPaymentProfileId = null;
 
@@ -69,17 +77,20 @@ class ChatInquiry extends Page
 
         $this->threadId = (string) ($inquiry->firebase_thread_id ?? '');
 
-        $this->quoteFormLines = [
-            [
-                'weight_grams' => '',
-                'labor_fee_mmk' => '',
-                'gem_price_mmk' => '',
-                'product_id' => '',
-                'custom_title' => '',
-                'metal_type' => '',
-                'stone_details' => '',
-            ],
-        ];
+        $this->quoteFormLines = [$this->buildInitialQuoteLine($inquiry)];
+        $defaultDeposit = app(QuoteBuilderService::class)->readyMadeDefaultDepositPercentage($this->quoteFormLines);
+        $this->quoteDepositPercentage = number_format($defaultDeposit, 2, '.', '');
+        $this->quoteDepositAmountMmk = null;
+        $this->quoteProductOptions = Product::query()
+            ->withTrashed()
+            ->orderBy('title')
+            ->limit(400)
+            ->get(['id', 'sku', 'title'])
+            ->map(fn (Product $product): array => [
+                'id' => (int) $product->id,
+                'label' => trim(((string) $product->sku !== '' ? "{$product->sku} - " : '').$product->title),
+            ])
+            ->all();
 
         $this->refreshPipeline();
         $this->dispatch('jh-admin-static-refresh');
@@ -166,15 +177,7 @@ class ChatInquiry extends Page
 
     public function addQuoteLine(): void
     {
-        $this->quoteFormLines[] = [
-            'weight_grams' => '',
-            'labor_fee_mmk' => '',
-            'gem_price_mmk' => '',
-            'product_id' => '',
-            'custom_title' => '',
-            'metal_type' => '',
-            'stone_details' => '',
-        ];
+        $this->quoteFormLines[] = $this->emptyQuoteLine();
     }
 
     public function removeQuoteLine(int $index): void
@@ -234,10 +237,18 @@ class ChatInquiry extends Page
             return;
         }
 
+        $preparedRows = app(QuoteBuilderService::class)->normalizeQuoteLines($this->quoteFormLines, $inquiry);
+        $this->quoteFormLines = array_map(
+            fn (array $row): array => $this->normalizeQuoteFormLine($row),
+            $preparedRows
+        );
+
         $validator = Validator::make([
             'quoteFormLines' => $this->quoteFormLines,
             'quoteValidUntil' => $this->quoteValidUntil,
             'quoteNotes' => $this->quoteNotes,
+            'quoteDepositPercentage' => $this->quoteDepositPercentage,
+            'quoteDepositAmountMmk' => $this->quoteDepositAmountMmk,
         ], [
             'quoteFormLines' => ['required', 'array', 'min:1'],
             'quoteFormLines.*.weight_grams' => ['required', 'numeric', 'min:0'],
@@ -249,6 +260,8 @@ class ChatInquiry extends Page
             'quoteFormLines.*.stone_details' => ['nullable', 'string', 'max:1000'],
             'quoteValidUntil' => ['nullable', 'date'],
             'quoteNotes' => ['nullable', 'string'],
+            'quoteDepositPercentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'quoteDepositAmountMmk' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         if ($validator->fails()) {
@@ -280,6 +293,8 @@ class ChatInquiry extends Page
             ];
         }
 
+        $lines = app(QuoteBuilderService::class)->normalizeQuoteLines($lines, $inquiry);
+
         $customer = User::query()->findOrFail($inquiry->customer_user_id);
         if (! $customer->isCustomer()) {
             Notification::make()->title(__('Invalid customer on inquiry'))->danger()->send();
@@ -296,7 +311,13 @@ class ChatInquiry extends Page
                 $inquiry->id,
                 $validated['quoteNotes'] ?? null,
                 isset($validated['quoteValidUntil']) ? new \DateTimeImmutable($validated['quoteValidUntil']) : null,
-                'sent'
+                'sent',
+                isset($validated['quoteDepositPercentage']) && $validated['quoteDepositPercentage'] !== ''
+                    ? (float) $validated['quoteDepositPercentage']
+                    : app(QuoteBuilderService::class)->readyMadeDefaultDepositPercentage($lines),
+                isset($validated['quoteDepositAmountMmk']) && $validated['quoteDepositAmountMmk'] !== ''
+                    ? (float) $validated['quoteDepositAmountMmk']
+                    : null
             );
 
             $inquiry->update(['status' => 'quoted']);
@@ -502,5 +523,72 @@ class ChatInquiry extends Page
     public function getBreadcrumb(): string
     {
         return __('Chat');
+    }
+
+    public function prefillFromInquiryProduct(): void
+    {
+        /** @var Inquiry $inquiry */
+        $inquiry = $this->getRecord();
+        if ($inquiry->product_id === null) {
+            Notification::make()
+                ->title(__('This inquiry has no linked catalog product'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->quoteFormLines = [
+            $this->normalizeQuoteFormLine(
+                app(QuoteBuilderService::class)->normalizeQuoteLines([$this->emptyQuoteLine()], $inquiry)[0] ?? $this->emptyQuoteLine()
+            ),
+        ];
+        $defaultDeposit = app(QuoteBuilderService::class)->readyMadeDefaultDepositPercentage($this->quoteFormLines);
+        $this->quoteDepositPercentage = number_format($defaultDeposit, 2, '.', '');
+        $this->quoteDepositAmountMmk = null;
+    }
+
+    protected function buildInitialQuoteLine(Inquiry $inquiry): array
+    {
+        if ($inquiry->product_id === null) {
+            return $this->emptyQuoteLine();
+        }
+
+        $line = app(QuoteBuilderService::class)->normalizeQuoteLines([$this->emptyQuoteLine()], $inquiry)[0] ?? [];
+
+        return $this->normalizeQuoteFormLine($line);
+    }
+
+    /**
+     * @return array{weight_grams:string,labor_fee_mmk:string,gem_price_mmk:string,product_id:string,custom_title:string,metal_type:string,stone_details:string}
+     */
+    protected function emptyQuoteLine(): array
+    {
+        return [
+            'weight_grams' => '',
+            'labor_fee_mmk' => '',
+            'gem_price_mmk' => '',
+            'product_id' => '',
+            'custom_title' => '',
+            'metal_type' => '',
+            'stone_details' => '',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     * @return array{weight_grams:string,labor_fee_mmk:string,gem_price_mmk:string,product_id:string,custom_title:string,metal_type:string,stone_details:string}
+     */
+    protected function normalizeQuoteFormLine(array $line): array
+    {
+        return [
+            'weight_grams' => isset($line['weight_grams']) && $line['weight_grams'] !== null ? (string) $line['weight_grams'] : '',
+            'labor_fee_mmk' => isset($line['labor_fee_mmk']) && $line['labor_fee_mmk'] !== null ? (string) $line['labor_fee_mmk'] : '',
+            'gem_price_mmk' => isset($line['gem_price_mmk']) && $line['gem_price_mmk'] !== null ? (string) $line['gem_price_mmk'] : '',
+            'product_id' => isset($line['product_id']) && $line['product_id'] !== null ? (string) $line['product_id'] : '',
+            'custom_title' => isset($line['custom_title']) && $line['custom_title'] !== null ? (string) $line['custom_title'] : '',
+            'metal_type' => isset($line['metal_type']) && $line['metal_type'] !== null ? (string) $line['metal_type'] : '',
+            'stone_details' => isset($line['stone_details']) && $line['stone_details'] !== null ? (string) $line['stone_details'] : '',
+        ];
     }
 }

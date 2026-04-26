@@ -1,17 +1,18 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
-import 'package:jewelry_hub/core/ui/widgets/display_preferences_sheet.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/display_preferences_sheet.dart';
 import 'package:jewelry_hub/core/ui/widgets/price_tag.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/core/ui/widgets/shwe_eain_gold_placeholder.dart';
 import 'package:jewelry_hub/core/ui/widgets/weight_badge.dart';
 import 'package:jewelry_hub/features/catalog/data/catalog_api.dart';
+import 'package:jewelry_hub/features/catalog/ui/catalog_toggle_bar.dart';
 import 'package:jewelry_hub/features/catalog/models/catalog_product.dart';
 import 'package:jewelry_hub/features/catalog/ui/product_detail_screen.dart';
+import 'package:jewelry_hub/features/catalog/widgets/product_favorite_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 
@@ -136,10 +137,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PremiumText.caption(
-              'NEW ARRIVALS',
-              color: AppColors.goldMuted,
-            ),
+            PremiumText.caption('NEW ARRIVALS', color: AppColors.goldMuted),
             const SizedBox(height: 8),
             SizedBox(
               height: 204,
@@ -185,18 +183,9 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                       ),
                       onPressed: _openDisplayPreferencesSheet,
                     ),
-                    IconButton(
-                      tooltip: 'Log out',
-                      icon: const Icon(
-                        Icons.logout_rounded,
-                        color: AppColors.textSecondary,
-                      ),
-                      onPressed: () async {
-                        await context.read<AuthProvider>().logout();
-                      },
-                    ),
                   ],
                 ),
+                // const SliverToBoxAdapter(child: CatalogToggleBar()),
                 _buildNewArrivalsCarousel(),
                 _buildCategoryChips(),
                 if (_error != null)
@@ -304,12 +293,16 @@ class _NewArrivalCard extends StatelessWidget {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(AppRadii.md),
                 ),
-                child: url == null
-                    ? Container(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (url == null)
+                      Container(
                         color: AppColors.surface,
                         child: const ShweEainGoldPlaceholder(compact: true),
                       )
-                    : CachedNetworkImage(
+                    else
+                      CachedNetworkImage(
                         imageUrl: url,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Shimmer.fromColors(
@@ -322,6 +315,13 @@ class _NewArrivalCard extends StatelessWidget {
                           child: const ShweEainGoldPlaceholder(compact: true),
                         ),
                       ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: ProductFavoriteButton(productId: product.id),
+                    ),
+                  ],
+                ),
               ),
             ),
             Padding(
@@ -329,10 +329,7 @@ class _NewArrivalCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PremiumText.body(
-                    product.title,
-                    maxLines: 1,
-                  ),
+                  PremiumText.body(product.title, maxLines: 1),
                   const SizedBox(height: 6),
                   PriceTag(pricing: product.pricing),
                 ],
@@ -370,12 +367,16 @@ class _ProductTile extends StatelessWidget {
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(AppRadii.md),
               ),
-              child: url == null
-                  ? Container(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (url == null)
+                    Container(
                       color: AppColors.surface,
                       child: const ShweEainGoldPlaceholder(compact: true),
                     )
-                  : Hero(
+                  else
+                    Hero(
                       tag: 'product-hero-${product.id}',
                       child: CachedNetworkImage(
                         imageUrl: url,
@@ -391,6 +392,13 @@ class _ProductTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: ProductFavoriteButton(productId: product.id),
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(

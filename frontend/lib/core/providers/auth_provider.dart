@@ -174,4 +174,71 @@ class AuthProvider extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
   }
+
+  Future<bool> updatePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    final t = _token;
+    if (t == null) return false;
+    _sessionBusy = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      await AuthApi.updatePassword(
+        token: t,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+        newPasswordConfirmation: newPasswordConfirmation,
+      );
+      _sessionBusy = false;
+      notifyListeners();
+      return true;
+    } on AuthApiException catch (e) {
+      _lastError = e.message;
+      _sessionBusy = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _lastError = e.toString();
+      _sessionBusy = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Permanently closes the customer account on the server and clears local session.
+  Future<bool> closeAccount({required String currentPassword}) async {
+    final t = _token;
+    if (t == null) return false;
+    _sessionBusy = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      try {
+        await PushNotificationManager.instance.unregisterForSession(
+          bearerToken: t,
+        );
+      } catch (_) {}
+      await AuthApi.closeAccount(token: t, currentPassword: currentPassword);
+      await AuthTokenStorage.clear();
+      _token = null;
+      _user = null;
+      _sessionBusy = false;
+      _lastError = null;
+      notifyListeners();
+      return true;
+    } on AuthApiException catch (e) {
+      _lastError = e.message;
+      _sessionBusy = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _lastError = e.toString();
+      _sessionBusy = false;
+      notifyListeners();
+      return false;
+    }
+  }
 }

@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/notifications/data/notification_api.dart';
 import 'package:jewelry_hub/core/notifications/models/app_notification_item.dart';
+import 'package:jewelry_hub/core/notifications/ui/premium_in_app_notification.dart';
 import 'package:jewelry_hub/features/artisan/ui/artisan_notifications_screen.dart';
 import 'package:jewelry_hub/features/inquiries/ui/inquiry_list_screen.dart';
 import 'package:jewelry_hub/features/orders/ui/customer_order_detail_screen.dart';
@@ -44,8 +45,10 @@ class PushNotificationManager {
     FirebaseMessaging.onMessage.listen((message) {
       final title = message.notification?.title ?? 'Notification';
       final body = message.notification?.body ?? 'You have a new update.';
-      scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(content: Text('$title — $body')),
+      PremiumInAppNotification.show(
+        navigatorKey: navigatorKey,
+        title: title,
+        body: body,
       );
     });
 

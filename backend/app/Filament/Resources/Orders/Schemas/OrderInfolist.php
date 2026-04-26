@@ -36,7 +36,7 @@ class OrderInfolist
                     ->placeholder('-'),
                 TextEntry::make('workflow_stage')
                     ->label('Workflow stage')
-                    ->state(fn (Order $record): string => self::workflowLabel((string) $record->status)),
+                    ->state(fn (Order $record): string => self::workflowLabel($record)),
                 TextEntry::make('deposit_amount_mmk')
                     ->label('Deposit due (MMK)')
                     ->money('MMK')
@@ -223,8 +223,22 @@ class OrderInfolist
             ->implode("\n");
     }
 
-    private static function workflowLabel(string $status): string
+    private static function workflowLabel(Order $order): string
     {
+        $status = (string) $order->status;
+        $isReadyMade = $order->isReadyMadeFulfillment();
+
+        if ($isReadyMade) {
+            return match ($status) {
+                'awaiting_deposit' => 'Awaiting payment (Ready-made)',
+                'deposit_confirmed' => 'Deposit Confirmed (Ready-made)',
+                'awaiting_final_settlement' => 'Deposit Confirmed (Ready-made)',
+                'ready' => 'Ready for pickup',
+                'completed' => 'Fully paid',
+                default => ucfirst(str_replace('_', ' ', $status)),
+            };
+        }
+
         return match ($status) {
             'awaiting_deposit' => 'Awaiting deposit',
             'deposit_confirmed' => 'Deposit confirmed',

@@ -35,6 +35,7 @@ class OrdersTable
                     ->color(fn (string $state): string => match ($state) {
                         'awaiting_deposit' => 'warning',
                         'deposit_confirmed' => 'info',
+                        'awaiting_final_settlement' => 'info',
                         'in_production' => 'primary',
                         'pending_qc' => 'gray',
                         'ready' => 'success',
@@ -74,6 +75,7 @@ class OrdersTable
                             ->options([
                                 'awaiting_deposit' => 'Awaiting deposit',
                                 'deposit_confirmed' => 'Deposit confirmed',
+                                'awaiting_final_settlement' => 'Awaiting final settlement',
                                 'in_production' => 'In production',
                                 'pending_qc' => 'Pending QC',
                                 'ready' => 'Ready',

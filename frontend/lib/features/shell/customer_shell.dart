@@ -4,6 +4,7 @@ import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/features/catalog/ui/product_catalog_screen.dart';
 import 'package:jewelry_hub/features/inquiries/ui/inquiry_list_screen.dart';
 import 'package:jewelry_hub/features/orders/ui/customer_orders_screen.dart';
+import 'package:jewelry_hub/features/profile/ui/customer_profile_screen.dart';
 
 /// Bottom navigation: catalog + inquiries (premium dark shell).
 class CustomerShell extends StatefulWidget {
@@ -28,6 +29,7 @@ class _CustomerShellState extends State<CustomerShell> {
           const InquiryListScreen(),
           const CustomerOrdersScreen(),
           NotificationsScreen(navigatorKey: widget.navigatorKey),
+          const CustomerProfileScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -56,6 +58,11 @@ class _CustomerShellState extends State<CustomerShell> {
             icon: Icon(Icons.notifications_none_rounded),
             selectedIcon: Icon(Icons.notifications_rounded),
             label: 'Alerts',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline_rounded),
+            selectedIcon: Icon(Icons.person_rounded),
+            label: 'Profile',
           ),
         ],
       ),

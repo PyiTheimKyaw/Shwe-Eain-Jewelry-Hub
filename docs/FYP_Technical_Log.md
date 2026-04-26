@@ -1078,3 +1078,48 @@ Implemented the bespoke-journey closing stage: remaining-balance-aware final pay
 - Updated receipt chips and details to show `Deposit` vs `Final`.
 - Added official receipts section to `CustomerOrderDetailScreen` so receipt download is available directly from order details.
 
+## 2026-04-26 — Inquiry product prefill + ready-made lifecycle branching
+
+### Quote prefill normalization (single source of truth)
+
+- Added reusable line prefill helper in `App\Services\QuoteBuilderService::normalizeQuoteLines(...)`.
+- Prefill contract now applies consistently across API + Filament:
+  - If line `product_id` is blank and inquiry has linked product, inject inquiry product.
+  - Preserve explicit admin-entered values for `custom_title`, `weight_grams`, and details.
+  - Fill missing `custom_title`/`weight_grams`/`labor_fee_mmk`/`gem_price_mmk` from linked product defaults.
+- Canonical pricing behavior remains unchanged: when `product_id` is present, labor/gems are still finalized from product values inside quote creation.
+
+### API parity updates
+
+- `POST /api/v1/admin/inquiries/{inquiry}/quotes/publish` and `POST /api/v1/admin/quotes` now:
+  1) validate base payload shape,
+  2) normalize quote lines through shared service,
+  3) validate normalized lines before creating quotes.
+- Result: no behavior drift between inquiry publish flow and direct admin quote create flow.
+
+### Filament concierge quote UX
+
+- `ChatInquiry` now pre-initializes quote form line from inquiry-linked product when present.
+- Added `prefillFromInquiryProduct()` action and “Use linked product as starting line” button.
+- Replaced raw numeric product id input with a friendly product selector (`SKU - Title` labels).
+
+### Ready-made vs bespoke lifecycle branching
+
+- `OrderBuilderService` now infers fulfillment type from quote line products:
+  - all line products `is_ready_made = true` => ready-made fulfillment.
+- Ready-made rules now enforced:
+  - fully credited at quote accept => order starts in `ready`,
+  - deposit/final settlement path skips artisan assignment/production/QC.
+- `OrderLifecycleService` blocks assignment/production/QC transitions for ready-made orders.
+- `PaymentVerificationService` now transitions fully settled ready-made orders directly to `ready` (not `completed`), while bespoke retains `ready -> completed` final-settlement closure.
+- `InquiryPipelinePresenter` avoids fake production phases for ready-made orders by mapping `deposit_confirmed` to payment-settlement progression.
+
+### Regression tests
+
+- Added `tests/Feature/InquiryProductPrefillTest.php`:
+  - linked inquiry + blank line prefill,
+  - explicit manual value precedence,
+  - non-linked inquiry blank-slate validation unchanged.
+- Extended `tests/Feature/FinalPaymentPickupWorkflowTest.php`:
+  - ready-made final payment moves to `ready` without bespoke-style completion.
+

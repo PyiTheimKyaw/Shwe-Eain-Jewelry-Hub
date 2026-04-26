@@ -285,6 +285,15 @@
                     </p>
                 @endif
                 <form wire:submit.prevent="publishQuoteFromConsole" class="space-y-3">
+                    @if ($inquiry->product_id)
+                        <button
+                            type="button"
+                            wire:click="prefillFromInquiryProduct"
+                            class="w-full rounded-lg border border-primary-500/40 bg-primary-500/10 px-3 py-2 text-xs font-medium text-primary-700 hover:bg-primary-500/20 dark:text-primary-300"
+                        >
+                            {{ __('Use linked product as starting line') }}
+                        </button>
+                    @endif
                     @foreach ($quoteFormLines as $index => $line)
                         <div
                             class="space-y-2 rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-800/50"
@@ -338,12 +347,15 @@
                                     class="rounded-lg border border-gray-300 bg-white px-2 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                                 />
                             </div>
-                            <input
-                                type="number"
+                            <select
                                 wire:model="quoteFormLines.{{ $index }}.product_id"
-                                placeholder="{{ __('Product ID (optional)') }}"
                                 class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                            />
+                            >
+                                <option value="">{{ __('Linked product (optional)') }}</option>
+                                @foreach ($quoteProductOptions as $productOption)
+                                    <option value="{{ $productOption['id'] }}">{{ $productOption['label'] }}</option>
+                                @endforeach
+                            </select>
                             @if (count($quoteFormLines) > 1)
                                 <button
                                     type="button"
@@ -376,6 +388,25 @@
                         class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                         placeholder="{{ __('Internal notes (optional)') }}"
                     ></textarea>
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            wire:model="quoteDepositPercentage"
+                            placeholder="{{ __('Deposit due (%)') }}"
+                            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                        />
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            wire:model="quoteDepositAmountMmk"
+                            placeholder="{{ __('Or fixed deposit (MMK)') }}"
+                            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                        />
+                    </div>
 
                     <button
                         type="submit"

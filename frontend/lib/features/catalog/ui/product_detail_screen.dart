@@ -1,15 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
+import 'package:jewelry_hub/core/providers/saved_favorites_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
-import 'package:jewelry_hub/core/ui/widgets/display_preferences_sheet.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
 import 'package:jewelry_hub/core/ui/widgets/price_tag.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/core/ui/widgets/shwe_eain_gold_placeholder.dart';
 import 'package:jewelry_hub/core/ui/widgets/weight_badge.dart';
 import 'package:jewelry_hub/features/catalog/data/catalog_api.dart';
+import 'package:jewelry_hub/features/catalog/ui/catalog_toggle_bar.dart';
 import 'package:jewelry_hub/features/catalog/models/catalog_product.dart';
 import 'package:jewelry_hub/features/inquiries/ui/new_inquiry_screen.dart';
 import 'package:provider/provider.dart';
@@ -68,9 +69,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _openDisplayPreferencesSheet() =>
-      showDisplayPreferencesSheet(context);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -104,9 +102,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           backgroundColor: AppColors.background.withValues(alpha: 0.9),
           title: PremiumText.headline(p.title, maxLines: 1),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.tune_rounded, color: AppColors.gold),
-              onPressed: _openDisplayPreferencesSheet,
+            Consumer<SavedFavorites>(
+              builder: (context, fav, _) {
+                final saved = fav.isFavorite(p.id);
+                return IconButton(
+                  tooltip: saved ? 'Remove from saved' : 'Save piece',
+                  icon: Icon(
+                    saved
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: AppColors.gold,
+                  ),
+                  onPressed: () => fav.toggle(p.id),
+                );
+              },
             ),
             IconButton(
               icon: const Icon(Icons.refresh, color: AppColors.gold),
@@ -114,9 +123,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ],
         ),
+        const SliverToBoxAdapter(child: CatalogToggleBar()),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

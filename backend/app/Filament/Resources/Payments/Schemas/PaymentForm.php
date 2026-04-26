@@ -42,7 +42,7 @@ class PaymentForm
                                     return;
                                 }
 
-                                if ($order->status === 'ready') {
+                                if (in_array($order->status, ['ready', 'awaiting_final_settlement'], true)) {
                                     $remaining = app(OrderSettlementService::class)
                                         ->remainingBalanceFromDepositsMmk($order);
                                     $set('amount_mmk', number_format($remaining, 4, '.', ''));
@@ -84,7 +84,7 @@ class PaymentForm
                         TextInput::make('amount_mmk')
                             ->label('Amount (MMK)')
                             ->numeric()
-                            ->helperText('For ready-for-pickup orders, this auto-fills the current remaining balance.')
+                            ->helperText('For pickup/settlement orders, this auto-fills the current remaining balance.')
                             ->required(),
                         Select::make('currency')
                             ->options(['MMK' => 'MMK'])

@@ -85,4 +85,21 @@ class Order extends Model
     {
         return $this->payments()->where('type', Payment::TYPE_DEPOSIT)->orderByDesc('id')->first();
     }
+
+    public function isReadyMadeFulfillment(): bool
+    {
+        $this->loadMissing(['quote.lineItems.product', 'items.product']);
+
+        if ($this->quote !== null && $this->quote->lineItems->isNotEmpty()) {
+            return $this->quote->lineItems
+                ->every(fn ($line) => $line->product_id !== null && $line->product?->is_ready_made === true);
+        }
+
+        if ($this->items->isNotEmpty()) {
+            return $this->items
+                ->every(fn ($item) => $item->product_id !== null && $item->product?->is_ready_made === true);
+        }
+
+        return false;
+    }
 }

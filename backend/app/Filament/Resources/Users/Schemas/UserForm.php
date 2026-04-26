@@ -37,6 +37,7 @@ class UserForm
                     ->options([
                         'active' => 'Active',
                         'suspended' => 'Suspended',
+                        'closed' => 'Closed (self-service)',
                     ])
                     ->default('active')
                     ->required()

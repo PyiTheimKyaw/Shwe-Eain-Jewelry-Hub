@@ -12,6 +12,7 @@ use App\Services\PricingService;
 use App\Services\QuoteBuilderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class QuoteController extends Controller
 {
@@ -55,14 +56,10 @@ class QuoteController extends Controller
             'inquiry_id' => ['nullable', 'exists:inquiries,id'],
             'valid_until' => ['nullable', 'date'],
             'notes_internal' => ['nullable', 'string'],
+            'deposit_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'deposit_amount_mmk' => ['nullable', 'numeric', 'min:0'],
             'lines' => ['required', 'array', 'min:1'],
-            'lines.*.product_id' => ['nullable', 'exists:products,id'],
-            'lines.*.custom_title' => ['nullable', 'string', 'max:255'],
-            'lines.*.metal_type' => ['nullable', 'string', 'max:100'],
-            'lines.*.stone_details' => ['nullable', 'string', 'max:1000'],
-            'lines.*.weight_grams' => ['required', 'numeric', 'min:0'],
-            'lines.*.labor_fee_mmk' => ['nullable', 'numeric', 'min:0'],
-            'lines.*.gem_price_mmk' => ['nullable', 'numeric', 'min:0'],
+            'lines.*' => ['array'],
         ]);
 
         $customer = User::query()->findOrFail($data['customer_user_id']);
@@ -76,14 +73,35 @@ class QuoteController extends Controller
             $warning = app(InquiryQuoteCommitmentGate::class)->warningForPublishing($inquiry);
         }
 
+        $normalizedLines = $this->quotes->normalizeQuoteLines($data['lines'], $inquiry ?? null);
+        $lineValidator = Validator::make(
+            ['lines' => $normalizedLines],
+            [
+                'lines' => ['required', 'array', 'min:1'],
+                'lines.*.product_id' => ['nullable', 'exists:products,id'],
+                'lines.*.custom_title' => ['nullable', 'string', 'max:255'],
+                'lines.*.metal_type' => ['nullable', 'string', 'max:100'],
+                'lines.*.stone_details' => ['nullable', 'string', 'max:1000'],
+                'lines.*.weight_grams' => ['required', 'numeric', 'min:0'],
+                'lines.*.labor_fee_mmk' => ['nullable', 'numeric', 'min:0'],
+                'lines.*.gem_price_mmk' => ['nullable', 'numeric', 'min:0'],
+            ]
+        );
+        $lineValidator->validate();
+
         $quote = $this->quotes->createQuote(
             $customer,
             $gold,
             $fx,
-            $data['lines'],
+            $normalizedLines,
             $data['inquiry_id'] ?? null,
             $data['notes_internal'] ?? null,
-            isset($data['valid_until']) ? new \DateTimeImmutable($data['valid_until']) : null
+            isset($data['valid_until']) ? new \DateTimeImmutable($data['valid_until']) : null,
+            'draft',
+            isset($data['deposit_percentage'])
+                ? (float) $data['deposit_percentage']
+                : $this->quotes->readyMadeDefaultDepositPercentage($normalizedLines),
+            isset($data['deposit_amount_mmk']) ? (float) $data['deposit_amount_mmk'] : null
         );
 
         if (! empty($data['inquiry_id'])) {
@@ -97,7 +115,7 @@ class QuoteController extends Controller
             context: [
                 'inquiry_id' => $data['inquiry_id'] ?? null,
                 'status' => $quote->status,
-                'line_count' => count($data['lines']),
+                'line_count' => count($normalizedLines),
             ],
         );
 

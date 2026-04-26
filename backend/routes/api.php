@@ -45,6 +45,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout'])->middleware('throttle:auth-login');
         Route::get('auth/me', [AuthController::class, 'me'])->middleware('throttle:auth-login');
+        Route::put('auth/password', [AuthController::class, 'updatePassword'])->middleware('throttle:auth-login');
 
         Route::post('uploads/presign', [UploadController::class, 'presign'])->middleware('throttle:uploads');
         Route::post('uploads', [UploadController::class, 'store'])->middleware('throttle:uploads');
@@ -69,6 +70,8 @@ Route::prefix('v1')->group(function () {
             Route::get('orders/{order}/receipts', [CustomerReceiptController::class, 'index']);
             Route::get('orders/{order}/receipts/{receipt}', [CustomerReceiptController::class, 'show']);
             Route::get('orders/{order}/receipts/{receipt}/download', [CustomerReceiptController::class, 'download']);
+
+            Route::delete('auth/account', [AuthController::class, 'closeAccount'])->middleware('throttle:auth-login');
         });
 
         Route::post('conversations/{inquiry}/firebase-bootstrap', [ConversationController::class, 'firebaseBootstrap']);

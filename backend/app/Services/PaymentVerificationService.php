@@ -46,7 +46,11 @@ class PaymentVerificationService
                 ]);
 
                 if ($payment->isDeposit()) {
-                    $order->update(['status' => 'deposit_confirmed']);
+                    if ($order->isReadyMadeFulfillment()) {
+                        $order->update(['status' => 'awaiting_final_settlement']);
+                    } else {
+                        $order->update(['status' => 'deposit_confirmed']);
+                    }
                 }
             });
             $this->auditLogs->log(
@@ -59,15 +63,17 @@ class PaymentVerificationService
                     'amount_mmk' => (string) $payment->amount_mmk,
                 ],
             );
-        } elseif ($payment->isDeposit() && $order->status !== 'deposit_confirmed') {
-            $order->update(['status' => 'deposit_confirmed']);
+        } elseif ($payment->isDeposit() && ! in_array($order->status, ['deposit_confirmed', 'awaiting_final_settlement'], true)) {
+            $order->update(['status' => $order->isReadyMadeFulfillment() ? 'awaiting_final_settlement' : 'deposit_confirmed']);
         }
 
         $order->refresh();
+        $isReadyMadeOrder = $order->isReadyMadeFulfillment();
+        $remainingAfterConfirmation = $this->settlement->remainingBalanceMmk($order);
+
         if ($payment->isFinal()) {
             try {
-                $remaining = $this->settlement->remainingBalanceMmk($order);
-                if ($remaining <= 0 && $order->status === 'ready') {
+                if (! $isReadyMadeOrder && $remainingAfterConfirmation <= 0 && $order->status === 'ready') {
                     $this->orderLifecycle->completeAfterFinalSettlement($order);
                     $didCompleteOrder = true;
                 }
@@ -109,7 +115,9 @@ class PaymentVerificationService
         if ($payment->isFinal()) {
             $this->push->notifyUsers(
                 [$order->customer],
-                $didCompleteOrder ? 'Order completed' : 'Final payment confirmed',
+                $didCompleteOrder
+                    ? 'Order completed'
+                    : 'Final payment confirmed',
                 $didCompleteOrder
                     ? 'Thank you for your purchase. Your bespoke order is now fully paid and completed.'
                     : 'Your final payment has been verified.',

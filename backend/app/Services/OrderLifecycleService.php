@@ -26,6 +26,12 @@ class OrderLifecycleService
         ?int $orderItemId = null,
         ?string $instructions = null
     ): OrderAssignment {
+        if ($order->isReadyMadeFulfillment()) {
+            throw ValidationException::withMessages([
+                'order' => 'Ready-made orders skip artisan assignment and production stages.',
+            ]);
+        }
+
         if ($taskScope === 'line_item' && $orderItemId !== null) {
             $belongs = $order->items()->whereKey($orderItemId)->exists();
             if (! $belongs) {
@@ -114,6 +120,12 @@ class OrderLifecycleService
      */
     public function startProduction(Order $order, int $artisanUserId): OrderAssignment
     {
+        if ($order->isReadyMadeFulfillment()) {
+            throw ValidationException::withMessages([
+                'order' => 'Ready-made orders do not enter production.',
+            ]);
+        }
+
         if ($order->status !== 'deposit_confirmed') {
             throw ValidationException::withMessages([
                 'order' => 'Order must be deposit confirmed before starting production.',
@@ -163,6 +175,12 @@ class OrderLifecycleService
      */
     public function markReadyForReview(Order $order, int $artisanUserId): OrderAssignment
     {
+        if ($order->isReadyMadeFulfillment()) {
+            throw ValidationException::withMessages([
+                'order' => 'Ready-made orders do not require QC review flow.',
+            ]);
+        }
+
         if ($order->status !== 'in_production') {
             throw ValidationException::withMessages([
                 'order' => 'Only in-production orders can be marked ready for review.',
@@ -222,6 +240,45 @@ class OrderLifecycleService
             category: 'workflow',
             context: [
                 'remaining_balance_mmk' => (string) $remaining,
+            ],
+        );
+
+        return $order->fresh();
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    public function markReadyForPickup(Order $order): Order
+    {
+        if (! $order->isReadyMadeFulfillment()) {
+            throw ValidationException::withMessages([
+                'order' => 'Only ready-made orders use this shortcut action.',
+            ]);
+        }
+
+        if (! in_array($order->status, ['awaiting_final_settlement', 'deposit_confirmed'], true)) {
+            throw ValidationException::withMessages([
+                'order' => 'Order is not in a pickup-eligible ready-made state.',
+            ]);
+        }
+
+        $remaining = $this->settlement->remainingBalanceMmk($order);
+        if ($remaining > 0) {
+            throw ValidationException::withMessages([
+                'order' => 'Final settlement is still outstanding.',
+            ]);
+        }
+
+        $order->update(['status' => 'ready']);
+        $this->auditLogs->log(
+            action: 'workflow.order.ready_for_pickup_marked',
+            actor: Auth::user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'remaining_balance_mmk' => (string) $remaining,
+                'ready_made' => true,
             ],
         );
 

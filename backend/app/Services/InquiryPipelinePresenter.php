@@ -327,12 +327,19 @@ class InquiryPipelinePresenter
         if (in_array($order->status, ['deposit_confirmed', 'in_production', 'pending_qc', 'ready', 'shipped', 'completed'], true)) {
             return self::DEPOSIT_CONFIRMED;
         }
+        if ($order->status === 'awaiting_final_settlement') {
+            return self::DEPOSIT_CONFIRMED;
+        }
 
         return self::DEPOSIT_NONE;
     }
 
     protected function resolveAssignmentState(Order $order): string
     {
+        if ($order->isReadyMadeFulfillment()) {
+            return self::ASSIGNMENT_NONE;
+        }
+
         /** @var OrderAssignment|null $a */
         $a = $order->assignments()->orderByDesc('id')->first();
         if ($a === null) {
@@ -349,6 +356,15 @@ class InquiryPipelinePresenter
 
     protected function orderToStep(Order $order): string
     {
+        if ($order->isReadyMadeFulfillment()) {
+            return match ($order->status) {
+                'ready', 'shipped', 'completed' => self::STEP_READY,
+                'awaiting_deposit', 'deposit_confirmed', 'awaiting_final_settlement' => self::STEP_AWAITING_DEPOSIT,
+                'cancelled' => self::STEP_CONSULTING,
+                default => self::STEP_CONSULTING,
+            };
+        }
+
         return match ($order->status) {
             'ready', 'shipped', 'completed' => self::STEP_READY,
             'pending_qc' => self::STEP_PENDING_QC,

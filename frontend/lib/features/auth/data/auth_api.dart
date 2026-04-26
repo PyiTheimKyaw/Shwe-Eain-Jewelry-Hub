@@ -130,4 +130,40 @@ class AuthApi {
     final map = json.decode(res.body) as Map<String, dynamic>;
     return AuthUser.fromJson(map);
   }
+
+  static Future<void> updatePassword({
+    required String token,
+    required String currentPassword,
+    required String newPassword,
+    required String newPasswordConfirmation,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/auth/password');
+    final res = await http.put(
+      uri,
+      headers: _jsonHeaders(bearer: token),
+      body: json.encode({
+        'current_password': currentPassword,
+        'password': newPassword,
+        'password_confirmation': newPasswordConfirmation,
+      }),
+    );
+    if (res.statusCode != 200) {
+      throw AuthApiException(_messageFromBody(res.body));
+    }
+  }
+
+  static Future<void> closeAccount({
+    required String token,
+    required String currentPassword,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/auth/account');
+    final res = await http.delete(
+      uri,
+      headers: _jsonHeaders(bearer: token),
+      body: json.encode({'current_password': currentPassword}),
+    );
+    if (res.statusCode != 200) {
+      throw AuthApiException(_messageFromBody(res.body));
+    }
+  }
 }

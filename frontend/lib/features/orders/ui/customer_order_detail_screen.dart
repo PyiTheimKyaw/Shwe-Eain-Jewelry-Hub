@@ -103,6 +103,10 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
     final inquiry = inquiryRaw is Map
         ? Map<String, dynamic>.from(inquiryRaw)
         : const <String, dynamic>{};
+    final inquiryProductRaw = inquiry['product'];
+    final inquiryProduct = inquiryProductRaw is Map
+        ? Map<String, dynamic>.from(inquiryProductRaw)
+        : const <String, dynamic>{};
     final initialAttachmentUrls =
         ((inquiry['attachments'] as List<dynamic>?) ?? const [])
             .whereType<Map>()
@@ -322,11 +326,28 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                           (imagesRaw is List ? imagesRaw : const <dynamic>[])
                               .whereType<Map>()
                               .map(
-                                (img) => (img['storage_path'] ?? '').toString(),
+                                (img) => (img['url'] ?? img['storage_path'] ?? '')
+                                    .toString(),
                               )
                               .where((path) => path.trim().isNotEmpty)
                               .map(publicStorageUrl)
                               .toList(growable: false);
+                      final inquiryProductImagesRaw = inquiryProduct['images'];
+                      final inquiryProductImageUrls = (inquiryProductImagesRaw is List
+                              ? inquiryProductImagesRaw
+                              : const <dynamic>[])
+                          .whereType<Map>()
+                          .map(
+                            (img) =>
+                                (img['url'] ?? img['storage_path'] ?? '')
+                                    .toString(),
+                          )
+                          .where((path) => path.trim().isNotEmpty)
+                          .map(publicStorageUrl)
+                          .toList(growable: false);
+                      final effectiveDesignPhotos = imageUrls.isNotEmpty
+                          ? imageUrls
+                          : inquiryProductImageUrls;
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: AppGlassCard(
@@ -367,7 +388,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                                 color: AppColors.goldMuted,
                               ),
                               const SizedBox(height: 8),
-                              if (imageUrls.isEmpty)
+                              if (effectiveDesignPhotos.isEmpty)
                                 PremiumText.body(
                                   'No design photos attached.',
                                   color: AppColors.textSecondary,
@@ -376,7 +397,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
-                                  children: imageUrls
+                                  children: effectiveDesignPhotos
                                       .map(
                                         (url) => ClipRRect(
                                           borderRadius: BorderRadius.circular(
