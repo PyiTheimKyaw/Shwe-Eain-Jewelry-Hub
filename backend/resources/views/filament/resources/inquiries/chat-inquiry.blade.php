@@ -153,9 +153,7 @@
                                         <div class="flex flex-wrap gap-2">
                                             @foreach ($inquiry->attachments as $att)
                                                 @php
-                                                    $attUrl = \Illuminate\Support\Str::startsWith((string) $att->storage_path, ['http://', 'https://'])
-                                                        ? (string) $att->storage_path
-                                                        : asset('storage/'.$att->storage_path);
+                                                    $attUrl = app(\App\Services\MediaStorageService::class)->publicUrl((string) $att->storage_path);
                                                 @endphp
                                                 <a href="{{ $attUrl }}" target="_blank" rel="noopener noreferrer" class="block">
                                                     <img
@@ -236,7 +234,7 @@
                                     class="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-inner placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
                                     placeholder="{{ __('Message the customer…') }}"
                                 />
-                                <input id="jh-image-input" type="file" accept="image/*" class="hidden" />
+                                <input id="jh-image-input" type="file" accept="image/*" multiple class="hidden" />
                                 <button
                                     id="jh-image-btn"
                                     type="button"
@@ -1489,26 +1487,28 @@
                 });
 
                 imageInput.addEventListener('change', async function () {
-                    var file = imageInput.files && imageInput.files[0];
+                    var files = imageInput.files ? Array.from(imageInput.files) : [];
                     imageInput.value = '';
-                    if (!file) {
+                    if (!files.length) {
                         return;
                     }
                     try {
                         setImageSending(true);
-                        var imageUrl = await uploadImageToPublic(file);
-                        await firebase
-                            .firestore()
-                            .collection('inquiry_threads')
-                            .doc(threadId)
-                            .collection('messages')
-                            .add({
-                                type: 'image',
-                                image_url: imageUrl,
-                                text: 'Image message',
-                                sender_role: 'admin',
-                                created_at: firebase.firestore.FieldValue.serverTimestamp(),
-                            });
+                        for (var i = 0; i < files.length; i++) {
+                            var imageUrl = await uploadImageToPublic(files[i]);
+                            await firebase
+                                .firestore()
+                                .collection('inquiry_threads')
+                                .doc(threadId)
+                                .collection('messages')
+                                .add({
+                                    type: 'image',
+                                    image_url: imageUrl,
+                                    text: 'Image message',
+                                    sender_role: 'admin',
+                                    created_at: firebase.firestore.FieldValue.serverTimestamp(),
+                                });
+                        }
                     } catch (err) {
                         alert('Image send failed: ' + err);
                     } finally {

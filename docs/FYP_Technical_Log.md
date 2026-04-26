@@ -1179,3 +1179,63 @@ Implemented the bespoke-journey closing stage: remaining-balance-aware final pay
   - `dart analyze lib/features/artisan lib/features/shell/artisan_shell.dart lib/main.dart lib/core/notifications/push_notification_manager.dart` (pass)
   - `flutter test test/features/artisan/artisan_notification_badge_test.dart` (pass)
 
+## 2026-04-26 — Artisan reference image bridge (chat/inquiry -> assignment)
+
+### Problem addressed
+
+- Customer/admin chat images were visible in Firestore chat but not reliably available in artisan assignment payloads.
+- Admin had no direct picker to attach the most relevant references during assignment.
+
+### Backend bridge implementation
+
+- Added bridge tables:
+  - `inquiry_image_candidates`
+  - `order_assignment_reference_images`
+- Added models and relations:
+  - `InquiryImageCandidate`, `OrderAssignmentReferenceImage`
+  - `Inquiry::imageCandidates()`
+  - `OrderAssignment::referenceImages()`
+- Added `InquiryImageCandidateService` for candidate creation/upsert and basic inquiry access checks.
+
+### Candidate capture
+
+- API upload path now accepts optional `inquiry_id` and captures chat image candidates when folder is `inquiry-chat`.
+  - `POST /api/v1/uploads` (`UploadController`)
+- Filament admin chat upload now also writes candidate rows.
+  - `InquiryChatUploadController`
+- Flutter customer chat upload now sends `inquiry_id` with image upload.
+  - `InquiryApi.uploadChatImage(...)` + `InquiryChatScreen._sendImage()`
+
+### Admin assignment modal integration
+
+- Assign Artisan form now includes `reference_image_ids` picker with smart defaults:
+  - latest customer images pre-selected,
+  - up to recent candidates shown.
+- Assignment creation now persists selected references to `order_assignment_reference_images`.
+- Updated in:
+  - `ViewOrder` assign action
+  - `OrderController@storeAssignment`
+  - `OrderLifecycleService::assignArtisan(...)`
+
+### Artisan delivery
+
+- Artisan assignment API now eager-loads `referenceImages.candidate`.
+- Artisan job detail now renders **Selected Reference Images** from assignment references.
+
+### Optional Firestore parity backfill
+
+- Added `FirebaseInquiryService::backfillInquiryImageCandidates(...)` to mirror historical Firestore `type=image` messages into MySQL candidates.
+- Added CLI command:
+  - `php artisan inquiries:backfill-image-candidates`
+  - optional `--inquiry_id=<id>`
+
+### Validation
+
+- Added/extended backend coverage in `tests/Feature/ArtisanApiTest.php`:
+  - candidate upload capture,
+  - assignment attachment of references,
+  - artisan payload includes reference images.
+- Verification commands:
+  - `php artisan test --filter=ArtisanApiTest` (pass)
+  - `dart analyze lib/features/inquiries/data/inquiry_api.dart lib/features/inquiries/ui/inquiry_chat_screen.dart lib/features/artisan/ui/artisan_job_detail_screen.dart` (pass)
+

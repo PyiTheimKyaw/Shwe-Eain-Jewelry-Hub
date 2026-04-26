@@ -41,4 +41,9 @@ class Inquiry extends Model
     {
         return $this->hasMany(InquiryTimelineLog::class);
     }
+
+    public function imageCandidates(): HasMany
+    {
+        return $this->hasMany(InquiryImageCandidate::class);
+    }
 }

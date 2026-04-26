@@ -6,6 +6,7 @@ import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
+import 'package:jewelry_hub/core/ui/widgets/premium_image_viewer.dart';
 import 'package:jewelry_hub/core/ui/widgets/price_tag.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/core/ui/widgets/shwe_eain_gold_placeholder.dart';
@@ -171,10 +172,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   itemBuilder: (context, index) {
                                     final url = imageUrls[index];
                                     return GestureDetector(
-                                      onTap: () => _openZoomGallery(
+                                      onTap: () => PremiumImageViewer.open(
                                         context: context,
                                         imageUrls: imageUrls,
                                         initialIndex: index,
+                                        heroPrefix: 'product-hero-${p.id}',
                                       ),
                                       child: Hero(
                                         tag: 'product-hero-${p.id}-$index',
@@ -245,8 +247,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                             color: AppColors.glassBorder,
                                           ),
                                         ),
-                                        child: PremiumText.caption(
+                                        child: Text(
                                           '${_currentImageIndex + 1}/${imageUrls.length}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            height: 1,
+                                            decoration: TextDecoration.none,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -364,92 +373,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ),
       ],
     );
-  }
-
-  Future<void> _openZoomGallery({
-    required BuildContext context,
-    required List<String> imageUrls,
-    required int initialIndex,
-  }) async {
-    if (imageUrls.isEmpty) {
-      return;
-    }
-    final zoomController = PageController(initialPage: initialIndex);
-    var active = initialIndex;
-
-    await showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Close image viewer',
-      barrierColor: Colors.black.withValues(alpha: 0.88),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              child: Stack(
-                children: [
-                  PageView.builder(
-                    controller: zoomController,
-                    itemCount: imageUrls.length,
-                    onPageChanged: (idx) => setSheetState(() => active = idx),
-                    itemBuilder: (context, index) {
-                      return InteractiveViewer(
-                        minScale: 1,
-                        maxScale: 4,
-                        child: Center(
-                          child: Hero(
-                            tag: 'product-hero-${_product?.id ?? 'p'}-$index',
-                            child: CachedNetworkImage(
-                              imageUrl: imageUrls[index],
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    right: 8,
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.close_rounded,
-                            color: Colors.white,
-                          ),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.45),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.18),
-                            ),
-                          ),
-                          child: Text(
-                            '${active + 1}/${imageUrls.length}',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-    zoomController.dispose();
   }
 
   static Widget _row(String label, Object? value, {bool isTotal = false}) {

@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\OrderAssignment;
+use App\Models\OrderAssignmentReferenceImage;
+use App\Models\InquiryImageCandidate;
 use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -26,7 +28,8 @@ class OrderLifecycleService
         ?int $orderItemId = null,
         ?string $instructions = null,
         ?string $targetDeadlineAt = null,
-        string $priorityLevel = 'normal'
+        string $priorityLevel = 'normal',
+        array $referenceImageIds = [],
     ): OrderAssignment {
         if ($order->isReadyMadeFulfillment()) {
             throw ValidationException::withMessages([
@@ -78,6 +81,24 @@ class OrderLifecycleService
             'status' => 'assigned',
         ]);
 
+        $candidateRows = $referenceImageIds === []
+            ? collect()
+            : InquiryImageCandidate::query()
+                ->whereIn('id', $referenceImageIds)
+                ->where('inquiry_id', $order->quote?->inquiry_id)
+                ->orderByDesc('uploaded_at')
+                ->orderByDesc('id')
+                ->get();
+        foreach ($candidateRows->values() as $index => $candidate) {
+            OrderAssignmentReferenceImage::query()->create([
+                'order_assignment_id' => $assignment->id,
+                'inquiry_image_candidate_id' => $candidate->id,
+                'storage_path' => $candidate->storage_path,
+                'url' => $candidate->url,
+                'sort_order' => $index,
+            ]);
+        }
+
         $this->auditLogs->log(
             action: 'admin.order.assignment.created',
             actor: Auth::user(),
@@ -90,6 +111,7 @@ class OrderLifecycleService
                 'order_item_id' => $orderItemId,
                 'target_deadline_at' => $targetDeadlineAt,
                 'priority_level' => $priorityLevel,
+                'reference_image_ids' => $referenceImageIds,
             ],
         );
 

@@ -10,6 +10,7 @@ import 'package:jewelry_hub/core/storage/public_storage_url.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
+import 'package:jewelry_hub/core/ui/widgets/premium_image_viewer.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/inquiries/data/inquiry_api.dart';
 import 'package:jewelry_hub/features/inquiries/models/inquiry_pipeline.dart';
@@ -567,32 +568,32 @@ class _InquiryChatScreenState extends State<InquiryChatScreen> {
     if (bearer == null) {
       return;
     }
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
-    if (picked == null) {
+    final picked = await ImagePicker().pickMultiImage(imageQuality: 85);
+    if (picked.isEmpty) {
       return;
     }
     setState(() => _sendingImage = true);
     try {
-      final imageUrl = await InquiryApi.uploadChatImage(
-        bearerToken: bearer,
-        file: picked,
-        folder: 'inquiry-chat',
-      );
-      await FirebaseFirestore.instance
-          .collection('inquiry_threads')
-          .doc(threadId)
-          .collection('messages')
-          .add({
-            'type': 'image',
-            'image_url': imageUrl,
-            'sender_role': 'customer',
-            'created_at': FieldValue.serverTimestamp(),
-            'laravel_user_id': uid,
-            'text': 'Image message',
-          });
+      for (final file in picked) {
+        final imageUrl = await InquiryApi.uploadChatImage(
+          bearerToken: bearer,
+          file: file,
+          inquiryId: widget.inquiry.id,
+          folder: 'inquiry-chat',
+        );
+        await FirebaseFirestore.instance
+            .collection('inquiry_threads')
+            .doc(threadId)
+            .collection('messages')
+            .add({
+              'type': 'image',
+              'image_url': imageUrl,
+              'sender_role': 'customer',
+              'created_at': FieldValue.serverTimestamp(),
+              'laravel_user_id': uid,
+              'text': 'Image message',
+            });
+      }
       _scrollToBottom(animated: true);
     } catch (e) {
       if (mounted) {
@@ -1691,30 +1692,37 @@ class _MessageTile extends StatelessWidget {
                       ),
                     if (isPaymentProof) const SizedBox(height: 6),
                     if (url.isNotEmpty)
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(AppRadii.sm),
-                        child: CachedNetworkImage(
-                          imageUrl: url,
-                          width: 220,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => const SizedBox(
+                      GestureDetector(
+                        onTap: () => PremiumImageViewer.open(
+                          context: context,
+                          imageUrls: [url],
+                          initialIndex: 0,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadii.sm),
+                          child: CachedNetworkImage(
+                            imageUrl: url,
                             width: 220,
-                            height: 140,
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: AppColors.gold,
-                                strokeWidth: 2,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => const SizedBox(
+                              width: 220,
+                              height: 140,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: AppColors.gold,
+                                  strokeWidth: 2,
+                                ),
                               ),
                             ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            width: 220,
-                            height: 140,
-                            color: AppColors.surface.withValues(alpha: 0.6),
-                            alignment: Alignment.center,
-                            child: PremiumText.caption(
-                              'Image unavailable',
-                              color: AppColors.textSecondary,
+                            errorWidget: (context, url, error) => Container(
+                              width: 220,
+                              height: 140,
+                              color: AppColors.surface.withValues(alpha: 0.6),
+                              alignment: Alignment.center,
+                              child: PremiumText.caption(
+                                'Image unavailable',
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ),
                         ),

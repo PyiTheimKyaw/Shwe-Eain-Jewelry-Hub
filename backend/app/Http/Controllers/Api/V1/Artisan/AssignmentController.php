@@ -18,6 +18,7 @@ class AssignmentController extends Controller
                 'order.items.product.images',
                 'order.quote.inquiry.attachments',
                 'orderItem.product.images',
+                'referenceImages.candidate',
             ])
             ->orderByDesc('created_at')
             ->paginate(30);
@@ -62,6 +63,7 @@ class AssignmentController extends Controller
             'order.items.product.images',
             'order.quote.inquiry.attachments',
             'orderItem.product.images',
+            'referenceImages.candidate',
         ]);
 
         $latestAdminFeedback = $assignment->order

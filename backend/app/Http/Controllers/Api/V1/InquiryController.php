@@ -8,6 +8,7 @@ use App\Models\Inquiry;
 use App\Models\InquiryAttachment;
 use App\Models\User;
 use App\Services\FirebaseInquiryService;
+use App\Services\InquiryImageCandidateService;
 use App\Services\InquiryPipelinePresenter;
 use App\Services\MediaStorageService;
 use App\Services\PushNotificationService;
@@ -19,6 +20,7 @@ class InquiryController extends Controller
 {
     public function __construct(
         protected MediaStorageService $mediaStorage,
+        protected InquiryImageCandidateService $candidates,
         protected PushNotificationService $push
     ) {}
 
@@ -47,6 +49,17 @@ class InquiryController extends Controller
                     'storage_path' => $stored['storage_path'],
                     'mime_type' => $file->getMimeType(),
                 ]);
+                $this->candidates->createFromUpload(
+                    inquiry: $inquiry,
+                    source: 'initial_inquiry_attachment',
+                    senderRole: UserRole::Customer->value,
+                    storagePath: $stored['storage_path'] ?? null,
+                    url: $attachment->url,
+                    metadata: [
+                        'origin' => 'inquiry_attachments',
+                        'inquiry_attachment_id' => $attachment->id,
+                    ],
+                );
                 $firebaseInquiry->publishInquiryAttachmentMessage($inquiry, $attachment);
             }
         }

@@ -4,24 +4,34 @@ namespace App\Filament\Resources\Orders\Pages;
 
 use App\Filament\Resources\Orders\OrderResource;
 use App\Filament\Resources\Products\ProductResource;
+use App\Models\Inquiry;
+use App\Models\InquiryAttachment;
+use App\Models\InquiryImageCandidate;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentProfile;
+use App\Models\Quote;
 use App\Models\User;
 use App\Services\FirebaseInquiryService;
+use App\Services\InquiryImageCandidateService;
+use App\Services\MediaStorageService;
 use App\Services\OrderSettlementService;
 use App\Services\PaymentVerificationService;
 use App\Services\OrderLifecycleService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\HtmlString;
 use Illuminate\Validation\ValidationException;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 
 class ViewOrder extends ViewRecord
 {
@@ -283,11 +293,124 @@ class ViewOrder extends ViewRecord
                         ])
                         ->default('normal')
                         ->required(),
+                    CheckboxList::make('reference_image_ids')
+                        ->label('Reference images for artisan')
+                        ->options(function (): array {
+                            /** @var Order $order */
+                            $order = $this->getRecord();
+                            $inquiry = $this->resolveInquiry($order);
+                            if ($inquiry === null) {
+                                return [];
+                            }
+                            $this->syncInitialAttachmentsToCandidates($inquiry);
+
+                            return InquiryImageCandidate::query()
+                                ->where('inquiry_id', $inquiry->id)
+                                ->orderByDesc('uploaded_at')
+                                ->orderByDesc('id')
+                                ->limit(24)
+                                ->get()
+                                ->mapWithKeys(function (InquiryImageCandidate $candidate): array {
+                                    $when = $candidate->uploaded_at?->format('m/d H:i') ?? '-';
+                                    $role = strtoupper((string) ($candidate->sender_role ?? 'unknown'));
+                                    $source = str_replace('_', ' ', (string) $candidate->source);
+                                    $url = (string) ($candidate->url ?? '');
+                                    if ($url === '' && filled($candidate->storage_path)) {
+                                        $url = app(MediaStorageService::class)->publicUrl((string) $candidate->storage_path);
+                                    }
+                                    $safeUrl = e($url);
+
+                                    return [
+                                        $candidate->id => new HtmlString(
+                                            '<div style="display:flex; flex-direction:column; gap:6px;">'
+                                            .'<div style="width:100%; aspect-ratio:1/1; border-radius:8px; overflow:hidden; border:1px solid rgba(212,175,55,.35); background:rgba(30,41,59,.6);">'
+                                            .'<img src="'.$safeUrl.'" alt="reference '.$candidate->id.'" style="width:100%; height:100%; object-fit:cover;" />'
+                                            .'</div>'
+                                            .'<div style="font-size:11px; line-height:1.2;">#'.$candidate->id.' · '.$role.' · '.$when.'</div>'
+                                            .'<div style="font-size:10px; opacity:.8; text-transform:capitalize;">'.$source.'</div>'
+                                            .'</div>'
+                                        ),
+                                    ];
+                                })
+                                ->all();
+                        })
+                        ->default(function (): array {
+                            /** @var Order $order */
+                            $order = $this->getRecord();
+                            $inquiry = $this->resolveInquiry($order);
+                            if ($inquiry === null) {
+                                return [];
+                            }
+                            $this->syncInitialAttachmentsToCandidates($inquiry);
+
+                            return InquiryImageCandidate::query()
+                                ->where('inquiry_id', $inquiry->id)
+                                ->where('sender_role', 'customer')
+                                ->orderByDesc('uploaded_at')
+                                ->orderByDesc('id')
+                                ->limit(4)
+                                ->pluck('id')
+                                ->map(fn ($id): int => (int) $id)
+                                ->all();
+                        })
+                        ->columns(4)
+                        ->allowHtml()
+                        ->helperText('Click thumbnails to select references. Recent customer images are pre-selected.')
+                        ->searchable(function (): bool {
+                            /** @var Order $order */
+                            $order = $this->getRecord();
+                            $inquiry = $this->resolveInquiry($order);
+                            if ($inquiry === null) {
+                                return false;
+                            }
+                            $this->syncInitialAttachmentsToCandidates($inquiry);
+
+                            return InquiryImageCandidate::query()
+                                ->where('inquiry_id', $inquiry->id)
+                                ->count() > 10;
+                        }),
+                    FileUpload::make('new_reference_uploads')
+                        ->label('Upload New')
+                        ->helperText('Add blueprint/reference images from computer.')
+                        ->image()
+                        ->multiple()
+                        ->maxFiles(6)
+                        ->storeFiles(false),
                 ])
                 ->action(function (array $data): void {
                     /** @var Order $order */
                     $order = $this->getRecord();
                     try {
+                        $referenceImageIds = array_values(array_map('intval', $data['reference_image_ids'] ?? []));
+                        $uploads = $data['new_reference_uploads'] ?? [];
+                        $inquiry = $this->resolveInquiry($order);
+                        if ($inquiry !== null && is_array($uploads) && $uploads !== []) {
+                            $media = app(MediaStorageService::class);
+                            $candidateService = app(InquiryImageCandidateService::class);
+                            foreach ($uploads as $upload) {
+                                if (! $upload instanceof TemporaryUploadedFile) {
+                                    continue;
+                                }
+                                $stored = $media->storeImage(
+                                    $upload,
+                                    'uploads/inquiry-chat-'.$inquiry->id,
+                                );
+                                $candidate = $candidateService->createFromUpload(
+                                    inquiry: $inquiry,
+                                    source: 'assignment_modal_upload',
+                                    senderRole: 'admin',
+                                    storagePath: $stored['storage_path'] ?? null,
+                                    url: $stored['url'] ?? null,
+                                    metadata: [
+                                        'upload_via' => 'assign_artisan_modal',
+                                        'order_id' => $order->id,
+                                    ],
+                                );
+                                $referenceImageIds[] = (int) $candidate->id;
+                            }
+                            $referenceImageIds = array_values(array_unique($referenceImageIds));
+                        }
+
                         app(OrderLifecycleService::class)->assignArtisan(
                             $order,
                             (int) $data['artisan_user_id'],
@@ -295,7 +418,8 @@ class ViewOrder extends ViewRecord
                             isset($data['order_item_id']) ? (int) $data['order_item_id'] : null,
                             $data['instructions'] ?? null,
                             $data['target_deadline_at'] ?? null,
-                            $data['priority_level'] ?? 'normal'
+                            $data['priority_level'] ?? 'normal',
+                            $referenceImageIds
                         );
                         Notification::make()
                             ->title('Artisan assigned')
@@ -344,5 +468,74 @@ class ViewOrder extends ViewRecord
                     $this->getRecord()->refresh();
                 }),
         ];
+    }
+
+    private function resolveInquiryId(Order $order): ?int
+    {
+        if ($order->quote?->inquiry_id !== null) {
+            return (int) $order->quote->inquiry_id;
+        }
+        if ($order->quote_id === null) {
+            return null;
+        }
+
+        $id = Quote::query()
+            ->whereKey($order->quote_id)
+            ->value('inquiry_id');
+
+        return is_numeric($id) ? (int) $id : null;
+    }
+
+    private function resolveInquiry(Order $order): ?Inquiry
+    {
+        $order->loadMissing('quote.inquiry');
+        if ($order->quote?->inquiry instanceof Inquiry) {
+            return $order->quote->inquiry;
+        }
+
+        $inquiryId = $this->resolveInquiryId($order);
+        if ($inquiryId === null) {
+            return null;
+        }
+
+        return Inquiry::query()->find($inquiryId);
+    }
+
+    private function syncInitialAttachmentsToCandidates(Inquiry $inquiry): void
+    {
+        $attachments = InquiryAttachment::query()
+            ->where('inquiry_id', $inquiry->id)
+            ->get(['id', 'storage_path', 'created_at']);
+        if ($attachments->isEmpty()) {
+            return;
+        }
+
+        $existingPaths = InquiryImageCandidate::query()
+            ->where('inquiry_id', $inquiry->id)
+            ->whereNotNull('storage_path')
+            ->pluck('storage_path')
+            ->map(fn ($path): string => (string) $path)
+            ->all();
+        $existingPathLookup = array_fill_keys($existingPaths, true);
+
+        foreach ($attachments as $attachment) {
+            $path = (string) ($attachment->storage_path ?? '');
+            if ($path === '' || isset($existingPathLookup[$path])) {
+                continue;
+            }
+
+            InquiryImageCandidate::query()->create([
+                'inquiry_id' => $inquiry->id,
+                'source' => 'initial_inquiry_attachment',
+                'sender_role' => 'customer',
+                'storage_path' => $path,
+                'url' => app(MediaStorageService::class)->publicUrl($path),
+                'metadata_json' => [
+                    'origin' => 'inquiry_attachments',
+                    'inquiry_attachment_id' => $attachment->id,
+                ],
+                'uploaded_at' => $attachment->created_at ?? now(),
+            ]);
+        }
     }
 }

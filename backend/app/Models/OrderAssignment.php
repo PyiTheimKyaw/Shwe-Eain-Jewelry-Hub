@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class OrderAssignment extends Model
 {
@@ -38,5 +39,10 @@ class OrderAssignment extends Model
     public function orderItem(): BelongsTo
     {
         return $this->belongsTo(OrderItem::class);
+    }
+
+    public function referenceImages(): HasMany
+    {
+        return $this->hasMany(OrderAssignmentReferenceImage::class);
     }
 }

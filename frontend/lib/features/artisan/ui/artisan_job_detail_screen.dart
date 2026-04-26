@@ -7,6 +7,7 @@ import 'package:jewelry_hub/core/storage/public_storage_url.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
+import 'package:jewelry_hub/core/ui/widgets/premium_image_viewer.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/artisan/data/artisan_api.dart';
 import 'package:provider/provider.dart';
@@ -81,6 +82,67 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
         .where((path) => path.isNotEmpty)
         .map(publicStorageUrl)
         .toList(growable: false);
+  }
+
+  List<String> _selectedReferenceUrls() {
+    final raw = _assignment?['reference_images'];
+    final refs = (raw is List ? raw : const <dynamic>[])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: false);
+    final urls = <String>[];
+    for (final ref in refs) {
+      final candidate = ref['candidate'];
+      if (candidate is Map) {
+        final c = Map<String, dynamic>.from(candidate);
+        final directUrl = (c['url'] ?? '').toString().trim();
+        final storage = (c['storage_path'] ?? '').toString().trim();
+        if (directUrl.isNotEmpty) {
+          urls.add(directUrl);
+          continue;
+        }
+        if (storage.isNotEmpty) {
+          urls.add(publicStorageUrl(storage));
+          continue;
+        }
+      }
+      final directUrl = (ref['url'] ?? '').toString().trim();
+      final storage = (ref['storage_path'] ?? '').toString().trim();
+      if (directUrl.isNotEmpty) {
+        urls.add(directUrl);
+      } else if (storage.isNotEmpty) {
+        urls.add(publicStorageUrl(storage));
+      }
+    }
+    return urls.toSet().toList(growable: false);
+  }
+
+  Widget _buildZoomableThumb({
+    required List<String> imageUrls,
+    required int index,
+    required String heroPrefix,
+  }) {
+    final url = imageUrls[index];
+    return GestureDetector(
+      onTap: () => PremiumImageViewer.open(
+        context: context,
+        imageUrls: imageUrls,
+        initialIndex: index,
+        heroPrefix: heroPrefix,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+        child: Hero(
+          tag: '$heroPrefix-$index',
+          child: CachedNetworkImage(
+            imageUrl: url,
+            width: 88,
+            height: 88,
+            fit: BoxFit.cover,
+          ),
+        ),
+      ),
+    );
   }
 
   static const List<String> _progressStages = <String>[
@@ -620,20 +682,14 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                                   Wrap(
                                     spacing: 8,
                                     runSpacing: 8,
-                                    children: images
-                                        .map(
-                                          (url) => ClipRRect(
-                                            borderRadius: BorderRadius.circular(
-                                              AppRadii.sm,
-                                            ),
-                                            child: CachedNetworkImage(
-                                              imageUrl: url,
-                                              width: 88,
-                                              height: 88,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        )
+                                    children: List.generate(
+                                      images.length,
+                                      (idx) => _buildZoomableThumb(
+                                        imageUrls: images,
+                                        index: idx,
+                                        heroPrefix: 'artisan-design-${widget.assignmentId}-${item['id'] ?? title}',
+                                      ),
+                                    )
                                         .toList(growable: false),
                                   ),
                               ],
@@ -661,25 +717,47 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
-                                children: _inquiryAttachmentUrls()
-                                    .map(
-                                      (url) => ClipRRect(
-                                        borderRadius: BorderRadius.circular(
-                                          AppRadii.sm,
-                                        ),
-                                        child: CachedNetworkImage(
-                                          imageUrl: url,
-                                          width: 88,
-                                          height: 88,
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    )
+                                children: List.generate(
+                                  _inquiryAttachmentUrls().length,
+                                  (idx) => _buildZoomableThumb(
+                                    imageUrls: _inquiryAttachmentUrls(),
+                                    index: idx,
+                                    heroPrefix: 'artisan-inquiry-${widget.assignmentId}',
+                                  ),
+                                )
                                     .toList(growable: false),
                               ),
                             ],
                           ),
                         ),
+                      if (_selectedReferenceUrls().isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        AppGlassCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              PremiumText.caption(
+                                'SELECTED REFERENCE IMAGES',
+                                color: AppColors.goldMuted,
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: List.generate(
+                                  _selectedReferenceUrls().length,
+                                  (idx) => _buildZoomableThumb(
+                                    imageUrls: _selectedReferenceUrls(),
+                                    index: idx,
+                                    heroPrefix: 'artisan-reference-${widget.assignmentId}',
+                                  ),
+                                )
+                                    .toList(growable: false),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       if (status == 'assigned' &&
                           orderStatus == 'deposit_confirmed')

@@ -209,12 +209,14 @@ class InquiryApi {
   static Future<String> uploadChatImage({
     required String bearerToken,
     required XFile file,
+    required int inquiryId,
     String folder = 'inquiry-chat',
   }) async {
     final uri = Uri.parse('${ApiConfig.apiV1}/uploads');
     final request = http.MultipartRequest('POST', uri);
     request.headers.addAll(_authHeaders(bearerToken));
     request.fields['folder'] = folder;
+    request.fields['inquiry_id'] = inquiryId.toString();
     request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
     final streamed = await request.send();

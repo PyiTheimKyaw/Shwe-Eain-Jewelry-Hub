@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Inquiry;
 use App\Models\InquiryAttachment;
+use App\Models\InquiryImageCandidate;
 use App\Models\InquiryTimelineLog;
 use App\Models\Order;
 use App\Models\OrderProgressAttachment;
@@ -14,6 +15,7 @@ use App\Models\Quote;
 use App\Models\Receipt;
 use App\Models\User;
 use Google\Cloud\Core\Timestamp;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Kreait\Firebase\Contract\Auth as FirebaseAuthContract;
 use Kreait\Firebase\Contract\Firestore as FirestoreContract;
@@ -524,5 +526,99 @@ class FirebaseInquiryService
             ->document($threadId)
             ->collection('messages')
             ->add($payload);
+    }
+
+    /**
+     * Backfill Firestore image messages into MySQL inquiry_image_candidates.
+     *
+     * @return array{checked:int, created:int, updated:int}
+     */
+    public function backfillInquiryImageCandidates(?int $inquiryId = null): array
+    {
+        $firestore = $this->firestoreClient();
+        if ($firestore === null) {
+            return ['checked' => 0, 'created' => 0, 'updated' => 0];
+        }
+
+        $query = Inquiry::query()
+            ->whereNotNull('firebase_thread_id')
+            ->where('firebase_thread_id', '!=', '')
+            ->orderByDesc('id');
+        if ($inquiryId !== null) {
+            $query->whereKey($inquiryId);
+        }
+
+        $checked = 0;
+        $created = 0;
+        $updated = 0;
+        /** @var Collection<int, Inquiry> $inquiries */
+        $inquiries = $query->get();
+        foreach ($inquiries as $inquiry) {
+            try {
+                $messages = $firestore->database()
+                    ->collection('inquiry_threads')
+                    ->document((string) $inquiry->firebase_thread_id)
+                    ->collection('messages')
+                    ->documents();
+                foreach ($messages as $message) {
+                    if (! $message->exists()) {
+                        continue;
+                    }
+                    $payload = $message->data();
+                    if (! is_array($payload)) {
+                        continue;
+                    }
+                    if (($payload['type'] ?? null) !== 'image') {
+                        continue;
+                    }
+                    $imageUrl = trim((string) ($payload['image_url'] ?? ''));
+                    if ($imageUrl === '') {
+                        continue;
+                    }
+                    $checked++;
+
+                    $messageId = (string) $message->id();
+                    $existing = InquiryImageCandidate::query()
+                        ->where('inquiry_id', $inquiry->id)
+                        ->where('firebase_message_id', $messageId)
+                        ->first();
+                    $mappedStorage = null;
+                    if (str_contains($imageUrl, '/storage/')) {
+                        $parts = explode('/storage/', $imageUrl, 2);
+                        $mappedStorage = $parts[1] ?? null;
+                    }
+                    $data = [
+                        'source' => 'firestore_backfill',
+                        'sender_role' => (string) ($payload['sender_role'] ?? 'unknown'),
+                        'storage_path' => $mappedStorage,
+                        'url' => $imageUrl,
+                        'metadata_json' => [
+                            'firestore_message' => $payload,
+                            'firestore_document_id' => $messageId,
+                            'inquiry_id' => $inquiry->id,
+                        ],
+                        'uploaded_at' => now(),
+                    ];
+                    if ($existing === null) {
+                        InquiryImageCandidate::query()->create([
+                            'inquiry_id' => $inquiry->id,
+                            'firebase_message_id' => $messageId,
+                            ...$data,
+                        ]);
+                        $created++;
+                    } else {
+                        $existing->update($data);
+                        $updated++;
+                    }
+                }
+            } catch (Throwable $e) {
+                Log::warning('firebase.inquiry_image_backfill_failed', [
+                    'message' => $e->getMessage(),
+                    'inquiry_id' => $inquiry->id,
+                ]);
+            }
+        }
+
+        return ['checked' => $checked, 'created' => $created, 'updated' => $updated];
     }
 }

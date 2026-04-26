@@ -153,6 +153,8 @@ class OrderController extends Controller
             'instructions' => ['nullable', 'required_if:task_scope,line_item', 'string', 'max:5000'],
             'target_deadline_at' => ['nullable', 'date'],
             'priority_level' => ['nullable', 'in:low,normal,high,urgent'],
+            'reference_image_ids' => ['nullable', 'array', 'max:12'],
+            'reference_image_ids.*' => ['integer', 'exists:inquiry_image_candidates,id'],
         ]);
 
         try {
@@ -163,7 +165,8 @@ class OrderController extends Controller
                 isset($data['order_item_id']) ? (int) $data['order_item_id'] : null,
                 $data['instructions'] ?? null,
                 $data['target_deadline_at'] ?? null,
-                $data['priority_level'] ?? 'normal'
+                $data['priority_level'] ?? 'normal',
+                array_values(array_map('intval', $data['reference_image_ids'] ?? []))
             );
         } catch (ValidationException $e) {
             return response()->json([
