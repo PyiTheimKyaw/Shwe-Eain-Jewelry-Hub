@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/providers/saved_favorites_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
+import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
 import 'package:jewelry_hub/core/ui/widgets/price_tag.dart';
@@ -38,11 +39,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     await context.read<CatalogPricing>().refresh();
     try {
       final p = await CatalogApi.fetchProduct(widget.productId);
@@ -51,14 +54,21 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           _product = p;
           _currentImageIndex = 0;
           _loading = false;
+          _error = null;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e;
-          _loading = false;
-        });
+        if (silent && _product != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$e')),
+          );
+        } else {
+          setState(() {
+            _error = e;
+            _loading = false;
+          });
+        }
       }
     }
   }
@@ -81,7 +91,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 )
               : _error != null
               ? Center(child: Text('$_error'))
-              : _buildContent(context, _product!),
+              : RefreshIndicator(
+                  color: AppRefresh.indicatorColor,
+                  strokeWidth: AppRefresh.strokeWidth,
+                  onRefresh: () => _load(silent: true),
+                  child: _buildContent(context, _product!),
+                ),
         ),
       ),
     );
@@ -96,10 +111,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         .toList(growable: false);
 
     return CustomScrollView(
+      physics: AppRefresh.scrollPhysics,
       slivers: [
         SliverAppBar(
           pinned: true,
           backgroundColor: AppColors.background.withValues(alpha: 0.9),
+          surfaceTintColor: Colors.transparent,
           title: PremiumText.headline(p.title, maxLines: 1),
           actions: [
             Consumer<SavedFavorites>(
@@ -116,10 +133,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   onPressed: () => fav.toggle(p.id),
                 );
               },
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh, color: AppColors.gold),
-              onPressed: _load,
             ),
           ],
         ),

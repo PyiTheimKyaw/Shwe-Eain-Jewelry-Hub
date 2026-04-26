@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
+import 'package:jewelry_hub/core/ui/widgets/customer_tab_header.dart';
 import 'package:jewelry_hub/core/ui/widgets/display_preferences_sheet.dart';
 import 'package:jewelry_hub/core/ui/widgets/price_tag.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
@@ -37,11 +39,13 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     await context.read<CatalogPricing>().refresh();
     try {
       final categories = await CatalogApi.fetchCategories();
@@ -54,14 +58,21 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
           _newArrivals = result.newArrivals;
           _items = result.products;
           _loading = false;
+          _error = null;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e;
-          _loading = false;
-        });
+        if (silent && _items != null && _items!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$e')),
+          );
+        } else {
+          setState(() {
+            _error = e;
+            _loading = false;
+          });
+        }
       }
     }
   }
@@ -164,16 +175,15 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: SafeArea(
           child: RefreshIndicator(
-            color: AppColors.gold,
-            onRefresh: _load,
+            color: AppRefresh.indicatorColor,
+            strokeWidth: AppRefresh.strokeWidth,
+            onRefresh: () => _load(silent: true),
             child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: AppRefresh.scrollPhysics,
               slivers: [
-                SliverAppBar(
-                  pinned: true,
-                  floating: false,
-                  backgroundColor: AppColors.background.withValues(alpha: 0.85),
-                  title: PremiumText.display('Jewelry Hub'),
+                CustomerTabHeader.sliverAppBar(
+                  title: 'Catalog',
+                  backgroundOpacity: 0.85,
                   actions: [
                     IconButton(
                       tooltip: 'Display preferences',
@@ -185,7 +195,7 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                     ),
                   ],
                 ),
-                // const SliverToBoxAdapter(child: CatalogToggleBar()),
+                const SliverToBoxAdapter(child: CatalogToggleBar()),
                 _buildNewArrivalsCarousel(),
                 _buildCategoryChips(),
                 if (_error != null)

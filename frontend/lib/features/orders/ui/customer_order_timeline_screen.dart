@@ -5,6 +5,7 @@ import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/storage/public_storage_url.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/inquiries/data/inquiry_api.dart';
 import 'package:jewelry_hub/features/orders/data/order_api.dart';
@@ -55,15 +56,17 @@ class _CustomerOrderTimelineScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool silent = false}) async {
     final token = context.read<AuthProvider>().token;
     if (token == null) {
       return;
     }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final progressRaw = await OrderApi.fetchOrderProgress(
         token: token,
@@ -135,31 +138,50 @@ class _CustomerOrderTimelineScreenState
       setState(() {
         _items = timeline;
         _loading = false;
+        _error = null;
       });
     } on InquiryApiException catch (e) {
       if (!mounted) {
         return;
       }
-      setState(() {
-        _error = e.message;
-        _loading = false;
-      });
+      if (silent && _items.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      } else {
+        setState(() {
+          _error = e.message;
+          _loading = false;
+        });
+      }
     } on OrderApiException catch (e) {
       if (!mounted) {
         return;
       }
-      setState(() {
-        _error = e.message;
-        _loading = false;
-      });
+      if (silent && _items.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      } else {
+        setState(() {
+          _error = e.message;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (!mounted) {
         return;
       }
-      setState(() {
-        _error = '$e';
-        _loading = false;
-      });
+      if (silent && _items.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      } else {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -171,37 +193,46 @@ class _CustomerOrderTimelineScreenState
           'Timeline ${widget.orderNumber}',
           maxLines: 1,
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.gold),
-            onPressed: _load,
-          ),
-        ],
+        surfaceTintColor: Colors.transparent,
       ),
       extendBodyBehindAppBar: true,
       body: Container(
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: SafeArea(
-          child: _loading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.gold,
-                    strokeWidth: 2,
-                  ),
-                )
-              : _error != null
-              ? Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: AppGlassCard(
-                    child: PremiumText.body(
-                      _error!,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                  children: [
+          child: RefreshIndicator(
+            color: AppRefresh.indicatorColor,
+            strokeWidth: AppRefresh.strokeWidth,
+            onRefresh: () => _load(silent: true),
+            child: _loading
+                ? ListView(
+                    physics: AppRefresh.scrollPhysics,
+                    padding: const EdgeInsets.only(top: 120),
+                    children: const [
+                      Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.gold,
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ],
+                  )
+                : _error != null
+                ? ListView(
+                    physics: AppRefresh.scrollPhysics,
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      AppGlassCard(
+                        child: PremiumText.body(
+                          _error!,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView(
+                    physics: AppRefresh.scrollPhysics,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                    children: [
                     AppGlassCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -275,6 +306,7 @@ class _CustomerOrderTimelineScreenState
                       ..._items.map(_buildTimelineCard),
                   ],
                 ),
+          ),
         ),
       ),
     );

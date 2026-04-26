@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:jewelry_hub/core/notifications/customer_notification_badge.dart';
 import 'package:jewelry_hub/core/notifications/push_notification_manager.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
@@ -41,6 +42,7 @@ class JewelryHubApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => DisplayPreferences()),
         ChangeNotifierProvider(create: (_) => SavedFavorites()),
         ChangeNotifierProvider(create: (_) => CatalogPricing()),
+        ChangeNotifierProvider(create: (_) => CustomerNotificationBadge()),
       ],
       child: MaterialApp(
         title: 'Jewelry Hub',

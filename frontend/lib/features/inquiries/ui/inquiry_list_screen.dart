@@ -4,7 +4,8 @@ import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_gold_button.dart';
-import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
+import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
+import 'package:jewelry_hub/core/ui/widgets/customer_tab_header.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/inquiries/data/inquiry_api.dart';
 import 'package:jewelry_hub/features/inquiries/models/inquiry_summary.dart';
@@ -31,71 +32,57 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool silent = false}) async {
     final token = context.read<AuthProvider>().token;
     if (token == null) {
       return;
     }
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final list = await InquiryApi.fetchMine(token);
       if (mounted) {
         setState(() {
           _items = list;
           _loading = false;
+          _error = null;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e;
-          _loading = false;
-        });
+        if (silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$e')),
+          );
+        } else {
+          setState(() {
+            _error = e;
+            _loading = false;
+          });
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
     final dateFmt = DateFormat.MMMd();
 
     return Scaffold(
+      appBar: CustomerTabHeader.appBar(title: 'Inquiries'),
+      extendBodyBehindAppBar: true,
       body: Container(
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                child: Row(
-                  children: [
-                    const BrandLogo(height: 28),
-                    const SizedBox(width: 10),
-                    Expanded(child: PremiumText.headline('Inquiries')),
-                    IconButton(
-                      tooltip: 'Log out',
-                      icon: const Icon(
-                        Icons.logout_rounded,
-                        color: AppColors.textSecondary,
-                      ),
-                      onPressed: () => auth.logout(),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: RefreshIndicator(
-                  color: AppColors.gold,
-                  onRefresh: _load,
-                  child: _buildBody(context, dateFmt),
-                ),
-              ),
-            ],
+          child: RefreshIndicator(
+            color: AppRefresh.indicatorColor,
+            strokeWidth: AppRefresh.strokeWidth,
+            onRefresh: () => _load(silent: true),
+            child: _buildBody(context, dateFmt),
           ),
         ),
       ),
@@ -121,7 +108,7 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
   Widget _buildBody(BuildContext context, DateFormat dateFmt) {
     if (_error != null) {
       return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics: AppRefresh.scrollPhysics,
         children: [
           Padding(
             padding: const EdgeInsets.all(24),
@@ -141,7 +128,7 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
     final items = _items!;
     if (items.isEmpty) {
       return ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
+        physics: AppRefresh.scrollPhysics,
         padding: const EdgeInsets.all(24),
         children: [
           AppGlassCard(
@@ -175,7 +162,7 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
     }
 
     return ListView.separated(
-      physics: const AlwaysScrollableScrollPhysics(),
+      physics: AppRefresh.scrollPhysics,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
       itemCount: items.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),

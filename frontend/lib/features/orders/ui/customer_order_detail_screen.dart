@@ -4,6 +4,7 @@ import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/storage/public_storage_url.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/orders/data/order_api.dart';
 import 'package:jewelry_hub/features/orders/models/payment_receipt.dart';
@@ -47,13 +48,15 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool silent = false}) async {
     final token = context.read<AuthProvider>().token;
     if (token == null) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final order = await OrderApi.fetchOrderDetail(
         token: token,
@@ -63,19 +66,32 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
       setState(() {
         _order = order;
         _loading = false;
+        _error = null;
       });
     } on OrderApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _loading = false;
-      });
+      if (silent && _order != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      } else {
+        setState(() {
+          _error = e.message;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = '$e';
-        _loading = false;
-      });
+      if (silent && _order != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      } else {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -123,12 +139,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: PremiumText.headline('Order ${widget.orderNumber}', maxLines: 1),
-        actions: [
-          IconButton(
-            onPressed: _load,
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.gold),
-          ),
-        ],
+        surfaceTintColor: Colors.transparent,
       ),
       extendBodyBehindAppBar: true,
       body: Container(
@@ -151,9 +162,14 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                     ),
                   ),
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                  children: [
+              : RefreshIndicator(
+                  color: AppRefresh.indicatorColor,
+                  strokeWidth: AppRefresh.strokeWidth,
+                  onRefresh: () => _load(silent: true),
+                  child: ListView(
+                    physics: AppRefresh.scrollPhysics,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                    children: [
                     AppGlassCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,6 +443,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
                       ),
                   ],
                 ),
+                  ),
         ),
       ),
     );

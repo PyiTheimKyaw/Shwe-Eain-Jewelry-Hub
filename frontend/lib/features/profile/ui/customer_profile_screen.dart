@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/customer_tab_header.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:jewelry_hub/features/orders/ui/customer_orders_screen.dart';
 import 'package:jewelry_hub/features/profile/ui/change_password_screen.dart';
@@ -213,10 +214,9 @@ class CustomerProfileScreen extends StatelessWidget {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              SliverAppBar(
-                pinned: true,
-                backgroundColor: AppColors.background.withValues(alpha: 0.92),
-                title: PremiumText.display('Profile'),
+              CustomerTabHeader.sliverAppBar(
+                title: 'Profile',
+                backgroundOpacity: 0.92,
               ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),

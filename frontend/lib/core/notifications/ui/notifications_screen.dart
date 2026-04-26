@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:jewelry_hub/core/notifications/customer_notification_badge.dart';
 import 'package:jewelry_hub/core/notifications/data/notification_api.dart';
 import 'package:jewelry_hub/core/notifications/models/app_notification_item.dart';
 import 'package:jewelry_hub/core/notifications/push_notification_manager.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
-import 'package:jewelry_hub/core/ui/widgets/brand_logo.dart';
+import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
+import 'package:jewelry_hub/core/ui/widgets/customer_tab_header.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
 import 'package:provider/provider.dart';
 
@@ -31,32 +33,50 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool silent = false}) async {
     final token = context.read<AuthProvider>().token;
     if (token == null) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final list = await NotificationApi.fetchNotifications(token);
       if (!mounted) return;
       setState(() {
         _items = list;
         _loading = false;
+        _error = null;
       });
+      if (mounted) {
+        context.read<CustomerNotificationBadge>().syncFromNotifications(list);
+      }
     } on NotificationApiException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = e.message;
-        _loading = false;
-      });
+      if (silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      } else {
+        setState(() {
+          _error = e.message;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _error = '$e';
-        _loading = false;
-      });
+      if (silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e')),
+        );
+      } else {
+        setState(() {
+          _error = '$e';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -70,21 +90,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       } catch (_) {}
     }
     if (!mounted) return;
-    setState(() {
-      _items = _items
-          .map(
-            (n) => n.id == item.id
-                ? AppNotificationItem(
-                    id: n.id,
-                    type: n.type,
-                    data: n.data,
-                    readAt: DateTime.now(),
-                    createdAt: n.createdAt,
-                  )
-                : n,
-          )
-          .toList(growable: false);
-    });
+    final updated = _items
+        .map(
+          (n) => n.id == item.id
+              ? AppNotificationItem(
+                  id: n.id,
+                  type: n.type,
+                  data: n.data,
+                  readAt: DateTime.now(),
+                  createdAt: n.createdAt,
+                )
+              : n,
+        )
+        .toList(growable: false);
+    setState(() => _items = updated);
+    if (mounted) {
+      context.read<CustomerNotificationBadge>().syncFromNotifications(updated);
+    }
 
     PushNotificationManager.instance.openNotification(
       item,
@@ -96,125 +118,148 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leadingWidth: 56,
-        leading: const Padding(
-          padding: EdgeInsets.only(left: 12, top: 8, bottom: 8),
-          child: BrandLogo(height: 28),
-        ),
-        title: PremiumText.headline('Notifications', maxLines: 1),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          IconButton(
-            onPressed: _load,
-            icon: const Icon(Icons.refresh_rounded, color: AppColors.gold),
-          ),
-        ],
+      appBar: CustomerTabHeader.appBar(
+        title: 'Alerts',
+        backgroundOpacity: 0.92,
       ),
       extendBodyBehindAppBar: true,
       body: Container(
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: SafeArea(
-          child: _loading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.gold,
-                    strokeWidth: 2,
-                  ),
-                )
-              : _error != null
-              ? Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: AppGlassCard(
-                    child: PremiumText.body(
-                      _error!,
-                      color: AppColors.textSecondary,
+          child: RefreshIndicator(
+            color: AppRefresh.indicatorColor,
+            strokeWidth: AppRefresh.strokeWidth,
+            onRefresh: () => _load(silent: true),
+            child: CustomScrollView(
+              physics: AppRefresh.scrollPhysics,
+              slivers: [
+                if (_loading && _items.isEmpty)
+                  const SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.gold,
+                        strokeWidth: 2,
+                      ),
                     ),
-                  ),
-                )
-              : _items.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: AppGlassCard(
-                    child: PremiumText.body(
-                      'No notifications yet.',
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
-                  itemCount: _items.length,
-                  separatorBuilder: (_, index) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final item = _items[index];
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(AppRadii.md),
-                      onTap: () => _open(item),
+                  )
+                else if (_error != null && _items.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
                       child: AppGlassCard(
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              margin: const EdgeInsets.only(top: 7),
-                              decoration: BoxDecoration(
-                                color: item.isRead
-                                    ? AppColors.textSecondary
-                                    : AppColors.gold,
-                                shape: BoxShape.circle,
-                              ),
+                        child: PremiumText.body(
+                          _error!,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  )
+                else if (_items.isEmpty)
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: AppGlassCard(
+                        child: PremiumText.body(
+                          'No notifications yet.',
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final item = _items[index];
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              bottom: index < _items.length - 1 ? 10 : 0,
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: PremiumText.body(item.title),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      PremiumText.caption(
-                                        item.isRead ? 'Read' : 'Unread',
+                            child: InkWell(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadii.md),
+                              onTap: () => _open(item),
+                              child: AppGlassCard(
+                                padding: const EdgeInsets.all(14),
+                                child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      margin: const EdgeInsets.only(top: 7),
+                                      decoration: BoxDecoration(
                                         color: item.isRead
                                             ? AppColors.textSecondary
                                             : AppColors.gold,
+                                        shape: BoxShape.circle,
                                       ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  PremiumText.caption(
-                                    item.body,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                  if (item.createdAt != null) ...[
-                                    const SizedBox(height: 6),
-                                    PremiumText.caption(
-                                      _timeFmt.format(
-                                        item.createdAt!.toLocal(),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: PremiumText.body(
+                                                  item.title,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              PremiumText.caption(
+                                                item.isRead
+                                                    ? 'Read'
+                                                    : 'Unread',
+                                                color: item.isRead
+                                                    ? AppColors.textSecondary
+                                                    : AppColors.gold,
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          PremiumText.caption(
+                                            item.body,
+                                            color: AppColors.textSecondary,
+                                          ),
+                                          if (item.createdAt != null) ...[
+                                            const SizedBox(height: 6),
+                                            PremiumText.caption(
+                                              _timeFmt.format(
+                                                item.createdAt!.toLocal(),
+                                              ),
+                                              color: AppColors.goldMuted,
+                                            ),
+                                          ],
+                                        ],
                                       ),
-                                      color: AppColors.goldMuted,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: AppColors.textSecondary,
                                     ),
                                   ],
-                                ],
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.chevron_right_rounded,
-                              color: AppColors.textSecondary,
-                            ),
-                          ],
-                        ),
+                          );
+                        },
+                        childCount: _items.length,
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
