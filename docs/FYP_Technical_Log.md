@@ -2,6 +2,81 @@
 
 **Run locally:** see [Local_Setup.md](./Local_Setup.md) (Laravel + Filament + Flutter).
 
+## 2026-04-26 — Market-readiness implementation (Smart Home, Offline Cache, Funnel Analytics)
+
+### Summary
+
+Implemented the planned market-readiness phase across backend, admin, and customer mobile:
+
+- Smart Home marketing sections in customer catalog (Popular Items + Featured Collections).
+- Offline-first cache layer for core customer list surfaces with Last Synced indicators.
+- Dual conversion-funnel analytics widget in Filament Command Center with drop-off visibility.
+
+### Backend changes
+
+- Catalog API now returns extra marketing blocks under `meta`:
+  - `popular_items` (inquiry-weighted products)
+  - `featured_collections` (admin-curated categories with cover image + product count)
+- Added category curation flag:
+  - migration: `add_is_featured_to_categories_table`
+  - model/form/table/controller support for `is_featured`
+- Analytics service added dual funnel aggregation:
+  - customer journey funnel
+  - operations funnel
+  - per-stage drop-off %
+- New Filament widget:
+  - `ConversionFunnelWidget` + Blade view
+  - filter windows: 7 / 30 / 90 days
+
+### Flutter changes
+
+- Added Hive-based cache service:
+  - `frontend/lib/core/cache/app_cache_store.dart`
+  - initialized at app startup in `main.dart`
+- Integrated cache-first fallback + sync metadata:
+  - catalog products response includes `fromCache` + `lastSyncedAt`
+  - inquiries list (`fetchMineCached`)
+  - orders list (`fetchOrdersCached`)
+- UI now shows Last Synced line and offline-state hint on:
+  - catalog screen
+  - inquiry list
+  - customer orders
+- Added Smart Home sections on customer catalog UI:
+  - Popular Items carousel
+  - Featured Collections strip with tap-to-filter behavior
+
+### Validation
+
+- Backend syntax checks passed for updated PHP files.
+- Flutter analyzer passed for updated cache/catalog/inquiry/order surfaces.
+- Catalog feature tests passed including new assertions for popular/featured payload sections.
+
+## 2026-04-26 — Comprehensive platform audit + final architecture snapshot
+
+### Summary
+
+Completed a full codebase audit across Customer mobile, Artisan mobile, and Admin/Backend, then documented the final architecture and implementation status in:
+
+- `docs/PLATFORM_COMPREHENSIVE_AUDIT.md`
+
+### Key outcomes captured
+
+- Finalized architecture positioning:
+  - Laravel/MySQL as source of truth for workflow and financial state.
+  - Firebase/Firestore as realtime delivery channel with REST fallback on mobile.
+- Completed-features inventory for:
+  - Customer flows (auth/catalog/inquiries/orders/receipts/notifications/profile, shared image viewer).
+  - Artisan flows (jobs, lifecycle actions, enriched detail payload, profile/stats, notifications).
+  - Admin flows (concierge chat, quote/payment operations, assign artisan modal, QC/lifecycle controls, exports).
+- Current gaps/polish list and market-ready next roadmap (performance, reliability, UX consistency, observability).
+
+### Additional hardening included in this phase
+
+- Initial inquiry attachments are mirrored into `inquiry_image_candidates` so admin can always see/select them in Assign Artisan reference picker.
+- Admin inquiry chat upload now supports multi-image selection.
+- Customer inquiry chat upload now supports multi-image selection.
+- Existing artisan progress upload multi-image flow verified as aligned with the same UX direction.
+
 ## 2026-04-03 — Database schema and REST API v1 scaffold
 
 ### Summary

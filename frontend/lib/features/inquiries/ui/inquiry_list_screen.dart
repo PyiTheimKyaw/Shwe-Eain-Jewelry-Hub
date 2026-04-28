@@ -25,6 +25,8 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
   List<InquirySummary>? _items;
   Object? _error;
   bool _loading = true;
+  DateTime? _lastSyncedAt;
+  bool _showingCached = false;
 
   @override
   void initState() {
@@ -44,10 +46,12 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
       });
     }
     try {
-      final list = await InquiryApi.fetchMine(token);
+      final result = await InquiryApi.fetchMineCached(token);
       if (mounted) {
         setState(() {
-          _items = list;
+          _items = result.inquiries;
+          _lastSyncedAt = result.lastSyncedAt;
+          _showingCached = result.fromCache;
           _loading = false;
           _error = null;
         });
@@ -71,6 +75,7 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
   @override
   Widget build(BuildContext context) {
     final dateFmt = DateFormat.MMMd();
+    final syncFmt = DateFormat('MMM d, HH:mm');
 
     return Scaffold(
       appBar: CustomerTabHeader.appBar(title: 'Inquiries'),
@@ -82,7 +87,7 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
             color: AppRefresh.indicatorColor,
             strokeWidth: AppRefresh.strokeWidth,
             onRefresh: () => _load(silent: true),
-            child: _buildBody(context, dateFmt),
+            child: _buildBody(context, dateFmt, syncFmt),
           ),
         ),
       ),
@@ -105,7 +110,11 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
     );
   }
 
-  Widget _buildBody(BuildContext context, DateFormat dateFmt) {
+  Widget _buildBody(
+    BuildContext context,
+    DateFormat dateFmt,
+    DateFormat syncFmt,
+  ) {
     if (_error != null) {
       return ListView(
         physics: AppRefresh.scrollPhysics,
@@ -164,10 +173,19 @@ class _InquiryListScreenState extends State<InquiryListScreen> {
     return ListView.separated(
       physics: AppRefresh.scrollPhysics,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
-      itemCount: items.length,
+      itemCount: items.length + (_lastSyncedAt != null ? 1 : 0),
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
-        final q = items[index];
+        if (_lastSyncedAt != null && index == 0) {
+          return PremiumText.caption(
+            _showingCached
+                ? 'Offline view · Last synced ${syncFmt.format(_lastSyncedAt!)}'
+                : 'Last synced ${syncFmt.format(_lastSyncedAt!)}',
+            color: AppColors.textSecondary,
+          );
+        }
+        final dataIndex = _lastSyncedAt != null ? index - 1 : index;
+        final q = items[dataIndex];
         final preview = q.message.length > 120
             ? '${q.message.substring(0, 117)}…'
             : q.message;

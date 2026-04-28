@@ -1,0 +1,209 @@
+@startuml sejh_db_module_order_artisan
+
+' =========================================================
+' Module 3 — Order Fulfillment & Artisan Bridge
+' Focus: Orders, Payments, Receipts, Assignments, Reference Bridge, and Production Progress
+' Export hint: higher DPI for report screenshots.
+' =========================================================
+
+left to right direction
+hide methods
+skinparam dpi 220
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #111827
+  ArrowColor #111827
+}
+
+' Minimal reference tables (to clarify foreign keys without pulling full modules)
+class users <<ref>> {
+  +id : bigint <<PK>>
+}
+class products <<ref>> {
+  +id : bigint <<PK>>
+}
+class quotes <<ref>> {
+  +id : bigint <<PK>>
+}
+class exchange_rate_snapshots <<ref>> {
+  +id : bigint <<PK>>
+}
+class inquiries <<ref>> {
+  +id : bigint <<PK>>
+}
+
+package "Orders & Line Items" {
+  class orders <<table>> {
+    +id : bigint <<PK>>
+    --
+    +customer_user_id : bigint <<FK users.id>>
+    +quote_id : bigint? <<FK quotes.id>>
+    +exchange_rate_snapshot_id : bigint? <<FK exchange_rate_snapshots.id>>
+    +order_number : string <<UNIQUE>>
+    +status : string
+    +deposit_amount_mmk : decimal(18,4)?
+    +deposit_instructions_sent_at : timestamp?
+    +total_mmk : decimal(18,4)
+    +total_usd_snapshot : decimal(14,4)
+    +created_at : timestamp
+  }
+
+  class order_items <<table>> {
+    +id : bigint <<PK>>
+    --
+    +order_id : bigint <<FK orders.id>>
+    +product_id : bigint? <<FK products.id>>
+    +title_snapshot : string
+    +metal_type_snapshot : string?
+    +stone_details_snapshot : text?
+    +weight_grams : decimal(12,4)
+    +metal_value_mmk : decimal(18,4)
+    +labor_fee_mmk : decimal(18,4)
+    +gem_price_mmk : decimal(18,4)?
+    +line_total_mmk : decimal(18,4)
+    +line_total_usd_snapshot : decimal(14,4)
+    +created_at : timestamp
+  }
+}
+
+package "Payments & Receipts" {
+  class payment_profiles <<table>> {
+    +id : bigint <<PK>>
+    --
+    +name : string
+    +channel : string
+    +institution_name : string?
+    +account_name : string?
+    +account_number : string?
+    +wallet_id : string?
+    +qr_image_path : string?
+    +is_active : boolean
+    +sort_order : int
+    +created_at : timestamp
+  }
+
+  class payments <<table>> {
+    +id : bigint <<PK>>
+    --
+    +order_id : bigint <<FK orders.id>>
+    +payment_profile_id : bigint? <<FK payment_profiles.id>>
+    +verified_by_user_id : bigint? <<FK users.id>>
+    +type : string
+    +amount_mmk : decimal(18,4)
+    +currency : string
+    +status : string
+    +proof_storage_path : string?
+    +submitted_at : timestamp?
+    +verified_at : timestamp?
+    +created_at : timestamp
+  }
+
+  class receipts <<table>> {
+    +id : bigint <<PK>>
+    --
+    +payment_id : bigint <<FK payments.id>> <<UNIQUE>>
+    +order_id : bigint <<FK orders.id>>
+    +customer_user_id : bigint <<FK users.id>>
+    +receipt_number : string <<UNIQUE>>
+    +currency_code : string
+    +amount_mmk : decimal(14,4)
+    +amount_usd_snapshot : decimal(14,4)?
+    +pdf_storage_path : string
+    +sha256 : string
+    +issued_at : timestamp
+  }
+}
+
+package "Assignments & Artisan Bridge" {
+  class order_assignments <<table>> {
+    +id : bigint <<PK>>
+    --
+    +order_id : bigint <<FK orders.id>>
+    +artisan_user_id : bigint <<FK users.id>>
+    +order_item_id : bigint? <<FK order_items.id>>
+    +task_scope : enum(full_order|line_item)
+    +status : enum(assigned|in_progress|blocked|done)
+    +instructions : text?
+    +target_deadline_at : datetime?
+    +priority_level : enum(low|normal|high|urgent)
+    +created_at : timestamp
+  }
+
+  class inquiry_image_candidates <<table>> {
+    +id : bigint <<PK>>
+    --
+    +inquiry_id : bigint <<FK inquiries.id>>
+    +storage_path : string?
+    +url : string?
+    +firebase_message_id : string?
+    +uploaded_at : timestamp?
+    +created_at : timestamp
+  }
+
+  class order_assignment_reference_images <<table>> {
+    +id : bigint <<PK>>
+    --
+    +order_assignment_id : bigint <<FK order_assignments.id>>
+    +inquiry_image_candidate_id : bigint? <<FK inquiry_image_candidates.id>>
+    +storage_path : string?
+    +url : string?
+    +sort_order : int
+    +created_at : timestamp
+  }
+}
+
+package "Production Progress" {
+  class order_progress_events <<table>> {
+    +id : bigint <<PK>>
+    --
+    +order_id : bigint <<FK orders.id>>
+    +artisan_user_id : bigint <<FK users.id>>
+    +stage : enum(casting|filing|polishing|setting|qc|other)
+    +note : text?
+    +firebase_event_id : string?
+    +created_at : timestamp
+  }
+
+  class order_progress_attachments <<table>> {
+    +id : bigint <<PK>>
+    --
+    +progress_event_id : bigint <<FK order_progress_events.id>>
+    +storage_path : string
+    +mime_type : string?
+    +created_at : timestamp
+  }
+}
+
+' Relationships (UML multiplicities)
+users "1" -- "0..*" orders : places >
+quotes "1" -- "0..1" orders : may create >
+exchange_rate_snapshots "1" -- "0..*" orders : fx by >
+orders "1" -- "1..*" order_items : includes >
+products "1" -- "0..*" order_items : optional source >
+
+orders "1" -- "0..*" payments : has >
+payment_profiles "1" -- "0..*" payments : used for >
+users "1" -- "0..*" payments : verifies >
+
+payments "1" -- "0..1" receipts : issues >
+orders "1" -- "0..*" receipts : records >
+users "1" -- "0..*" receipts : owns >
+
+orders "1" -- "0..*" order_assignments : assigns >
+users "1" -- "0..*" order_assignments : works on >
+order_items "1" -- "0..*" order_assignments : scoped to >
+
+inquiries "1" -- "0..*" inquiry_image_candidates : captures >
+order_assignments "1" -- "0..*" order_assignment_reference_images : references >
+inquiry_image_candidates "1" -- "0..*" order_assignment_reference_images : source >
+
+orders "1" -- "0..*" order_progress_events : progresses >
+users "1" -- "0..*" order_progress_events : records >
+order_progress_events "1" -- "0..*" order_progress_attachments : attaches >
+
+@enduml
+

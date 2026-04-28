@@ -1,5 +1,7 @@
 # Artisan App Audit (Flutter)
 
+> Cross-platform latest audit (Customer + Artisan + Admin): `docs/PLATFORM_COMPREHENSIVE_AUDIT.md`.
+
 Date: 2026-04-26  
 Scope: Current artisan mobile experience audit and production-hardening updates for workshop operations (jobs, progress updates, notifications, and navigation integrity).
 

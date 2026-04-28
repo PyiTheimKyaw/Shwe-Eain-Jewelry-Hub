@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:jewelry_hub/core/cache/app_cache_store.dart';
 import 'package:jewelry_hub/core/notifications/customer_notification_badge.dart';
 import 'package:jewelry_hub/core/notifications/push_notification_manager.dart';
 import 'package:jewelry_hub/core/providers/auth_provider.dart';
@@ -25,6 +26,7 @@ Future<void> main() async {
   } catch (e, st) {
     debugPrint('Firebase.initializeApp failed: $e\n$st');
   }
+  await AppCacheStore.init();
   runApp(const JewelryHubApp());
 }
 

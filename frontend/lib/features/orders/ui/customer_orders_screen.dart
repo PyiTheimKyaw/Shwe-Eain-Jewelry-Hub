@@ -27,6 +27,8 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
   String? _error;
   List<Map<String, dynamic>> _orders = [];
   final Map<int, List<PaymentReceipt>> _receipts = {};
+  DateTime? _lastSyncedAt;
+  bool _showingCached = false;
 
   @override
   void initState() {
@@ -44,7 +46,8 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
       });
     }
     try {
-      final orders = await OrderApi.fetchOrders(token);
+      final orderResult = await OrderApi.fetchOrdersCached(token);
+      final orders = orderResult.orders;
       final receiptMap = <int, List<PaymentReceipt>>{};
       for (final order in orders) {
         final idRaw = order['id'];
@@ -61,6 +64,8 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
         _receipts
           ..clear()
           ..addAll(receiptMap);
+        _lastSyncedAt = orderResult.lastSyncedAt;
+        _showingCached = orderResult.fromCache;
         _loading = false;
         _error = null;
       });
@@ -93,6 +98,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final syncFmt = DateFormat('MMM d, HH:mm');
     return Scaffold(
       appBar: CustomerTabHeader.appBar(title: 'Orders'),
       extendBodyBehindAppBar: true,
@@ -148,7 +154,20 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                     sliver: SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
-                          final order = _orders[index];
+                          if (_lastSyncedAt != null && index == 0) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: PremiumText.caption(
+                                _showingCached
+                                    ? 'Offline view · Last synced ${syncFmt.format(_lastSyncedAt!)}'
+                                    : 'Last synced ${syncFmt.format(_lastSyncedAt!)}',
+                                color: AppColors.textSecondary,
+                              ),
+                            );
+                          }
+                          final dataIndex =
+                              _lastSyncedAt != null ? index - 1 : index;
+                          final order = _orders[dataIndex];
                           final idRaw = order['id'];
                           final orderId = idRaw is num
                               ? idRaw.toInt()
@@ -175,7 +194,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
 
                           return Padding(
                             padding: EdgeInsets.only(
-                              bottom: index < _orders.length - 1 ? 10 : 0,
+                              bottom: dataIndex < _orders.length - 1 ? 10 : 0,
                             ),
                             child: AppGlassCard(
                               child: Column(
@@ -263,7 +282,7 @@ class _CustomerOrdersScreenState extends State<CustomerOrdersScreen> {
                             ),
                           );
                         },
-                        childCount: _orders.length,
+                        childCount: _orders.length + (_lastSyncedAt != null ? 1 : 0),
                       ),
                     ),
                   ),

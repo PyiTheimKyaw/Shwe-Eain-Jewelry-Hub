@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:jewelry_hub/core/cache/app_cache_store.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:jewelry_hub/core/config/api_config.dart';
 import 'package:jewelry_hub/features/inquiries/models/inquiry_pipeline.dart';
@@ -16,6 +17,7 @@ class InquiryApiException implements Exception {
 
 class InquiryApi {
   InquiryApi._();
+  static const _mineCacheKey = 'inquiries_mine';
 
   static Map<String, String> _authHeaders(String token) => {
     'Authorization': 'Bearer $token',
@@ -50,6 +52,42 @@ class InquiryApi {
     return list
         .map((e) => InquirySummary.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  static Future<InquiryMineResult> fetchMineCached(String token) async {
+    final uri = Uri.parse('${ApiConfig.apiV1}/inquiries/mine');
+    try {
+      final res = await http.get(uri, headers: _authHeaders(token));
+      if (res.statusCode != 200) {
+        throw InquiryApiException(
+          'Inquiries ${res.statusCode}: ${_errorBody(res.body)}',
+        );
+      }
+      final map = json.decode(res.body) as Map<String, dynamic>;
+      final list = map['data'] as List<dynamic>? ?? [];
+      await AppCacheStore.writeJson(key: _mineCacheKey, data: list);
+      return InquiryMineResult(
+        inquiries: list
+            .map((e) => InquirySummary.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        lastSyncedAt: DateTime.now(),
+        fromCache: false,
+      );
+    } catch (_) {
+      final cached = AppCacheStore.readJson(_mineCacheKey);
+      if (cached != null && cached.data is List) {
+        final list = cached.data as List<dynamic>;
+        return InquiryMineResult(
+          inquiries: list
+              .whereType<Map>()
+              .map((e) => InquirySummary.fromJson(Map<String, dynamic>.from(e)))
+              .toList(growable: false),
+          lastSyncedAt: cached.lastSyncedAt,
+          fromCache: true,
+        );
+      }
+      rethrow;
+    }
   }
 
   static Future<InquirySummary> create({
@@ -242,4 +280,16 @@ class InquiryApi {
     }
     throw InquiryApiException('Upload image succeeded but URL is missing.');
   }
+}
+
+class InquiryMineResult {
+  const InquiryMineResult({
+    required this.inquiries,
+    required this.lastSyncedAt,
+    required this.fromCache,
+  });
+
+  final List<InquirySummary> inquiries;
+  final DateTime lastSyncedAt;
+  final bool fromCache;
 }

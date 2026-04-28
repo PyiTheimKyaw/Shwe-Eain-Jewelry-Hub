@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Widgets\CommandCenterKpisWidget;
 use App\Filament\Widgets\CommandCenterStripWidget;
+use App\Filament\Widgets\ConversionFunnelWidget;
 use App\Filament\Widgets\InquiryConversionLineWidget;
 use App\Filament\Widgets\OperationsPulseWidget;
 use App\Filament\Widgets\OrderStageDoughnutWidget;
@@ -11,7 +12,6 @@ use App\Filament\Widgets\QuickExportWidget;
 use App\Filament\Widgets\RevenueBarChartWidget;
 use Filament\Actions\Action;
 use Filament\Pages\Dashboard as BaseDashboard;
-use Filament\Widgets\AccountWidget;
 use Filament\Widgets\Widget;
 
 class Dashboard extends BaseDashboard
@@ -29,7 +29,7 @@ class Dashboard extends BaseDashboard
             RevenueBarChartWidget::class,
             OrderStageDoughnutWidget::class,
             InquiryConversionLineWidget::class,
-            AccountWidget::class,
+            ConversionFunnelWidget::class,
         ];
     }
 

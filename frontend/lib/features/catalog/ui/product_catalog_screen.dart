@@ -17,6 +17,7 @@ import 'package:jewelry_hub/features/catalog/ui/product_detail_screen.dart';
 import 'package:jewelry_hub/features/catalog/widgets/product_favorite_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:intl/intl.dart';
 
 class ProductCatalogScreen extends StatefulWidget {
   const ProductCatalogScreen({super.key});
@@ -28,10 +29,14 @@ class ProductCatalogScreen extends StatefulWidget {
 class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
   List<CatalogCategory> _categories = const [];
   List<CatalogProduct> _newArrivals = const [];
+  List<CatalogProduct> _popularItems = const [];
+  List<FeaturedCollection> _featuredCollections = const [];
   List<CatalogProduct>? _items;
   int? _selectedCategoryId;
   Object? _error;
   bool _loading = true;
+  DateTime? _lastSyncedAt;
+  bool _showingCached = false;
 
   @override
   void initState() {
@@ -56,7 +61,11 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
         setState(() {
           _categories = categories;
           _newArrivals = result.newArrivals;
+          _popularItems = result.popularItems;
+          _featuredCollections = result.featuredCollections;
           _items = result.products;
+          _lastSyncedAt = result.lastSyncedAt;
+          _showingCached = result.fromCache;
           _loading = false;
           _error = null;
         });
@@ -90,7 +99,11 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
       }
       setState(() {
         _newArrivals = result.newArrivals;
+        _popularItems = result.popularItems;
+        _featuredCollections = result.featuredCollections;
         _items = result.products;
+        _lastSyncedAt = result.lastSyncedAt;
+        _showingCached = result.fromCache;
         _loading = false;
       });
     } catch (e) {
@@ -168,8 +181,77 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
     );
   }
 
+  Widget _buildPopularItemsCarousel() {
+    if (_popularItems.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PremiumText.caption('POPULAR ITEMS', color: AppColors.goldMuted),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 204,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _popularItems.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final product = _popularItems[index];
+                  return _NewArrivalCard(product: product);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeaturedCollections() {
+    if (_featuredCollections.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PremiumText.caption(
+              'FEATURED COLLECTIONS',
+              color: AppColors.goldMuted,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 90,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _featuredCollections.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final collection = _featuredCollections[index];
+                  return _FeaturedCollectionChip(
+                    collection: collection,
+                    onTap: () => _applyCategory(collection.id),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final syncFmt = DateFormat('MMM d, HH:mm');
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
@@ -196,7 +278,21 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                   ],
                 ),
                 const SliverToBoxAdapter(child: CatalogToggleBar()),
+                if (_lastSyncedAt != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                      child: PremiumText.caption(
+                        _showingCached
+                            ? 'Offline view · Last synced ${syncFmt.format(_lastSyncedAt!)}'
+                            : 'Last synced ${syncFmt.format(_lastSyncedAt!)}',
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
                 _buildNewArrivalsCarousel(),
+                _buildPopularItemsCarousel(),
+                _buildFeaturedCollections(),
                 _buildCategoryChips(),
                 if (_error != null)
                   SliverToBoxAdapter(
@@ -433,6 +529,67 @@ class _ProductTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FeaturedCollectionChip extends StatelessWidget {
+  const _FeaturedCollectionChip({
+    required this.collection,
+    required this.onTap,
+  });
+
+  final FeaturedCollection collection;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 180,
+      child: AppGlassCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(0),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (collection.coverImageUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                child: CachedNetworkImage(
+                  imageUrl: collection.coverImageUrl!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.15),
+                    Colors.black.withValues(alpha: 0.55),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  PremiumText.body(collection.name, maxLines: 1),
+                  PremiumText.caption(
+                    '${collection.publishedProductsCount} items',
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

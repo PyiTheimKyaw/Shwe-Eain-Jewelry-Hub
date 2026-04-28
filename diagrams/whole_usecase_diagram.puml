@@ -1,0 +1,75 @@
+@startuml shwe_eain_jewelry_hub_final_usecase
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam actorStyle stickman
+
+' Actors Definition
+actor "Customer" as Customer << (C,#ADD1B2) >>
+actor "Artisan" as Artisan << (A,#ADD1B2) >>
+actor "Admin (Concierge)" as Admin << (M,#ADD1B2) >>
+
+rectangle "System Boundary: Shwe Eain Jewelry Hub" {
+
+  package "Customer Shell" {
+    usecase "Browse Catalog" as UC_Browse
+    usecase "Send Inquiry & Photos" as UC_Inquiry
+    usecase "Real-time Chat" as UC_Chat
+    usecase "Accept / Decline Quote" as UC_Quote_Action
+    usecase "Upload Payment Proof" as UC_Payment
+    usecase "Track Order Timeline" as UC_Track
+    usecase "Download Receipt (PDF)" as UC_Receipt
+  }
+
+  package "Admin Command Center" {
+    ' Key Bespoke Logic
+    usecase "Manage Gold & FX Prices" as UC_Pricing
+    usecase "Publish Quote Cards" as UC_Gen_Quote
+    usecase "Verify Payments" as UC_Verify
+    usecase "Assign Artisan (Specs & Photos)" as UC_Assign
+    usecase "Quality Control (QC) Approval" as UC_QC
+    usecase "Export Financial Reports" as UC_Reports
+    
+    ' ADDED: Administrative & Catalog Tasks
+    usecase "Manage Product Catalog (CRUD)" as UC_Catalog_Mgmt
+    usecase "Manage User Accounts & Roles" as UC_User_Mgmt
+  }
+
+  package "Artisan Shell" {
+    usecase "View Assigned Jobs & Specs" as UC_View_Jobs
+    usecase "Start Production" as UC_Start_Prod
+    usecase "Upload Progress Updates" as UC_Progress
+    usecase "Mark Ready for Review" as UC_Ready
+  }
+}
+
+' Customer Connections
+Customer -- UC_Browse
+Customer -- UC_Inquiry
+Customer -- UC_Chat
+Customer -- UC_Quote_Action
+Customer -- UC_Payment
+Customer -- UC_Track
+Customer -- UC_Receipt
+
+' Artisan Connections
+Artisan -- UC_View_Jobs
+Artisan -- UC_Start_Prod
+Artisan -- UC_Progress
+Artisan -- UC_Ready
+
+' Admin Connections
+' Key Bespoke Logic
+UC_Pricing -- Admin
+UC_Chat -- Admin
+UC_Gen_Quote -- Admin
+UC_Verify -- Admin
+UC_Assign -- Admin
+UC_QC -- Admin
+UC_Reports -- Admin
+
+' ADDED: Administrative & Catalog Tasks
+UC_Catalog_Mgmt -- Admin
+UC_User_Mgmt -- Admin
+
+@enduml

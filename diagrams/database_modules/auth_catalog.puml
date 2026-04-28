@@ -1,0 +1,110 @@
+@startuml sejh_db_module_auth_catalog
+
+' =========================================================
+' Module 1 — Identity & Catalog (Auth + Inventory)
+' Shwe Eain Jewelry Hub — Database ERD (PlantUML class style)
+' Export hint: higher DPI for report screenshots.
+' =========================================================
+
+left to right direction
+hide methods
+skinparam dpi 220
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #111827
+  ArrowColor #111827
+}
+
+package "Identity & Access" {
+  class users <<table>> {
+    +id : bigint <<PK>>
+    --
+    +name : string
+    +email : string <<UNIQUE>>
+    +password : string
+    +role : enum(admin|artisan|customer)
+    +account_status : string
+    +force_password_reset : boolean
+    +created_at : timestamp
+  }
+
+  class customer_profiles <<table>> {
+    +user_id : bigint <<PK, FK users.id>>
+    --
+    +phone : string?
+    +address_json : json?
+    +created_at : timestamp
+  }
+
+  class artisan_profiles <<table>> {
+    +user_id : bigint <<PK, FK users.id>>
+    --
+    +specialty : string?
+    +is_active : boolean
+    +created_at : timestamp
+  }
+
+  class personal_access_tokens <<table>> {
+    +id : bigint <<PK>>
+    --
+    +tokenable_type : string
+    +tokenable_id : bigint
+    +name : string
+    +last_used_at : timestamp?
+    +expires_at : timestamp?
+    +created_at : timestamp
+  }
+}
+
+package "Catalog" {
+  class categories <<table>> {
+    +id : bigint <<PK>>
+    --
+    +name : string
+    +slug : string <<UNIQUE>>
+    +sort_order : int
+    +is_featured : boolean
+    +deleted_at : timestamp?
+  }
+
+  class products <<table>> {
+    +id : bigint <<PK>>
+    --
+    +category_id : bigint <<FK categories.id>>
+    +sku : string <<UNIQUE>>
+    +title : string
+    +description : text?
+    +weight_grams : decimal(12,4)
+    +labor_fee_mmk : decimal(18,4)
+    +gem_price_mmk : decimal(18,4)?
+    +is_published : boolean
+    +is_ready_made : boolean
+    +deleted_at : timestamp?
+  }
+
+  class product_images <<table>> {
+    +id : bigint <<PK>>
+    --
+    +product_id : bigint <<FK products.id>>
+    +storage_path : string
+    +sort_order : int
+    +created_at : timestamp
+  }
+}
+
+' Relationships (UML multiplicities)
+users "1" -- "0..1" customer_profiles : has >
+users "1" -- "0..1" artisan_profiles : has >
+
+' Note: personal_access_tokens is morph-based; in this system, tokens are issued for users.
+users "1" -- "0..*" personal_access_tokens : issues >
+
+categories "1" -- "0..*" products : contains >
+products "1" -- "0..*" product_images : has >
+
+@enduml
+

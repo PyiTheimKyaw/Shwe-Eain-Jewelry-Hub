@@ -1,5 +1,7 @@
 # Customer App Audit (Flutter)
 
+> Cross-platform latest audit (Customer + Artisan + Admin): `docs/PLATFORM_COMPREHENSIVE_AUDIT.md`.
+
 Date: 2026-04-25  
 Scope: End-to-end audit of the Flutter customer experience, backend API integration status, luxury UX consistency, and production-readiness gaps.
 

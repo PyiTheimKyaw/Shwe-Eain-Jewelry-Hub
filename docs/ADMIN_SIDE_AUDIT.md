@@ -1,5 +1,7 @@
 # Ultimate Admin Reference Manual (Filament Backend)
 
+> Latest consolidated platform audit: `docs/PLATFORM_COMPREHENSIVE_AUDIT.md` (Customer + Artisan + Admin final architecture, completed features, gaps, and roadmap).
+
 ## Customer-Side Application Audit Addendum (Flutter Mobile)
 
 Date: 2026-04-26  

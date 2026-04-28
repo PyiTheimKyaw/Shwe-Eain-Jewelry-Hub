@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Inquiry;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\Quote;
 use Carbon\Carbon;
 
 /**
@@ -153,5 +154,98 @@ class DashboardAnalyticsService
             ->count();
 
         return $paymentStale + $depositStale + $preProdStale + $productionStale;
+    }
+
+    /**
+     * Dual conversion funnels (customer journey + operations), with stage-to-stage drop-off.
+     *
+     * @return array{
+     *   window_days: int,
+     *   customer: array<int, array{label:string,count:int,drop_off_percent:float|null}>,
+     *   operations: array<int, array{label:string,count:int,drop_off_percent:float|null}>
+     * }
+     */
+    public function conversionFunnels(int $days = 30): array
+    {
+        $windowDays = max(1, $days);
+        $since = Carbon::now()->subDays($windowDays)->startOfDay();
+
+        $catalogLinkedInquiries = Inquiry::query()
+            ->where('created_at', '>=', $since)
+            ->whereNotNull('product_id')
+            ->count();
+        $inquiries = Inquiry::query()
+            ->where('created_at', '>=', $since)
+            ->count();
+        $quotesAccepted = Quote::query()
+            ->where('created_at', '>=', $since)
+            ->where('status', 'accepted')
+            ->count();
+        $depositConfirmed = Order::query()
+            ->where('created_at', '>=', $since)
+            ->whereIn('status', ['deposit_confirmed', 'in_production', 'pending_qc', 'ready', 'shipped', 'completed'])
+            ->count();
+
+        $quotesSent = Quote::query()
+            ->where('created_at', '>=', $since)
+            ->whereIn('status', ['sent', 'accepted'])
+            ->count();
+        $ready = Order::query()
+            ->where('created_at', '>=', $since)
+            ->whereIn('status', ['ready', 'shipped', 'completed'])
+            ->count();
+        $completed = Order::query()
+            ->where('created_at', '>=', $since)
+            ->where('status', 'completed')
+            ->count();
+
+        $customerStages = [
+            ['label' => 'Catalog-linked inquiry', 'count' => $catalogLinkedInquiries],
+            ['label' => 'Inquiry created', 'count' => $inquiries],
+            ['label' => 'Quote accepted', 'count' => $quotesAccepted],
+            ['label' => 'Deposit confirmed', 'count' => $depositConfirmed],
+        ];
+        $operationsStages = [
+            ['label' => 'Inquiry created', 'count' => $inquiries],
+            ['label' => 'Quote sent', 'count' => $quotesSent],
+            ['label' => 'Deposit confirmed', 'count' => $depositConfirmed],
+            ['label' => 'Ready', 'count' => $ready],
+            ['label' => 'Completed', 'count' => $completed],
+        ];
+
+        return [
+            'window_days' => $windowDays,
+            'customer' => $this->withDropOff($customerStages),
+            'operations' => $this->withDropOff($operationsStages),
+        ];
+    }
+
+    /**
+     * @param  array<int, array{label:string,count:int}>  $stages
+     * @return array<int, array{label:string,count:int,drop_off_percent:float|null}>
+     */
+    private function withDropOff(array $stages): array
+    {
+        $out = [];
+        foreach ($stages as $idx => $stage) {
+            if ($idx === 0) {
+                $out[] = [
+                    'label' => $stage['label'],
+                    'count' => $stage['count'],
+                    'drop_off_percent' => null,
+                ];
+                continue;
+            }
+            $prev = max(0, (int) ($stages[$idx - 1]['count'] ?? 0));
+            $curr = max(0, (int) ($stage['count'] ?? 0));
+            $drop = $prev > 0 ? round(max(0, (($prev - $curr) / $prev) * 100), 1) : null;
+            $out[] = [
+                'label' => $stage['label'],
+                'count' => $curr,
+                'drop_off_percent' => $drop,
+            ];
+        }
+
+        return $out;
     }
 }
