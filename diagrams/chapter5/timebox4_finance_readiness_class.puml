@@ -1,0 +1,85 @@
+@startuml timebox4_finance_readiness_class
+top to bottom direction
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+class Payment {
+  +id
+  +order_id
+  +type
+  +status
+  +amount_mmk
+}
+
+class Receipt {
+  +id
+  +payment_id
+  +order_id
+  +receipt_number
+  +pdf_storage_path
+  +sha256
+}
+
+class Order {
+  +id
+  +status
+  +total_mmk
+}
+
+class PushDeviceToken {
+  +id
+  +user_id
+  +token
+  +platform
+  +is_active
+}
+
+class Notification {
+  +id
+  +notifiable_type
+  +notifiable_id
+  +read_at
+}
+
+class ReceiptService {
+  +issueForConfirmedPayment()
+  +nextReceiptNumber()
+}
+
+class PaymentVerificationService {
+  +confirm()
+  +reject()
+}
+
+class ReportExportService {
+  +downloadOrderPdf()
+  +downloadPaymentPdf()
+  +exportRows(format)
+}
+
+class DashboardAnalyticsService {
+  +monthlyRevenueSeries()
+  +orderStageDistribution()
+  +inquiryOrderConversionSeries()
+  +slaBreachCount()
+}
+
+class PushNotificationService {
+  +notifyUsers()
+}
+
+Order "1" -- "0..*" Payment
+Payment "1" -- "0..1" Receipt
+Order "1" -- "0..*" Receipt
+
+PaymentVerificationService "1" -- "0..*" Payment
+ReceiptService "1" -- "0..*" Receipt
+ReportExportService "1" -- "0..*" Order
+DashboardAnalyticsService "1" -- "0..*" Order
+
+PushNotificationService "1" -- "0..*" PushDeviceToken
+PushDeviceToken "1" -- "0..*" Notification
+
+@enduml
+

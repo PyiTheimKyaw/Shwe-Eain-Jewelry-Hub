@@ -1,0 +1,67 @@
+@startuml timebox2_inquiry_quote_class
+top to bottom direction
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+class Inquiry {
+  +id
+  +customer_user_id
+  +status
+  +firebase_thread_id
+  --
+  +attachments()
+  +quotes()
+  +timelineLogs()
+}
+
+class InquiryAttachment {
+  +id
+  +inquiry_id
+  +storage_path
+}
+
+class Quote {
+  +id
+  +inquiry_id
+  +status
+  +total_mmk
+  +total_usd_snapshot
+}
+
+class QuoteLineItem {
+  +id
+  +quote_id
+  +weight_grams
+  +labor_fee_mmk
+  +gem_price_mmk
+  +line_total_mmk
+}
+
+class FirebaseInquiryService {
+  +mintChatToken()
+  +syncInquiryThreadDocument()
+  +publishQuoteCardMessage()
+  +publishTimelineLogMessage()
+}
+
+class QuoteBuilderService {
+  +createQuote()
+  +normalizeQuoteLines()
+  +readyMadeDefaultDepositPercentage()
+}
+
+class InquiryPipelinePresenter {
+  +present()
+  +timelineLogs()
+}
+
+Inquiry "1" -- "0..*" InquiryAttachment
+Inquiry "1" -- "0..*" Quote
+Quote "1" -- "1..*" QuoteLineItem
+Inquiry "1" -- "0..*" FirebaseInquiryService
+QuoteBuilderService "1" -- "0..*" Quote
+InquiryPipelinePresenter "1" -- "0..*" Inquiry
+
+@enduml
+

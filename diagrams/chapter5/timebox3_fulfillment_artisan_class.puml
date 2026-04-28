@@ -1,0 +1,85 @@
+@startuml timebox3_fulfillment_artisan_class
+top to bottom direction
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+class Quote {
+  +id
+  +status
+  +total_mmk
+}
+
+class Order {
+  +id
+  +quote_id
+  +status
+  +deposit_amount_mmk
+  --
+  +isReadyMadeFulfillment()
+  +depositPayment()
+}
+
+class Payment {
+  +id
+  +order_id
+  +type
+  +status
+  +amount_mmk
+  --
+  +isDeposit()
+  +isFinal()
+}
+
+class OrderAssignment {
+  +id
+  +order_id
+  +artisan_user_id
+  +status
+  +task_scope
+}
+
+class InquiryImageCandidate {
+  +id
+  +inquiry_id
+  +storage_path
+  +url
+}
+
+class OrderAssignmentReferenceImage {
+  +id
+  +order_assignment_id
+  +inquiry_image_candidate_id
+}
+
+class OrderBuilderService {
+  +acceptSentQuoteAndCreateOrder()
+  +createFromQuote()
+  +insertOrderAndItemsFromQuote()
+  +applySupersedeSideEffects()
+}
+
+class OrderLifecycleService {
+  +assignArtisan()
+  +startProduction()
+  +markReadyForReview()
+  +approveQc()
+}
+
+class PaymentVerificationService {
+  +confirm()
+  +reject()
+}
+
+Quote "1" -- "0..1" Order
+Order "1" -- "0..*" Payment
+Order "1" -- "0..*" OrderAssignment
+OrderAssignment "1" -- "0..*" OrderAssignmentReferenceImage
+InquiryImageCandidate "1" -- "0..*" OrderAssignmentReferenceImage
+
+OrderBuilderService "1" -- "0..*" Order
+OrderLifecycleService "1" -- "0..*" OrderAssignment
+PaymentVerificationService "1" -- "0..*" Payment
+
+@enduml
+
