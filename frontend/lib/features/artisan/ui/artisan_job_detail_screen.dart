@@ -208,87 +208,15 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
   }
 
   Future<({String stage, String? note})?> _pickProgressMeta() async {
-    var selectedStage = 'other';
-    final noteCtrl = TextEditingController();
-
-    final result = await showModalBottomSheet<({String stage, String? note})>(
+    return showModalBottomSheet<({String stage, String? note})>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                12,
-                12,
-                12,
-                MediaQuery.of(context).viewInsets.bottom + 12,
-              ),
-              child: AppGlassCard(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    PremiumText.headline('Progress details', maxLines: 1),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedStage,
-                      decoration: const InputDecoration(labelText: 'Stage'),
-                      items: _progressStages
-                          .map(
-                            (stage) => DropdownMenuItem<String>(
-                              value: stage,
-                              child: Text(_formatStageLabel(stage)),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (v) {
-                        if (v == null) return;
-                        setSheetState(() => selectedStage = v);
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: noteCtrl,
-                      maxLength: 160,
-                      decoration: const InputDecoration(
-                        labelText: 'Short note (optional)',
-                        counterText: '',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        const SizedBox(width: 8),
-                        AppGoldButton(
-                          label: 'Continue',
-                          icon: Icons.arrow_forward_rounded,
-                          onPressed: () {
-                            final note = noteCtrl.text.trim();
-                            Navigator.of(context).pop((
-                              stage: selectedStage,
-                              note: note.isEmpty ? null : note,
-                            ));
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      builder: (context) => _ProgressMetaSheet(
+        stages: _progressStages,
+        formatStageLabel: _formatStageLabel,
+      ),
     );
-    noteCtrl.dispose();
-    return result;
   }
 
   @override
@@ -371,7 +299,17 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
     if (progressMeta == null) {
       return;
     }
-    final files = await ImagePicker().pickMultiImage(imageQuality: 85);
+    List<XFile> files;
+    try {
+      files = await ImagePicker().pickMultiImage(imageQuality: 85);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open photos: $e')),
+        );
+      }
+      return;
+    }
     if (files.isEmpty) {
       return;
     }
@@ -787,6 +725,113 @@ class _ArtisanJobDetailScreenState extends State<ArtisanJobDetailScreen> {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProgressMetaSheet extends StatefulWidget {
+  const _ProgressMetaSheet({
+    required this.stages,
+    required this.formatStageLabel,
+  });
+
+  final List<String> stages;
+  final String Function(String) formatStageLabel;
+
+  @override
+  State<_ProgressMetaSheet> createState() => _ProgressMetaSheetState();
+}
+
+class _ProgressMetaSheetState extends State<_ProgressMetaSheet> {
+  static const String _defaultStage = 'other';
+
+  late String _selectedStage;
+  late TextEditingController _noteCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedStage = _defaultStage;
+    _noteCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        12,
+        12,
+        12,
+        MediaQuery.of(context).viewInsets.bottom + 12,
+      ),
+      child: AppGlassCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PremiumText.headline('Progress details', maxLines: 1),
+            const SizedBox(height: 10),
+            InputDecorator(
+              decoration: const InputDecoration(labelText: 'Stage'),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _selectedStage,
+                  items: widget.stages
+                      .map(
+                        (stage) => DropdownMenuItem<String>(
+                          value: stage,
+                          child: Text(widget.formatStageLabel(stage)),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => _selectedStage = v);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _noteCtrl,
+              maxLength: 160,
+              decoration: const InputDecoration(
+                labelText: 'Short note (optional)',
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                AppGoldButton(
+                  label: 'Continue',
+                  icon: Icons.arrow_forward_rounded,
+                  onPressed: () {
+                    final note = _noteCtrl.text.trim();
+                    Navigator.of(context).pop((
+                      stage: _selectedStage,
+                      note: note.isEmpty ? null : note,
+                    ));
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

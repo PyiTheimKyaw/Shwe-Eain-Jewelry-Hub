@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\MediaStorageService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -12,6 +13,17 @@ class OrderProgressAttachment extends Model
         'storage_path',
         'mime_type',
     ];
+
+    protected $appends = [
+        'url',
+    ];
+
+    public function getUrlAttribute(): string
+    {
+        return app(MediaStorageService::class)->publicUrl(
+            (string) ($this->attributes['storage_path'] ?? ''),
+        );
+    }
 
     public function progressEvent(): BelongsTo
     {

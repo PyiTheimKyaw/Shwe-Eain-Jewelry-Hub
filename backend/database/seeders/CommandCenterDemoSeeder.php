@@ -3,11 +3,14 @@
 namespace Database\Seeders;
 
 use App\Models\ExchangeRateSnapshot;
+use App\Models\GoldPriceSnapshot;
 use App\Models\Inquiry;
 use App\Models\Order;
 use App\Models\OrderAssignment;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\Quote;
+use App\Models\QuoteLineItem;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -20,6 +23,7 @@ class CommandCenterDemoSeeder extends Seeder
         $artisan = User::query()->where('email', 'artisan@jewelryhub.test')->first();
         $admin = User::query()->where('email', 'admin@jewelryhub.test')->first();
         $fxSnapshot = ExchangeRateSnapshot::query()->latest('id')->first();
+        $goldSnapshot = GoldPriceSnapshot::query()->latest('id')->first();
         $productIds = Product::query()->limit(3)->pluck('id')->all();
 
         if (! $customer || ! $artisan || ! $admin) {
@@ -31,7 +35,7 @@ class CommandCenterDemoSeeder extends Seeder
             $monthDate = now()->subMonths($monthOffset)->startOfMonth()->addDays(2);
             for ($i = 0; $i < 4; $i++) {
                 $createdAt = $monthDate->copy()->addDays($i * 4);
-                Inquiry::query()->updateOrCreate(
+                $inquiry = Inquiry::query()->updateOrCreate(
                     ['firebase_thread_id' => "demo-thread-{$monthDate->format('Ym')}-{$i}"],
                     [
                         'customer_user_id' => $customer->id,
@@ -42,6 +46,49 @@ class CommandCenterDemoSeeder extends Seeder
                         'updated_at' => $createdAt,
                     ]
                 );
+
+                // Seed quote flow data so conversion funnel widgets have realistic stage coverage.
+                if ($goldSnapshot && $fxSnapshot && $i < 3) {
+                    $lineTotalMmk = 950000 + ($i * 110000) + (($monthOffset + 1) * 25000);
+                    $lineTotalUsd = $fxSnapshot->mmk_per_usd > 0
+                        ? round($lineTotalMmk / (float) $fxSnapshot->mmk_per_usd, 4)
+                        : 0;
+                    $quoteStatus = $i === 0 ? 'accepted' : 'sent';
+                    $quote = Quote::query()->updateOrCreate(
+                        ['quote_number' => "DEMO-Q-{$monthDate->format('Ym')}-{$i}"],
+                        [
+                            'inquiry_id' => $inquiry->id,
+                            'customer_user_id' => $customer->id,
+                            'gold_price_snapshot_id' => $goldSnapshot->id,
+                            'exchange_rate_snapshot_id' => $fxSnapshot->id,
+                            'status' => $quoteStatus,
+                            'total_mmk' => $lineTotalMmk,
+                            'total_usd_snapshot' => $lineTotalUsd,
+                            'valid_until' => $createdAt->copy()->addDays(7),
+                            'notes_internal' => 'Seeded command center quote for funnel analytics.',
+                            'deposit_percentage_override' => 30,
+                            'deposit_amount_override_mmk' => round($lineTotalMmk * 0.30, 4),
+                            'created_at' => $createdAt,
+                            'updated_at' => $createdAt->copy()->addHours(6),
+                        ]
+                    );
+
+                    QuoteLineItem::query()->updateOrCreate(
+                        ['quote_id' => $quote->id, 'custom_title' => "Demo quote line {$monthDate->format('Ym')}-{$i}"],
+                        [
+                            'product_id' => $productIds[$i % max(1, count($productIds))] ?? null,
+                            'weight_grams' => 8.25 + $i,
+                            'gold_price_mmk_per_gram' => $goldSnapshot->price_mmk_per_gram,
+                            'metal_value_mmk' => 600000 + ($i * 85000),
+                            'labor_fee_mmk' => 210000 + ($i * 25000),
+                            'gem_price_mmk' => 140000 + ($i * 18000),
+                            'line_total_mmk' => $lineTotalMmk,
+                            'line_total_usd_snapshot' => $lineTotalUsd,
+                            'created_at' => $createdAt,
+                            'updated_at' => $createdAt->copy()->addHours(6),
+                        ]
+                    );
+                }
             }
         }
 

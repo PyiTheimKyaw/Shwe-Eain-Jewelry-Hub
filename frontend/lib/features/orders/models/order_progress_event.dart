@@ -25,6 +25,11 @@ class OrderProgressEvent {
     final urls = <String>[];
     for (final item in rawAttachments) {
       final map = Map<String, dynamic>.from(item as Map);
+      final apiUrl = (map['url'] ?? '').toString().trim();
+      if (apiUrl.isNotEmpty) {
+        urls.add(apiUrl);
+        continue;
+      }
       final path = (map['storage_path'] ?? '').toString().trim();
       if (path.isEmpty) {
         continue;

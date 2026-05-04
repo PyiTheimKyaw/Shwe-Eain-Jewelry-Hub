@@ -38,7 +38,7 @@ class DatabaseSeeder extends Seeder
             'role' => UserRole::Artisan,
         ]);
 
-        // $this->call(PricingSnapshotSeeder::class);
+        $this->call(PricingSnapshotSeeder::class);
         $this->call(CatalogSeeder::class);
         $this->call(CommandCenterDemoSeeder::class);
     }
