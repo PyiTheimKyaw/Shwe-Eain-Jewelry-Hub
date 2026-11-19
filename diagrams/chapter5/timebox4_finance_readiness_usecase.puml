@@ -1,0 +1,36 @@
+@startuml timebox4_finance_readiness_usecase
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "Customer" as Customer
+actor "Admin" as Admin
+actor "Artisan" as Artisan
+
+rectangle "Timebox 4: Financial Formalization & Market Readiness" {
+  usecase "Confirm Payment" as UC_Confirm
+  usecase "Issue Receipt PDF" as UC_Receipt
+  usecase "Download Receipt" as UC_Download
+  usecase "Record Final Payment" as UC_Final
+  usecase "Export Operational Reports" as UC_Export
+  usecase "View Command Center KPIs" as UC_Kpi
+  usecase "Receive Push / Inbox Alerts" as UC_Alerts
+  usecase "Use Offline Cached Lists" as UC_Cache
+}
+
+Admin -- UC_Confirm
+Admin -- UC_Final
+Admin -- UC_Export
+Admin -- UC_Kpi
+
+Customer -- UC_Download
+Customer -- UC_Alerts
+Customer -- UC_Cache
+
+Artisan -- UC_Alerts
+
+UC_Confirm ..> UC_Receipt : <<include>>
+UC_Final ..> UC_Receipt : <<include>>
+
+@enduml
+

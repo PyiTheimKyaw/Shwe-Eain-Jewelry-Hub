@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\ExchangeRateSnapshot;
 use App\Models\GoldPriceSnapshot;
+use App\Models\Inquiry;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -97,5 +99,43 @@ class CatalogApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.id', $product->id)
             ->assertJsonPath('meta.pricing_configured', false);
+    }
+
+    public function test_products_include_popular_and_featured_sections(): void
+    {
+        $customer = User::create([
+            'name' => 'Customer',
+            'email' => 'customer+'.uniqid().'@example.com',
+            'password' => bcrypt('password'),
+            'role' => 'customer',
+        ]);
+        $featuredCategory = Category::create([
+            'name' => 'Necklaces',
+            'slug' => 'necklaces-'.uniqid(),
+            'sort_order' => 0,
+            'is_featured' => true,
+        ]);
+        $popularProduct = Product::create([
+            'category_id' => $featuredCategory->id,
+            'sku' => 'POPULAR-1',
+            'title' => 'Popular Necklace',
+            'description' => null,
+            'weight_grams' => 8,
+            'labor_fee_mmk' => 60000,
+            'gem_price_mmk' => 20000,
+            'is_published' => true,
+            'is_ready_made' => true,
+            'is_custom_order_template' => false,
+        ]);
+        Inquiry::create([
+            'customer_user_id' => $customer->id,
+            'product_id' => $popularProduct->id,
+            'message' => 'Interested',
+            'status' => 'open',
+        ]);
+
+        $response = $this->getJson('/api/v1/catalog/products')->assertOk();
+        $response->assertJsonPath('meta.featured_collections.0.id', $featuredCategory->id);
+        $response->assertJsonPath('meta.popular_items.0.id', $popularProduct->id);
     }
 }

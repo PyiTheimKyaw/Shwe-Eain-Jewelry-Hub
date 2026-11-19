@@ -5,11 +5,16 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Services\MediaStorageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
+    public function __construct(
+        protected MediaStorageService $mediaStorage
+    ) {}
+
     public function store(Request $request): JsonResponse
     {
         $this->authorize('create', Product::class);
@@ -77,11 +82,11 @@ class ProductController extends Controller
         ]);
 
         $file = $request->file('image');
-        $path = $file->store('products/'.$product->id, 'public');
+        $stored = $this->mediaStorage->storeImage($file, 'products/'.$product->id);
 
         $image = ProductImage::create([
             'product_id' => $product->id,
-            'storage_path' => $path,
+            'storage_path' => $stored['storage_path'],
             'sort_order' => $request->integer('sort_order', 0),
         ]);
 

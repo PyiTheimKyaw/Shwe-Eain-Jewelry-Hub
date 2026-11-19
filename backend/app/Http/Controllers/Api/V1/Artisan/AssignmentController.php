@@ -13,20 +13,72 @@ class AssignmentController extends Controller
     {
         $items = OrderAssignment::query()
             ->where('artisan_user_id', $request->user()->id)
-            ->with(['order.customer', 'order.items', 'orderItem'])
+            ->with([
+                'order.customer',
+                'order.items.product.images',
+                'order.quote.inquiry.attachments',
+                'orderItem.product.images',
+                'referenceImages.candidate',
+            ])
             ->orderByDesc('created_at')
             ->paginate(30);
 
         return response()->json($items);
     }
 
+    public function stats(Request $request): JsonResponse
+    {
+        $artisanId = $request->user()->id;
+
+        $activeLoad = OrderAssignment::query()
+            ->where('artisan_user_id', $artisanId)
+            ->whereIn('status', ['assigned', 'in_progress'])
+            ->count();
+
+        $blockedCount = OrderAssignment::query()
+            ->where('artisan_user_id', $artisanId)
+            ->where('status', 'blocked')
+            ->count();
+
+        $completed = OrderAssignment::query()
+            ->where('artisan_user_id', $artisanId)
+            ->where('status', 'done')
+            ->count();
+
+        return response()->json([
+            'data' => [
+                'current_active_load' => $activeLoad,
+                'blocked_count' => $blockedCount,
+                'total_completed_jobs' => $completed,
+            ],
+        ]);
+    }
+
     public function show(Request $request, OrderAssignment $assignment): JsonResponse
     {
         $this->authorize('view', $assignment);
 
-        $assignment->load(['order.customer', 'order.items', 'orderItem']);
+        $assignment->load([
+            'order.customer',
+            'order.items.product.images',
+            'order.quote.inquiry.attachments',
+            'orderItem.product.images',
+            'referenceImages.candidate',
+        ]);
 
-        return response()->json(['data' => $assignment]);
+        $latestAdminFeedback = $assignment->order
+            ?->progressEvents()
+            ->whereNotNull('note')
+            ->where('note', '!=', '')
+            ->latest('id')
+            ->value('note');
+
+        return response()->json([
+            'data' => [
+                ...$assignment->toArray(),
+                'latest_admin_feedback' => $latestAdminFeedback,
+            ],
+        ]);
     }
 
     public function update(Request $request, OrderAssignment $assignment): JsonResponse

@@ -1,0 +1,36 @@
+@startuml timebox3_fulfillment_artisan_usecase
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "Customer" as Customer
+actor "Admin" as Admin
+actor "Artisan" as Artisan
+
+rectangle "Timebox 3: Bespoke Fulfillment & Artisan Bridge" {
+  usecase "Accept Latest Quote\n(Create/Supersede Order)" as UC_Accept
+  usecase "Upload Deposit Proof" as UC_Proof
+  usecase "Verify Payment\n(Confirm/Reject)" as UC_Verify
+  usecase "Assign Artisan" as UC_Assign
+  usecase "Attach Reference Images" as UC_Refs
+  usecase "Start Production" as UC_Start
+  usecase "Mark Ready for Review" as UC_Review
+  usecase "Approve QC" as UC_QC
+}
+
+Customer -- UC_Accept
+Customer -- UC_Proof
+
+Admin -- UC_Verify
+Admin -- UC_Assign
+Admin -- UC_Refs
+Admin -- UC_QC
+
+Artisan -- UC_Start
+Artisan -- UC_Review
+
+UC_Assign ..> UC_Refs : <<include>>
+UC_Review ..> UC_QC : <<include>>
+
+@enduml
+

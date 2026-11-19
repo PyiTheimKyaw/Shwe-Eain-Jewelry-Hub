@@ -46,6 +46,11 @@ class Product extends Model
         return $this->hasMany(ProductImage::class);
     }
 
+    public function inquiries(): HasMany
+    {
+        return $this->hasMany(Inquiry::class);
+    }
+
     public function scopePublished($query)
     {
         return $query->where('is_published', true);

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class OrderItem extends Model
 {
@@ -12,6 +13,10 @@ class OrderItem extends Model
         'order_id',
         'product_id',
         'title_snapshot',
+        'metal_type_snapshot',
+        'stone_details_snapshot',
+        'dimensions_snapshot',
+        'ring_size_snapshot',
         'weight_grams',
         'metal_value_mmk',
         'labor_fee_mmk',
@@ -39,7 +44,8 @@ class OrderItem extends Model
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class)
+            ->withoutGlobalScopes([SoftDeletingScope::class]);
     }
 
     public function assignments(): HasMany

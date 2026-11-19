@@ -14,12 +14,14 @@ class Category extends Model
         'name',
         'slug',
         'sort_order',
+        'is_featured',
     ];
 
     protected function casts(): array
     {
         return [
             'sort_order' => 'integer',
+            'is_featured' => 'boolean',
         ];
     }
 

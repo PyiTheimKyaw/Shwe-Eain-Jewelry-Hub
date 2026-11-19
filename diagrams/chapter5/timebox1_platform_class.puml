@@ -1,0 +1,69 @@
+@startuml timebox1_platform_class
+top to bottom direction
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+hide empty members
+
+class User {
+  +id
+  +role
+  +email
+  --
+  +isAdmin()
+  +isCustomer()
+  +canAccessPanel()
+}
+
+class Category {
+  +id
+  +name
+  +slug
+}
+
+class Product {
+  +id
+  +category_id
+  +weight_grams
+  +labor_fee_mmk
+  +gem_price_mmk
+  +is_published
+  --
+  +scopePublished()
+  +scopeReadyMade()
+}
+
+class GoldPriceSnapshot {
+  +id
+  +price_mmk_per_gram
+  +effective_from
+  +effective_to
+}
+
+class ExchangeRateSnapshot {
+  +id
+  +mmk_per_usd
+  +effective_from
+  +effective_to
+}
+
+class PricingService {
+  +currentGoldSnapshot()
+  +currentFxSnapshot()
+  +recordGoldPrice()
+  +recordExchangeRate()
+  +mmkToUsd()
+}
+
+class CatalogProductPresenter {
+  +presentProduct()
+  +presentCollection()
+}
+
+Category "1" -- "0..*" Product
+GoldPriceSnapshot "1" -- "0..*" PricingService
+ExchangeRateSnapshot "1" -- "0..*" PricingService
+PricingService "1" -- "0..*" CatalogProductPresenter
+Product "1" -- "0..*" CatalogProductPresenter
+
+@enduml
+

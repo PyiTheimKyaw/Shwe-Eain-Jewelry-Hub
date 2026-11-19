@@ -3,27 +3,37 @@
 use App\Http\Controllers\Api\V1\Admin\CategoryController as AdminCategoryController;
 use App\Http\Controllers\Api\V1\Admin\DashboardController;
 use App\Http\Controllers\Api\V1\Admin\InquiryController as AdminInquiryController;
+use App\Http\Controllers\Api\V1\Admin\InquiryQuotePublishController;
 use App\Http\Controllers\Api\V1\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Api\V1\Admin\OrderPaymentInstructionController;
+use App\Http\Controllers\Api\V1\Admin\OrderQcController;
+use App\Http\Controllers\Api\V1\Admin\PaymentVerificationController;
 use App\Http\Controllers\Api\V1\Admin\ProductController as AdminProductController;
 use App\Http\Controllers\Api\V1\Admin\ProductImageController as AdminProductImageController;
 use App\Http\Controllers\Api\V1\Admin\QuoteController as AdminQuoteController;
 use App\Http\Controllers\Api\V1\Admin\ReportController;
 use App\Http\Controllers\Api\V1\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Api\V1\Artisan\ArtisanNotificationController;
 use App\Http\Controllers\Api\V1\Artisan\AssignmentController;
+use App\Http\Controllers\Api\V1\Artisan\OrderWorkflowController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\ConversationController;
 use App\Http\Controllers\Api\V1\CustomerOrderController;
+use App\Http\Controllers\Api\V1\CustomerOrderDepositController;
 use App\Http\Controllers\Api\V1\CustomerQuoteController;
+use App\Http\Controllers\Api\V1\CustomerReceiptController;
 use App\Http\Controllers\Api\V1\InquiryController;
 use App\Http\Controllers\Api\V1\OrderProgressController;
 use App\Http\Controllers\Api\V1\PricingController;
+use App\Http\Controllers\Api\V1\PushDeviceController;
 use App\Http\Controllers\Api\V1\UploadController;
+use App\Http\Controllers\Api\V1\UserNotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::post('auth/register', [AuthController::class, 'register']);
-    Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:auth-register');
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:auth-login');
 
     Route::get('catalog/categories', [CatalogController::class, 'categories']);
     Route::get('catalog/products', [CatalogController::class, 'products']);
@@ -33,11 +43,16 @@ Route::prefix('v1')->group(function () {
     Route::get('pricing/fx/current', [PricingController::class, 'fxCurrent']);
 
     Route::middleware('auth:sanctum')->group(function () {
-        Route::post('auth/logout', [AuthController::class, 'logout']);
-        Route::get('auth/me', [AuthController::class, 'me']);
+        Route::post('auth/logout', [AuthController::class, 'logout'])->middleware('throttle:auth-login');
+        Route::get('auth/me', [AuthController::class, 'me'])->middleware('throttle:auth-login');
+        Route::put('auth/password', [AuthController::class, 'updatePassword'])->middleware('throttle:auth-login');
 
-        Route::post('uploads/presign', [UploadController::class, 'presign']);
-        Route::post('uploads', [UploadController::class, 'store']);
+        Route::post('uploads/presign', [UploadController::class, 'presign'])->middleware('throttle:uploads');
+        Route::post('uploads', [UploadController::class, 'store'])->middleware('throttle:uploads');
+        Route::post('push/devices', [PushDeviceController::class, 'store']);
+        Route::delete('push/devices', [PushDeviceController::class, 'destroy']);
+        Route::get('notifications', [UserNotificationController::class, 'index']);
+        Route::post('notifications/{notificationId}/read', [UserNotificationController::class, 'markRead']);
 
         Route::middleware('role:customer')->group(function () {
             Route::post('inquiries', [InquiryController::class, 'store']);
@@ -46,20 +61,33 @@ Route::prefix('v1')->group(function () {
 
             Route::get('quotes/mine', [CustomerQuoteController::class, 'mine']);
             Route::get('quotes/{quote}', [CustomerQuoteController::class, 'show']);
+            Route::post('quotes/{quote}/accept', [CustomerQuoteController::class, 'accept'])->middleware('throttle:quote-customer-decision');
+            Route::post('quotes/{quote}/decline', [CustomerQuoteController::class, 'decline'])->middleware('throttle:quote-customer-decision');
 
             Route::get('orders/mine', [CustomerOrderController::class, 'mine']);
             Route::get('orders/{order}', [CustomerOrderController::class, 'show']);
+            Route::post('orders/{order}/deposit-proof', [CustomerOrderDepositController::class, 'store'])->middleware('throttle:payment-proof-upload');
+            Route::get('orders/{order}/receipts', [CustomerReceiptController::class, 'index']);
+            Route::get('orders/{order}/receipts/{receipt}', [CustomerReceiptController::class, 'show']);
+            Route::get('orders/{order}/receipts/{receipt}/download', [CustomerReceiptController::class, 'download']);
+
+            Route::delete('auth/account', [AuthController::class, 'closeAccount'])->middleware('throttle:auth-login');
         });
 
         Route::post('conversations/{inquiry}/firebase-bootstrap', [ConversationController::class, 'firebaseBootstrap']);
+        Route::post('conversations/{inquiry}/firebase-token', [ConversationController::class, 'firebaseToken']);
 
         Route::get('orders/{order}/progress', [OrderProgressController::class, 'index']);
 
         Route::middleware('role:artisan')->group(function () {
+            Route::get('artisan/notifications', [ArtisanNotificationController::class, 'index']);
+            Route::get('artisan/stats', [AssignmentController::class, 'stats']);
             Route::get('artisan/assignments', [AssignmentController::class, 'index']);
             Route::get('artisan/assignments/{assignment}', [AssignmentController::class, 'show']);
             Route::patch('artisan/assignments/{assignment}', [AssignmentController::class, 'update']);
             Route::post('artisan/orders/{order}/progress', [OrderProgressController::class, 'store']);
+            Route::post('artisan/orders/{order}/start', [OrderWorkflowController::class, 'start']);
+            Route::post('artisan/orders/{order}/ready-for-review', [OrderWorkflowController::class, 'readyForReview']);
         });
 
         Route::middleware('role:admin')->group(function () {
@@ -80,17 +108,22 @@ Route::prefix('v1')->group(function () {
             Route::get('admin/inquiries', [AdminInquiryController::class, 'index']);
             Route::get('admin/inquiries/{inquiry}', [AdminInquiryController::class, 'show']);
             Route::patch('admin/inquiries/{inquiry}', [AdminInquiryController::class, 'update']);
+            Route::post('admin/inquiries/{inquiry}/quotes/publish', InquiryQuotePublishController::class)->middleware('throttle:quote-admin-mutations');
 
             Route::get('admin/quotes', [AdminQuoteController::class, 'index']);
-            Route::post('admin/quotes', [AdminQuoteController::class, 'store']);
+            Route::post('admin/quotes', [AdminQuoteController::class, 'store'])->middleware('throttle:quote-admin-mutations');
             Route::get('admin/quotes/{quote}', [AdminQuoteController::class, 'show']);
-            Route::patch('admin/quotes/{quote}', [AdminQuoteController::class, 'update']);
+            Route::patch('admin/quotes/{quote}', [AdminQuoteController::class, 'update'])->middleware('throttle:quote-admin-mutations');
 
             Route::get('admin/orders', [AdminOrderController::class, 'index']);
             Route::post('admin/orders', [AdminOrderController::class, 'store']);
             Route::get('admin/orders/{order}', [AdminOrderController::class, 'show']);
             Route::patch('admin/orders/{order}', [AdminOrderController::class, 'update']);
             Route::post('admin/orders/{order}/assignments', [AdminOrderController::class, 'storeAssignment']);
+            Route::post('admin/orders/{order}/payment-instructions', [OrderPaymentInstructionController::class, 'store'])->middleware('throttle:payment-admin-actions');
+            Route::post('admin/orders/{order}/qc/approve', [OrderQcController::class, 'approve']);
+            Route::post('admin/payments/{payment}/confirm', [PaymentVerificationController::class, 'confirm'])->middleware('throttle:payment-admin-actions');
+            Route::post('admin/payments/{payment}/reject', [PaymentVerificationController::class, 'reject'])->middleware('throttle:payment-admin-actions');
             Route::post('admin/orders/{order}/progress', [OrderProgressController::class, 'store']);
 
             Route::get('pricing/gold/history', [PricingController::class, 'goldHistory']);

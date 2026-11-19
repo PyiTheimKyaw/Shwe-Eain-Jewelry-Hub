@@ -1,0 +1,94 @@
+@startuml shwe_eain_jewelry_hub_usecase
+' Shwe Eain Jewelry Hub — Comprehensive Use Case Diagram (PlantUML)
+' Actors: Customer, Admin (Command Center), Artisan
+
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #FFFFFF
+  BorderColor #1F2937
+}
+skinparam rectangle {
+  BorderColor #111827
+}
+
+actor "Customer" as Customer
+actor "Admin (Command Center)" as Admin
+actor "Artisan" as Artisan
+
+rectangle "System Boundary: Shwe Eain Jewelry Hub" as SEJH {
+
+  package "Customer Experience" as P_CX {
+    usecase "Browse Digital Catalog" as UC_BrowseCatalog
+    usecase "Initiate Bespoke Consultation" as UC_BespokeConsult
+    usecase "Receive Quote Cards" as UC_ReceiveQuoteCards
+    usecase "Upload Payment Proofs" as UC_UploadPaymentProof
+    usecase "Track Order Pipeline" as UC_TrackPipeline
+    usecase "Download Digital Receipts" as UC_DownloadReceipts
+  }
+
+  package "Admin Command Center" as P_Admin {
+    usecase "Manage Inventory / Catalog" as UC_ManageCatalog
+    usecase "Adjust Daily Gold / FX Rates" as UC_AdjustRates
+    usecase "Generate Dynamic Quotations" as UC_GenerateQuotes
+    usecase "Verify Payments" as UC_VerifyPayments
+    usecase "Assign Tasks to Artisans" as UC_AssignTasks
+    usecase "View Business Intelligence Reports" as UC_ViewBI
+  }
+
+  package "Artisan Workflow" as P_Artisan {
+    usecase "View Assigned Bespoke Orders" as UC_ViewAssignedOrders
+    usecase "Access Design References\n(Artisan Bridge)" as UC_AccessDesignRefs
+    usecase "Update Production Progress\n(In-production, QC, Ready)" as UC_UpdateProgress
+  }
+
+  ' Minimal cross-cutting use cases to show key lifecycle links (kept report-friendly)
+  package "Core Workflow Links" as P_Links {
+    usecase "Publish Quote Card to Customer" as UC_PublishQuoteCard
+    usecase "Issue Digital Receipt" as UC_IssueReceipt
+  }
+}
+
+' =========================================================
+' Actor → Use Case associations
+' =========================================================
+
+' Customer
+Customer -- UC_BrowseCatalog
+Customer -- UC_BespokeConsult
+Customer -- UC_ReceiveQuoteCards
+Customer -- UC_UploadPaymentProof
+Customer -- UC_TrackPipeline
+Customer -- UC_DownloadReceipts
+
+' Admin
+Admin -- UC_ManageCatalog
+Admin -- UC_AdjustRates
+Admin -- UC_GenerateQuotes
+Admin -- UC_VerifyPayments
+Admin -- UC_AssignTasks
+Admin -- UC_ViewBI
+
+' Artisan
+Artisan -- UC_ViewAssignedOrders
+Artisan -- UC_AccessDesignRefs
+Artisan -- UC_UpdateProgress
+
+' =========================================================
+' Key internal relationships (kept minimal for clarity)
+' =========================================================
+UC_GenerateQuotes ..> UC_PublishQuoteCard : <<include>>
+UC_PublishQuoteCard ..> UC_ReceiveQuoteCards : <<include>>
+
+UC_UploadPaymentProof ..> UC_VerifyPayments : <<include>>
+UC_VerifyPayments ..> UC_AssignTasks : <<include>>
+
+UC_AssignTasks ..> UC_ViewAssignedOrders : <<include>>
+UC_AccessDesignRefs ..> UC_ViewAssignedOrders : <<include>>
+UC_UpdateProgress ..> UC_TrackPipeline : <<include>>
+
+UC_VerifyPayments ..> UC_IssueReceipt : <<include>>
+UC_IssueReceipt ..> UC_DownloadReceipts : <<include>>
+
+@enduml

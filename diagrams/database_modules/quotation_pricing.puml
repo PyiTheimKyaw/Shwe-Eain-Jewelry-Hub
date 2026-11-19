@@ -1,0 +1,133 @@
+@startuml sejh_db_module_quotation_pricing
+
+' =========================================================
+' Module 2 — Bespoke Quotation & Dynamic Pricing
+' Focus: Inquiries + Attachments + Timeline, Pricing Snapshots, Quotes, Quote Line Items
+' Export hint: higher DPI for report screenshots.
+' =========================================================
+
+left to right direction
+hide methods
+skinparam dpi 220
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #111827
+  ArrowColor #111827
+}
+
+' Minimal reference tables (to clarify foreign keys without pulling full modules)
+class users <<ref>> {
+  +id : bigint <<PK>>
+}
+class products <<ref>> {
+  +id : bigint <<PK>>
+}
+
+package "Inquiries (Concierge)" {
+  class inquiries <<table>> {
+    +id : bigint <<PK>>
+    --
+    +customer_user_id : bigint <<FK users.id>>
+    +product_id : bigint? <<FK products.id>>
+    +message : text
+    +status : enum(open|reviewing|quoted|closed)
+    +firebase_thread_id : string?
+    +created_at : timestamp
+  }
+
+  class inquiry_attachments <<table>> {
+    +id : bigint <<PK>>
+    --
+    +inquiry_id : bigint <<FK inquiries.id>>
+    +storage_path : string
+    +mime_type : string?
+    +created_at : timestamp
+  }
+
+  class inquiry_timeline_logs <<table>> {
+    +id : bigint <<PK>>
+    --
+    +inquiry_id : bigint <<FK inquiries.id>>
+    +message : string
+    +occurred_at : timestamp?
+    +created_at : timestamp
+  }
+}
+
+package "Pricing (Snapshots)" {
+  class gold_price_snapshots <<table>> {
+    +id : bigint <<PK>>
+    --
+    +price_mmk_per_gram : decimal(18,4)
+    +effective_from : datetime
+    +effective_to : datetime?
+    +set_by_user_id : bigint? <<FK users.id>>
+    +created_at : timestamp
+  }
+
+  class exchange_rate_snapshots <<table>> {
+    +id : bigint <<PK>>
+    --
+    +mmk_per_usd : decimal(18,4)
+    +effective_from : datetime
+    +effective_to : datetime?
+    +set_by_user_id : bigint? <<FK users.id>>
+    +created_at : timestamp
+  }
+}
+
+package "Quotes" {
+  class quotes <<table>> {
+    +id : bigint <<PK>>
+    --
+    +inquiry_id : bigint? <<FK inquiries.id>>
+    +customer_user_id : bigint <<FK users.id>>
+    +gold_price_snapshot_id : bigint <<FK gold_price_snapshots.id>>
+    +exchange_rate_snapshot_id : bigint <<FK exchange_rate_snapshots.id>>
+    +quote_number : string <<UNIQUE>>
+    +status : enum(draft|sent|accepted|expired|void)
+    +total_mmk : decimal(18,4)
+    +total_usd_snapshot : decimal(14,4)
+    +valid_until : datetime?
+    +created_at : timestamp
+  }
+
+  class quote_line_items <<table>> {
+    +id : bigint <<PK>>
+    --
+    +quote_id : bigint <<FK quotes.id>>
+    +product_id : bigint? <<FK products.id>>
+    +custom_title : string?
+    +metal_type : string?
+    +stone_details : text?
+    +weight_grams : decimal(12,4)
+    +gold_price_mmk_per_gram : decimal(18,4)
+    +metal_value_mmk : decimal(18,4)
+    +labor_fee_mmk : decimal(18,4)
+    +gem_price_mmk : decimal(18,4)?
+    +line_total_mmk : decimal(18,4)
+    +line_total_usd_snapshot : decimal(14,4)
+    +created_at : timestamp
+  }
+}
+
+' Relationships (UML multiplicities)
+users "1" -- "0..*" inquiries : opens >
+products "1" -- "0..*" inquiries : referenced by >
+inquiries "1" -- "0..*" inquiry_attachments : includes >
+inquiries "1" -- "0..*" inquiry_timeline_logs : logs >
+
+inquiries "1" -- "0..*" quotes : may produce >
+users "1" -- "0..*" quotes : owns >
+gold_price_snapshots "1" -- "0..*" quotes : priced by >
+exchange_rate_snapshots "1" -- "0..*" quotes : fx by >
+
+quotes "1" -- "1..*" quote_line_items : includes >
+products "1" -- "0..*" quote_line_items : optional source >
+
+@enduml
+

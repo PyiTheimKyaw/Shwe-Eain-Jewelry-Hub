@@ -3,15 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:jewelry_hub/core/providers/catalog_pricing_provider.dart';
 import 'package:jewelry_hub/core/ui/design_system.dart';
 import 'package:jewelry_hub/core/ui/widgets/app_glass_card.dart';
+import 'package:jewelry_hub/core/ui/widgets/app_refresh.dart';
+import 'package:jewelry_hub/core/ui/widgets/customer_tab_header.dart';
+import 'package:jewelry_hub/core/ui/widgets/display_preferences_sheet.dart';
 import 'package:jewelry_hub/core/ui/widgets/price_tag.dart';
 import 'package:jewelry_hub/core/ui/widgets/premium_text.dart';
+import 'package:jewelry_hub/core/ui/widgets/shwe_eain_gold_placeholder.dart';
 import 'package:jewelry_hub/core/ui/widgets/weight_badge.dart';
 import 'package:jewelry_hub/features/catalog/data/catalog_api.dart';
-import 'package:jewelry_hub/features/catalog/models/catalog_product.dart';
 import 'package:jewelry_hub/features/catalog/ui/catalog_toggle_bar.dart';
+import 'package:jewelry_hub/features/catalog/models/catalog_product.dart';
 import 'package:jewelry_hub/features/catalog/ui/product_detail_screen.dart';
+import 'package:jewelry_hub/features/catalog/widgets/product_favorite_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:intl/intl.dart';
 
 class ProductCatalogScreen extends StatefulWidget {
   const ProductCatalogScreen({super.key});
@@ -21,9 +27,16 @@ class ProductCatalogScreen extends StatefulWidget {
 }
 
 class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
+  List<CatalogCategory> _categories = const [];
+  List<CatalogProduct> _newArrivals = const [];
+  List<CatalogProduct> _popularItems = const [];
+  List<FeaturedCollection> _featuredCollections = const [];
   List<CatalogProduct>? _items;
+  int? _selectedCategoryId;
   Object? _error;
   bool _loading = true;
+  DateTime? _lastSyncedAt;
+  bool _showingCached = false;
 
   @override
   void initState() {
@@ -31,52 +44,256 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     await context.read<CatalogPricing>().refresh();
     try {
-      final list = await CatalogApi.fetchProducts();
+      final categories = await CatalogApi.fetchCategories();
+      final result = await CatalogApi.fetchProducts(
+        categoryId: _selectedCategoryId,
+      );
       if (mounted) {
         setState(() {
-          _items = list;
+          _categories = categories;
+          _newArrivals = result.newArrivals;
+          _popularItems = result.popularItems;
+          _featuredCollections = result.featuredCollections;
+          _items = result.products;
+          _lastSyncedAt = result.lastSyncedAt;
+          _showingCached = result.fromCache;
           _loading = false;
+          _error = null;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e;
-          _loading = false;
-        });
+        if (silent && _items != null && _items!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$e')),
+          );
+        } else {
+          setState(() {
+            _error = e;
+            _loading = false;
+          });
+        }
       }
     }
   }
 
+  Future<void> _applyCategory(int? categoryId) async {
+    setState(() {
+      _selectedCategoryId = categoryId;
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await CatalogApi.fetchProducts(categoryId: categoryId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _newArrivals = result.newArrivals;
+        _popularItems = result.popularItems;
+        _featuredCollections = result.featuredCollections;
+        _items = result.products;
+        _lastSyncedAt = result.lastSyncedAt;
+        _showingCached = result.fromCache;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _openDisplayPreferencesSheet() =>
+      showDisplayPreferencesSheet(context);
+
+  Widget _buildCategoryChips() {
+    final chips = <Widget>[
+      ChoiceChip(
+        label: const Text('All'),
+        selected: _selectedCategoryId == null,
+        onSelected: (_) => _applyCategory(null),
+      ),
+      ..._categories.map(
+        (category) => ChoiceChip(
+          label: Text(category.name),
+          selected: _selectedCategoryId == category.id,
+          onSelected: (_) => _applyCategory(category.id),
+        ),
+      ),
+    ];
+
+    return SliverToBoxAdapter(
+      child: SizedBox(
+        height: 48,
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+          scrollDirection: Axis.horizontal,
+          itemBuilder: (context, index) => chips[index],
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemCount: chips.length,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewArrivalsCarousel() {
+    if (_newArrivals.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PremiumText.caption('NEW ARRIVALS', color: AppColors.goldMuted),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 204,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _newArrivals.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final product = _newArrivals[index];
+                  return _NewArrivalCard(product: product);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPopularItemsCarousel() {
+    if (_popularItems.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PremiumText.caption('POPULAR ITEMS', color: AppColors.goldMuted),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 204,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _popularItems.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final product = _popularItems[index];
+                  return _NewArrivalCard(product: product);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeaturedCollections() {
+    if (_featuredCollections.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PremiumText.caption(
+              'FEATURED COLLECTIONS',
+              color: AppColors.goldMuted,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 90,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: _featuredCollections.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  final collection = _featuredCollections[index];
+                  return _FeaturedCollectionChip(
+                    collection: collection,
+                    onTap: () => _applyCategory(collection.id),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final syncFmt = DateFormat('MMM d, HH:mm');
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppGradients.backgroundMesh),
         child: SafeArea(
           child: RefreshIndicator(
-            color: AppColors.gold,
-            onRefresh: _load,
+            color: AppRefresh.indicatorColor,
+            strokeWidth: AppRefresh.strokeWidth,
+            onRefresh: () => _load(silent: true),
             child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: AppRefresh.scrollPhysics,
               slivers: [
-                SliverAppBar(
-                  pinned: true,
-                  floating: false,
-                  backgroundColor: AppColors.background.withValues(alpha: 0.85),
-                  title: PremiumText.display('Jewelry Hub'),
-                  bottom: const PreferredSize(
-                    preferredSize: Size.fromHeight(52),
-                    child: CatalogToggleBar(),
-                  ),
+                CustomerTabHeader.sliverAppBar(
+                  title: 'Catalog',
+                  backgroundOpacity: 0.85,
+                  actions: [
+                    IconButton(
+                      tooltip: 'Display preferences',
+                      icon: const Icon(
+                        Icons.tune_rounded,
+                        color: AppColors.gold,
+                      ),
+                      onPressed: _openDisplayPreferencesSheet,
+                    ),
+                  ],
                 ),
+                const SliverToBoxAdapter(child: CatalogToggleBar()),
+                if (_lastSyncedAt != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                      child: PremiumText.caption(
+                        _showingCached
+                            ? 'Offline view · Last synced ${syncFmt.format(_lastSyncedAt!)}'
+                            : 'Last synced ${syncFmt.format(_lastSyncedAt!)}',
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                _buildNewArrivalsCarousel(),
+                _buildPopularItemsCarousel(),
+                _buildFeaturedCollections(),
+                _buildCategoryChips(),
                 if (_error != null)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -93,11 +310,11 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                     sliver: SliverGrid(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.72,
-                      ),
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.72,
+                          ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) => const _ShimmerCard(),
                         childCount: 6,
@@ -117,18 +334,15 @@ class _ProductCatalogScreenState extends State<ProductCatalogScreen> {
                     sliver: SliverGrid(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.72,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final p = _items![index];
-                          return _ProductTile(product: p);
-                        },
-                        childCount: _items!.length,
-                      ),
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 0.72,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final p = _items![index];
+                        return _ProductTile(product: p);
+                      }, childCount: _items!.length),
                     ),
                   ),
               ],
@@ -158,6 +372,82 @@ class _ShimmerCard extends StatelessWidget {
   }
 }
 
+class _NewArrivalCard extends StatelessWidget {
+  const _NewArrivalCard({required this.product});
+
+  final CatalogProduct product;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = product.primaryImageUrl;
+    return SizedBox(
+      width: 162,
+      child: AppGlassCard(
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => ProductDetailScreen(productId: product.id),
+            ),
+          );
+        },
+        padding: const EdgeInsets.all(0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppRadii.md),
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (url == null)
+                      Container(
+                        color: AppColors.surface,
+                        child: const ShweEainGoldPlaceholder(compact: true),
+                      )
+                    else
+                      CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Shimmer.fromColors(
+                          baseColor: AppColors.surface,
+                          highlightColor: AppColors.surfaceElevated,
+                          child: Container(color: AppColors.surface),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: AppColors.surface,
+                          child: const ShweEainGoldPlaceholder(compact: true),
+                        ),
+                      ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: ProductFavoriteButton(productId: product.id),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  PremiumText.body(product.title, maxLines: 1),
+                  const SizedBox(height: 6),
+                  PriceTag(pricing: product.pricing),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ProductTile extends StatelessWidget {
   const _ProductTile({required this.product});
 
@@ -180,15 +470,19 @@ class _ProductTile extends StatelessWidget {
         children: [
           Expanded(
             child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(AppRadii.md)),
-              child: url == null
-                  ? Container(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppRadii.md),
+              ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (url == null)
+                    Container(
                       color: AppColors.surface,
-                      child: const Icon(Icons.image_not_supported_outlined,
-                          color: AppColors.textSecondary),
+                      child: const ShweEainGoldPlaceholder(compact: true),
                     )
-                  : Hero(
+                  else
+                    Hero(
                       tag: 'product-hero-${product.id}',
                       child: CachedNetworkImage(
                         imageUrl: url,
@@ -200,11 +494,17 @@ class _ProductTile extends StatelessWidget {
                         ),
                         errorWidget: (context, url, error) => Container(
                           color: AppColors.surface,
-                          child: const Icon(Icons.broken_image_outlined,
-                              color: AppColors.textSecondary),
+                          child: const ShweEainGoldPlaceholder(compact: true),
                         ),
                       ),
                     ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: ProductFavoriteButton(productId: product.id),
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(
@@ -217,9 +517,9 @@ class _ProductTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 WeightBadge(grams: product.weightGrams),
@@ -229,6 +529,67 @@ class _ProductTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FeaturedCollectionChip extends StatelessWidget {
+  const _FeaturedCollectionChip({
+    required this.collection,
+    required this.onTap,
+  });
+
+  final FeaturedCollection collection;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 180,
+      child: AppGlassCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(0),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (collection.coverImageUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                child: CachedNetworkImage(
+                  imageUrl: collection.coverImageUrl!,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadii.md),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.15),
+                    Colors.black.withValues(alpha: 0.55),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  PremiumText.body(collection.name, maxLines: 1),
+                  PremiumText.caption(
+                    '${collection.publishedProductsCount} items',
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

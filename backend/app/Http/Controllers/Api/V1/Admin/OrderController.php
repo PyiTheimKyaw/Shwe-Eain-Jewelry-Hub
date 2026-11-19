@@ -5,16 +5,33 @@ namespace App\Http\Controllers\Api\V1\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderAssignment;
+use App\Models\Payment;
 use App\Models\Quote;
-use App\Models\User;
+use App\Services\AdminAuditLogService;
 use App\Services\OrderBuilderService;
+use App\Services\OrderLifecycleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
+    /** @var array<string, list<string>> */
+    private const STATUS_TRANSITIONS = [
+        'awaiting_deposit' => ['deposit_confirmed', 'cancelled'],
+        'deposit_confirmed' => ['in_production', 'cancelled'],
+        'in_production' => ['pending_qc', 'cancelled'],
+        'pending_qc' => ['ready', 'in_production', 'cancelled'],
+        'ready' => ['shipped', 'completed', 'cancelled'],
+        'shipped' => ['completed', 'cancelled'],
+        'completed' => [],
+        'cancelled' => [],
+    ];
+
     public function __construct(
-        protected OrderBuilderService $orders
+        protected OrderBuilderService $orders,
+        protected OrderLifecycleService $lifecycle,
+        protected AdminAuditLogService $auditLogs
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -37,6 +54,7 @@ class OrderController extends Controller
             'progressEvents.attachments',
             'progressEvents.artisan',
             'quote',
+            'payments',
         ]);
 
         return response()->json(['data' => $order]);
@@ -50,6 +68,16 @@ class OrderController extends Controller
 
         $quote = Quote::query()->findOrFail($data['quote_id']);
         $order = $this->orders->createFromQuote($quote);
+        $this->auditLogs->log(
+            action: 'admin.order.created_from_quote',
+            actor: $request->user(),
+            target: $order,
+            category: 'workflow',
+            context: [
+                'quote_id' => $quote->id,
+                'quote_number' => $quote->quote_number,
+            ],
+        );
 
         return response()->json(['data' => $order], 201);
     }
@@ -57,11 +85,61 @@ class OrderController extends Controller
     public function update(Request $request, Order $order): JsonResponse
     {
         $data = $request->validate([
-            'status' => ['sometimes', 'in:pending,confirmed,in_production,qa,ready,shipped,completed,cancelled'],
+            'status' => ['sometimes', 'in:awaiting_deposit,deposit_confirmed,in_production,pending_qc,ready,shipped,completed,cancelled'],
             'shipping_notes' => ['nullable', 'string', 'max:10000'],
         ]);
 
+        if (array_key_exists('status', $data)) {
+            $nextStatus = $data['status'];
+            $currentStatus = (string) $order->status;
+            if ($nextStatus !== $currentStatus) {
+                $allowed = self::STATUS_TRANSITIONS[$currentStatus] ?? [];
+                if (! in_array($nextStatus, $allowed, true)) {
+                    return response()->json([
+                        'message' => "Invalid status transition: {$currentStatus} -> {$nextStatus}.",
+                    ], 422);
+                }
+
+                if (in_array($nextStatus, ['deposit_confirmed', 'in_production'], true)) {
+                    $depositConfirmed = Payment::query()
+                        ->where('order_id', $order->id)
+                        ->where('type', Payment::TYPE_DEPOSIT)
+                        ->where('status', Payment::STATUS_CONFIRMED)
+                        ->exists();
+                    if (! $depositConfirmed) {
+                        return response()->json([
+                            'message' => 'Cannot set this order status without a confirmed deposit payment.',
+                        ], 422);
+                    }
+                }
+
+                if ($nextStatus === 'pending_qc') {
+                    $inProgressAssignment = OrderAssignment::query()
+                        ->where('order_id', $order->id)
+                        ->where('status', 'in_progress')
+                        ->exists();
+                    if (! $inProgressAssignment) {
+                        return response()->json([
+                            'message' => 'Cannot move to quality review without an active in-progress assignment.',
+                        ], 422);
+                    }
+                }
+            }
+        }
+
+        $oldStatus = (string) $order->status;
         $order->update($data);
+        $this->auditLogs->log(
+            action: 'admin.order.updated',
+            actor: $request->user(),
+            target: $order,
+            category: 'admin',
+            context: [
+                'old_status' => $oldStatus,
+                'new_status' => $data['status'] ?? $oldStatus,
+                'shipping_notes_updated' => array_key_exists('shipping_notes', $data),
+            ],
+        );
 
         return response()->json(['data' => $order->fresh()]);
     }
@@ -72,29 +150,30 @@ class OrderController extends Controller
             'artisan_user_id' => ['required', 'exists:users,id'],
             'task_scope' => ['required', 'in:full_order,line_item'],
             'order_item_id' => ['nullable', 'required_if:task_scope,line_item', 'exists:order_items,id'],
-            'instructions' => ['nullable', 'string', 'max:5000'],
+            'instructions' => ['nullable', 'required_if:task_scope,line_item', 'string', 'max:5000'],
+            'target_deadline_at' => ['nullable', 'date'],
+            'priority_level' => ['nullable', 'in:low,normal,high,urgent'],
+            'reference_image_ids' => ['nullable', 'array', 'max:12'],
+            'reference_image_ids.*' => ['integer', 'exists:inquiry_image_candidates,id'],
         ]);
 
-        if ($data['task_scope'] === 'line_item' && $data['order_item_id']) {
-            $belongs = $order->items()->whereKey($data['order_item_id'])->exists();
-            if (! $belongs) {
-                return response()->json(['message' => 'Order item does not belong to this order.'], 422);
-            }
+        try {
+            $assignment = $this->lifecycle->assignArtisan(
+                $order,
+                (int) $data['artisan_user_id'],
+                (string) $data['task_scope'],
+                isset($data['order_item_id']) ? (int) $data['order_item_id'] : null,
+                $data['instructions'] ?? null,
+                $data['target_deadline_at'] ?? null,
+                $data['priority_level'] ?? 'normal',
+                array_values(array_map('intval', $data['reference_image_ids'] ?? []))
+            );
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'errors' => $e->errors(),
+            ], 422);
         }
-
-        $artisan = User::query()->findOrFail($data['artisan_user_id']);
-        if (! $artisan->isArtisan()) {
-            return response()->json(['message' => 'User is not an artisan.'], 422);
-        }
-
-        $assignment = OrderAssignment::create([
-            'order_id' => $order->id,
-            'artisan_user_id' => $data['artisan_user_id'],
-            'task_scope' => $data['task_scope'],
-            'order_item_id' => $data['order_item_id'] ?? null,
-            'instructions' => $data['instructions'] ?? null,
-            'status' => 'assigned',
-        ]);
 
         return response()->json(['data' => $assignment->load('artisan')], 201);
     }

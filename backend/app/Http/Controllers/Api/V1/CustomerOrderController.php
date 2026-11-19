@@ -13,7 +13,12 @@ class CustomerOrderController extends Controller
     {
         $items = Order::query()
             ->where('customer_user_id', $request->user()->id)
-            ->with('items')
+            ->with([
+                'items.product.images',
+                'receipts',
+                'quote.inquiry.attachments',
+                'quote.inquiry.product.images',
+            ])
             ->orderByDesc('created_at')
             ->paginate(20);
 
@@ -24,7 +29,16 @@ class CustomerOrderController extends Controller
     {
         $this->authorize('view', $order);
 
-        $order->load(['items', 'assignments.artisan', 'progressEvents.attachments', 'progressEvents.artisan']);
+        $order->load([
+            'items.product.images',
+            'quote.inquiry.attachments',
+            'quote.inquiry.product.images',
+            'assignments.artisan',
+            'progressEvents.attachments',
+            'progressEvents.artisan',
+            'payments.receipt',
+            'receipts',
+        ]);
 
         return response()->json(['data' => $order]);
     }

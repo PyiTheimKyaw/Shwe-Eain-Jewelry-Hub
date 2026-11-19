@@ -19,6 +19,8 @@ class Quote extends Model
         'total_usd_snapshot',
         'valid_until',
         'notes_internal',
+        'deposit_percentage_override',
+        'deposit_amount_override_mmk',
     ];
 
     protected function casts(): array
@@ -27,6 +29,8 @@ class Quote extends Model
             'total_mmk' => 'decimal:4',
             'total_usd_snapshot' => 'decimal:4',
             'valid_until' => 'datetime',
+            'deposit_percentage_override' => 'decimal:2',
+            'deposit_amount_override_mmk' => 'decimal:4',
         ];
     }
 

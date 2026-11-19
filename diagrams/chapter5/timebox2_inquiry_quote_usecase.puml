@@ -1,0 +1,36 @@
+@startuml timebox2_inquiry_quote_usecase
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "Customer" as Customer
+actor "Admin" as Admin
+
+rectangle "Timebox 2: Realtime Inquiry & Concierge Quotation" {
+  usecase "Create Inquiry" as UC_Inquiry
+  usecase "Request Firebase Chat Token" as UC_Token
+  usecase "Exchange Realtime Messages" as UC_Chat
+  usecase "Publish Quote (Admin)" as UC_Publish
+  usecase "Accept Quote" as UC_Accept
+  usecase "Decline Quote" as UC_Decline
+  usecase "Refresh Pipeline / Timeline" as UC_Pipeline
+}
+
+Customer -- UC_Inquiry
+Customer -- UC_Token
+Customer -- UC_Chat
+Customer -- UC_Accept
+Customer -- UC_Decline
+Customer -- UC_Pipeline
+
+Admin -- UC_Token
+Admin -- UC_Chat
+Admin -- UC_Publish
+Admin -- UC_Pipeline
+
+UC_Publish ..> UC_Pipeline : <<include>>
+UC_Accept ..> UC_Pipeline : <<include>>
+UC_Decline ..> UC_Pipeline : <<include>>
+
+@enduml
+

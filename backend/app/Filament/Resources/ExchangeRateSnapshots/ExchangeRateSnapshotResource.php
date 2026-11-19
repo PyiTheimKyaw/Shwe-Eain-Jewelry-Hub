@@ -26,7 +26,7 @@ class ExchangeRateSnapshotResource extends Resource
 
     protected static ?string $pluralModelLabel = 'exchange rate snapshots';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Pricing';
+    protected static string|UnitEnum|null $navigationGroup = 'Inventory';
 
     protected static ?int $navigationSort = 2;
 

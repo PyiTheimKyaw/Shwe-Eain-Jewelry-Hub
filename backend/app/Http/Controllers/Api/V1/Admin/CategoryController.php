@@ -18,6 +18,7 @@ class CategoryController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['nullable', 'string', 'max:255', 'unique:categories,slug'],
             'sort_order' => ['nullable', 'integer', 'min:0'],
+            'is_featured' => ['nullable', 'boolean'],
         ]);
 
         $slug = $data['slug'] ?? Str::slug($data['name']);
@@ -29,6 +30,7 @@ class CategoryController extends Controller
             'name' => $data['name'],
             'slug' => $slug,
             'sort_order' => $data['sort_order'] ?? 0,
+            'is_featured' => (bool) ($data['is_featured'] ?? false),
         ]);
 
         return response()->json(['data' => $category], 201);
@@ -42,6 +44,7 @@ class CategoryController extends Controller
             'name' => ['sometimes', 'string', 'max:255'],
             'slug' => ['sometimes', 'string', 'max:255', 'unique:categories,slug,'.$category->id],
             'sort_order' => ['sometimes', 'integer', 'min:0'],
+            'is_featured' => ['sometimes', 'boolean'],
         ]);
 
         $category->update($data);

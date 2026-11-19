@@ -5,12 +5,12 @@ namespace App\Services;
 use App\Models\ExchangeRateSnapshot;
 use App\Models\GoldPriceSnapshot;
 use App\Models\Product;
-use Illuminate\Support\Facades\Storage;
 
 class CatalogProductPresenter
 {
     public function __construct(
-        protected PricingService $pricing
+        protected PricingService $pricing,
+        protected MediaStorageService $mediaStorage
     ) {}
 
     /**
@@ -44,7 +44,7 @@ class CatalogProductPresenter
             'images' => $product->images->map(fn ($img) => [
                 'id' => $img->id,
                 'storage_path' => $img->storage_path,
-                'url' => Storage::disk('public')->url($img->storage_path),
+                'url' => $this->mediaStorage->publicUrl($img->storage_path),
                 'sort_order' => $img->sort_order,
             ])->values()->all(),
             'pricing' => null,

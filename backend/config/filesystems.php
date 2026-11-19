@@ -1,5 +1,10 @@
 <?php
 
+$firebaseCredentials = env('FIREBASE_CREDENTIALS');
+if (is_string($firebaseCredentials) && $firebaseCredentials !== '' && ! str_starts_with($firebaseCredentials, '/')) {
+    $firebaseCredentials = base_path($firebaseCredentials);
+}
+
 return [
 
     /*
@@ -56,6 +61,20 @@ return [
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'throw' => false,
+            'report' => false,
+        ],
+
+        'firebase' => [
+            'driver' => 'gcs',
+            'project_id' => env('FIREBASE_PROJECT_ID'),
+            'key_file_path' => $firebaseCredentials,
+            'bucket' => env('FIREBASE_STORAGE_BUCKET'),
+            'path_prefix' => env('FIREBASE_STORAGE_PATH_PREFIX', ''),
+            'storage_api_uri' => env('FIREBASE_STORAGE_API_URI'),
+            'api_endpoint' => env('FIREBASE_STORAGE_API_ENDPOINT'),
+            'visibility' => 'public',
+            'url' => env('FIREBASE_STORAGE_PUBLIC_URL'),
             'throw' => false,
             'report' => false,
         ],

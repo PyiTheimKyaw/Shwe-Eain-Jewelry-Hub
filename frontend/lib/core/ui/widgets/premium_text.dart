@@ -22,6 +22,7 @@ class PremiumText {
     TextAlign? textAlign,
     int? maxLines,
     TextOverflow? overflow,
+    Color? color,
   }) {
     return Builder(
       builder: (context) => Text(
@@ -29,7 +30,7 @@ class PremiumText {
         textAlign: textAlign,
         maxLines: maxLines,
         overflow: overflow,
-        style: Theme.of(context).textTheme.headlineMedium,
+        style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: color),
       ),
     );
   }
@@ -39,24 +40,29 @@ class PremiumText {
     TextAlign? textAlign,
     Color? color,
     int? maxLines,
+    TextOverflow? overflow = TextOverflow.ellipsis,
   }) {
     return Builder(
       builder: (context) => Text(
         text,
         textAlign: textAlign,
         maxLines: maxLines,
-        overflow: TextOverflow.ellipsis,
+        overflow: overflow,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: color),
       ),
     );
   }
 
-  static Widget caption(String text, {TextAlign? textAlign}) {
+  static Widget caption(
+    String text, {
+    TextAlign? textAlign,
+    Color? color,
+  }) {
     return Builder(
       builder: (context) => Text(
         text,
         textAlign: textAlign,
-        style: Theme.of(context).textTheme.labelLarge,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color),
       ),
     );
   }

@@ -59,14 +59,80 @@ class CatalogController extends Controller
         $fx = $this->pricing->currentFxSnapshot();
         $pricingConfigured = $gold !== null && $fx !== null;
 
-        $paginator = $query->orderBy('title')->paginate(20);
+        $paginator = $query->orderByDesc('created_at')->paginate(20);
 
         $paginator->getCollection()->transform(
             fn (Product $product) => $this->presenter->present($product, $pricingConfigured, $gold, $fx)
         );
 
+        $newArrivals = Product::query()
+            ->published()
+            ->with(['images', 'category'])
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get()
+            ->map(fn (Product $product) => $this->presenter->present($product, $pricingConfigured, $gold, $fx))
+            ->values()
+            ->all();
+
+        $popularItems = Product::query()
+            ->published()
+            ->with(['images', 'category'])
+            ->withCount('inquiries')
+            ->orderByDesc('inquiries_count')
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get()
+            ->map(function (Product $product) use ($pricingConfigured, $gold, $fx): array {
+                $presented = $this->presenter->present($product, $pricingConfigured, $gold, $fx);
+                $presented['inquiry_count'] = (int) ($product->inquiries_count ?? 0);
+                // Favorite counts are currently local-only on client; keep explicit key for future sync.
+                $presented['favorite_count'] = 0;
+
+                return $presented;
+            })
+            ->values()
+            ->all();
+
+        $featuredCollections = Category::query()
+            ->where('is_featured', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->limit(8)
+            ->get(['id', 'name', 'slug'])
+            ->map(function (Category $category): array {
+                $coverPath = Product::query()
+                    ->published()
+                    ->where('category_id', $category->id)
+                    ->join('product_images', 'product_images.product_id', '=', 'products.id')
+                    ->orderBy('product_images.sort_order')
+                    ->value('product_images.storage_path');
+
+                return [
+                    'id' => $category->id,
+                    'name' => $category->name,
+                    'slug' => $category->slug,
+                    'cover_image_url' => filled($coverPath)
+                        ? app(\App\Services\MediaStorageService::class)->publicUrl((string) $coverPath)
+                        : null,
+                    'published_products_count' => Product::query()
+                        ->published()
+                        ->where('category_id', $category->id)
+                        ->count(),
+                ];
+            })
+            ->values()
+            ->all();
+
         $payload = $paginator->toArray();
-        $payload['meta'] = $this->presenter->catalogMeta($pricingConfigured);
+        $payload['meta'] = array_merge(
+            $this->presenter->catalogMeta($pricingConfigured),
+            [
+                'new_arrivals' => $newArrivals,
+                'popular_items' => $popularItems,
+                'featured_collections' => $featuredCollections,
+            ]
+        );
 
         return response()->json($payload);
     }

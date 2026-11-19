@@ -1,0 +1,117 @@
+@startuml SEJH_Clear_Class_Diagram
+' Layout Config
+left to right direction
+skinparam dpi 200
+skinparam shadowing false
+skinparam roundcorner 5
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+' High Contrast Colors for Print/Report
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor Black
+    HeaderBackgroundColor White
+    ' စာသားကို အနက်ရောင်ဖြစ်အောင် သေချာသတ်မှတ်ပေးလိုက်ပါတယ်
+    FontColor Black
+    AttributeFontColor #333333
+}
+
+title Shwe Eain Jewelry Hub - High-Level UML Class Diagram
+
+' ===== Core Classes =====
+
+class User {
+    **{static} id: bigint <<PK>>**
+    +name: string
+    +email: string
+    +role: enum
+    --
+    +isAdmin(): bool
+    +isArtisan(): bool
+}
+
+class Product {
+    **{static} id: bigint <<PK>>**
+    +sku: string
+    +title: string
+    +weight_grams: decimal
+    +labor_fee_mmk: decimal
+}
+
+package "Bespoke & Pricing" #F2F2F2 {
+    class Inquiry {
+        **{static} id: bigint <<PK>>**
+        #customer_id: bigint <<FK>>
+        +status: enum
+        --
+        +quotes()
+    }
+
+    class Quote {
+        **{static} id: bigint <<PK>>**
+        #inquiry_id: bigint <<FK>>
+        +quote_number: string
+        +total_mmk: decimal
+        --
+        +createQuote()
+        +acceptQuote()
+    }
+
+    class GoldPriceSnapshot {
+        **{static} id: bigint <<PK>>**
+        +price_mmk: decimal
+    }
+    
+    class ExchangeRateSnapshot {
+        **{static} id: bigint <<PK>>**
+        +mmk_per_usd: decimal
+    }
+}
+
+package "Fulfillment & Production" #FFFFFF {
+    class Order {
+        **{static} id: bigint <<PK>>**
+        #customer_id: bigint <<FK>>
+        +order_number: string
+        +status: string
+        --
+        +depositPayment()
+    }
+
+    class OrderAssignment {
+        **{static} id: bigint <<PK>>**
+        #artisan_id: bigint <<FK>>
+        +status: enum
+        --
+        +assignArtisan()
+    }
+
+    class Payment {
+        **{static} id: bigint <<PK>>**
+        +type: enum
+        +amount: decimal
+        +status: enum
+    }
+
+    class Receipt {
+        **{static} id: bigint <<PK>>**
+        +receipt_number: string
+        +pdf_path: string
+    }
+}
+
+' ===== Relationships =====
+User "1" -- "*" Inquiry : creates >
+Product "1" -- "*" Inquiry : referenced by >
+Inquiry "1" -- "*" Quote : may produce >
+GoldPriceSnapshot "1" -- "*" Quote : prices >
+ExchangeRateSnapshot "1" -- "*" Quote : fx on >
+Quote "1" -- "0..1" Order : becomes >
+Order "1" -- "*" Payment : has >
+Payment "1" -- "0..1" Receipt : issues >
+Order "1" -- "*" OrderAssignment : assigned into >
+OrderAssignment "*" -- "1" User : assigned to >
+
+@enduml

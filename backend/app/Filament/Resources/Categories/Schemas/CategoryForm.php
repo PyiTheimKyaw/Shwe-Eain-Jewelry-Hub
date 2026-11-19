@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Categories\Schemas;
 
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
@@ -31,6 +32,10 @@ class CategoryForm
                     ->numeric()
                     ->default(0)
                     ->minValue(0),
+                Toggle::make('is_featured')
+                    ->label('Featured collection')
+                    ->helperText('Show this category in customer Featured Collections section.')
+                    ->default(false),
             ]);
     }
 }

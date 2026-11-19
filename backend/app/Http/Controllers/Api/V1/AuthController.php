@@ -4,13 +4,17 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\CloseAccountRequest;
 use App\Http\Requests\Api\V1\LoginRequest;
 use App\Http\Requests\Api\V1\RegisterRequest;
+use App\Http\Requests\Api\V1\UpdatePasswordRequest;
 use App\Models\CustomerProfile;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -51,6 +55,18 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
+        if ($user->account_status === 'suspended') {
+            return response()->json(['message' => 'Account is suspended. Please contact support.'], 423);
+        }
+
+        if ($user->account_status === 'closed') {
+            return response()->json(['message' => 'This account has been closed.'], 423);
+        }
+
+        if ((bool) $user->force_password_reset) {
+            return response()->json(['message' => 'Password reset required. Please contact admin support.'], 423);
+        }
+
         $token = $user->createToken('mobile')->plainTextToken;
 
         return response()->json([
@@ -72,6 +88,32 @@ class AuthController extends Controller
         return response()->json($this->userPayload($request->user()));
     }
 
+    public function updatePassword(UpdatePasswordRequest $request): JsonResponse
+    {
+        $request->user()->update([
+            'password' => $request->validated('password'),
+        ]);
+
+        return response()->json(['message' => 'Password updated.']);
+    }
+
+    public function closeAccount(CloseAccountRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        DB::transaction(function () use ($user): void {
+            $user->tokens()->delete();
+            $user->forceFill([
+                'name' => 'Former customer',
+                'email' => 'closed-'.$user->id.'-'.Str::uuid().'@closed.invalid',
+                'password' => Hash::make(Str::random(64)),
+                'account_status' => 'closed',
+            ])->save();
+        });
+
+        return response()->json(['message' => 'Your account has been closed.']);
+    }
+
     protected function userPayload(User $user): array
     {
         $user->loadMissing(['customerProfile', 'artisanProfile']);
@@ -81,6 +123,8 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role->value,
+            'account_status' => $user->account_status,
+            'force_password_reset' => (bool) $user->force_password_reset,
             'customer_profile' => $user->customerProfile,
             'artisan_profile' => $user->artisanProfile,
         ];

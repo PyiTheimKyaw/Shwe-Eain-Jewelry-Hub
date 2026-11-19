@@ -48,10 +48,7 @@ class CatalogToggleBar extends StatelessWidget {
               builder: (context, prefs, _) {
                 return SegmentedButton<WeightDisplay>(
                   segments: const [
-                    ButtonSegment(
-                      value: WeightDisplay.grams,
-                      label: Text('g'),
-                    ),
+                    ButtonSegment(value: WeightDisplay.grams, label: Text('g')),
                     ButtonSegment(
                       value: WeightDisplay.burmese,
                       label: Text('K·P·Y'),
